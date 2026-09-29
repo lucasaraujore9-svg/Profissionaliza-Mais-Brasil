@@ -27,6 +27,29 @@ import {
  *    Asaas segue o mesmo desenho em vez da assinatura nativa dele.
  */
 
+/**
+ * Meio do carne. BOLETO desde 2026-09-16; PIX desde 2026-09-29, porque o
+ * Mercado Pago nao faz recorrencia no PIX pela API — so no cartao — e as
+ * unidades de MP nao tinham assinatura no PIX.
+ */
+export type CarneMethod = "BOLETO" | "PIX"
+
+/**
+ * A assinatura escolhida neste meio e cobrada pelo carne da plataforma?
+ *
+ *  - BOLETO: sempre (inclusive o vitalicio, num boleto so).
+ *  - PIX: so a RECORRENTE. O vitalicio no PIX e uma cobranca unica, que os dois
+ *    gateways ja fazem direto.
+ *  - Cartao: nunca — o debito automatico e a propria recorrencia do gateway.
+ */
+export function usesPlatformCycles(
+  method: string,
+  interval: SubscriptionInterval,
+): method is CarneMethod {
+  if (method === "BOLETO") return true
+  return method === "PIX" && isRecurringInterval(interval)
+}
+
 /** Boletos que o vendedor pode gerar de uma vez na venda direta. */
 export const SUBSCRIPTION_CARNE_MIN_COUNT = 1
 export const SUBSCRIPTION_CARNE_MAX_COUNT = MAX_BOLETO_INSTALLMENTS
@@ -258,4 +281,19 @@ export function carneBoletoNotice(interval: SubscriptionInterval): string {
     return `Boleto único, com vencimento em ${SUBSCRIPTION_CARNE_SELF_SERVICE_DUE_DAYS} dias. O acesso é liberado quando ele for compensado (até 3 dias úteis).`
   }
   return `Um boleto por ${INTERVAL_PERIOD_LABEL[interval as SubscriptionIntervalValue]}. O primeiro vence em ${SUBSCRIPTION_CARNE_SELF_SERVICE_DUE_DAYS} dias; os próximos ficam disponíveis na sua área do aluno ${INSTALLMENT_REVEAL_WINDOW_DAYS} dias antes de cada vencimento.`
+}
+
+/**
+ * Como a assinatura no PIX e explicada ao aluno que escolhe PIX. Com o Pix
+ * Automatico (Asaas), o QR tambem pede a autorizacao dos debitos seguintes.
+ */
+export function carnePixNotice(
+  interval: SubscriptionInterval,
+  pixAutomatic = false,
+): string {
+  const ciclo = INTERVAL_PERIOD_LABEL[interval as SubscriptionIntervalValue]
+  if (pixAutomatic) {
+    return `Ao pagar este PIX, o app do seu banco pede para autorizar o Pix Automático: as próximas cobranças (uma por ${ciclo}) são debitadas sozinhas, e você cancela quando quiser pelo próprio app.`
+  }
+  return `Um PIX por ${ciclo}. Os próximos ficam disponíveis na sua área do aluno ${INSTALLMENT_REVEAL_WINDOW_DAYS} dias antes de cada vencimento.`
 }

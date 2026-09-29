@@ -19,6 +19,7 @@ import {
   discardSubscriptionCarne,
   startSelfServiceCarne,
 } from "@/lib/subscriptions/carne"
+import { usesPlatformCycles } from "@/lib/subscriptions/carne-schedule"
 import { contextLogger } from "@/lib/logger"
 import { clientIp } from "@/lib/http/client-ip"
 
@@ -194,17 +195,20 @@ export const POST = withRequestContext(
     // Assinatura no BOLETO: um boleto por ciclo, emitido pela plataforma na
     // conta-mãe (carnê — `lib/subscriptions/carne.ts`), igual à vitrine das
     // unidades.
-    if (data.paymentMethod === "BOLETO") {
+    if (usesPlatformCycles(data.paymentMethod, plan.interval)) {
       try {
         const carne = await startSelfServiceCarne({
           subscriptionId: subscription.id,
           studentId: student.id,
+          method: data.paymentMethod,
         })
         return NextResponse.json({
           data: {
             subscriptionId: subscription.id,
             authorized: false,
             boleto: carne.firstBoleto ?? undefined,
+            pix: carne.firstPix ?? undefined,
+            pixAutomatic: carne.pixAutomatic || undefined,
           },
         })
       } catch (err) {
@@ -217,7 +221,7 @@ export const POST = withRequestContext(
           "falha ao gerar o boleto da assinatura",
         )
         return NextResponse.json(
-          { error: "Não foi possível gerar o boleto. Tente novamente." },
+          { error: "Não foi possível gerar a cobrança. Tente novamente." },
           { status: 502 },
         )
       }

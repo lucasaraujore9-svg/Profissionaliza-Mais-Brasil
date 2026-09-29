@@ -8,6 +8,7 @@ import { SubscriptionSlotsPanel } from "@/components/aluno/subscription-slots-pa
 import { CancelSubscriptionButton } from "@/components/aluno/subscription-actions"
 import { InstallmentsSection } from "@/components/aluno/installments-section"
 import { subscriptionCarneView } from "@/lib/subscriptions/carne-view"
+import { isWithinRevealWindow } from "@/lib/installments/schedule"
 import {
   loadSubscriptionCatalog,
   loadSubscriptionSlots,
@@ -58,6 +59,7 @@ export default async function AssinaturaPage({
       interval: true,
       billingType: true,
       boletoCarne: true,
+      pixAutomaticAuthorizationId: true,
       plan: { select: { name: true, description: true } },
       // Ciclo em aberto: só o valor. O PAGAMENTO acontece na página da
       // plataforma (`/pagar/assinatura/<id>`), nunca na fatura do gateway.
@@ -96,25 +98,40 @@ export default async function AssinaturaPage({
 
   const openCharge = subscription.payments[0] ?? null
   const live = subscriptionGrantsAccess(subscription)
-  // Assinatura no boleto: a lista de boletos, no mesmo formato do carnê de curso.
-  const carne = subscription.boletoCarne
-    ? subscriptionCarneView(
-        { id: subscription.id, planName: subscription.plan.name },
-        await prisma.subscriptionPayment.findMany({
-          where: { subscriptionId: subscription.id, number: { not: null } },
-          orderBy: { number: "asc" },
-          select: {
-            number: true,
-            amount: true,
-            dueDate: true,
-            status: true,
-            paidAt: true,
-            bankSlipUrl: true,
-            digitableLine: true,
-          },
-        }),
+  // Assinatura no carnê: a lista de boletos, no mesmo formato do carnê de
+  // curso. No PIX não há lista (o QR é gerado na hora de pagar): só o aviso de
+  // que o PIX do ciclo já pode ser pago, com o link para a página de pagamento.
+  const carneRows = subscription.boletoCarne
+    ? await prisma.subscriptionPayment.findMany({
+        where: { subscriptionId: subscription.id, number: { not: null } },
+        orderBy: { number: "asc" },
+        select: {
+          number: true,
+          amount: true,
+          dueDate: true,
+          status: true,
+          paidAt: true,
+          bankSlipUrl: true,
+          digitableLine: true,
+        },
+      })
+    : []
+  const pixCarne = subscription.boletoCarne && subscription.billingType === "PIX"
+  const carne =
+    subscription.boletoCarne && !pixCarne
+      ? subscriptionCarneView(
+          { id: subscription.id, planName: subscription.plan.name },
+          carneRows,
+        )
+      : null
+  const pixDue = pixCarne
+    ? carneRows.find(
+        (r) =>
+          !r.paidAt &&
+          r.status !== "CANCELLED" &&
+          isWithinRevealWindow({ number: r.number ?? 1, dueDate: r.dueDate }, new Date()),
       )
-    : null
+    : undefined
   const recurring = isRecurringInterval(subscription.interval)
   const search = sp.q?.trim() || undefined
   const [catalog, slots] = live
@@ -216,6 +233,28 @@ export default async function AssinaturaPage({
                 : null
             }
           />
+        </div>
+      )}
+
+      {subscription.status === "ACTIVE" && pixDue && (
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+          <div className="text-sm text-emerald-900">
+            <p className="font-semibold">
+              PIX da assinatura vence em {formatDate(pixDue.dueDate)}
+            </p>
+            <p className="mt-0.5 text-xs">
+              {subscription.pixAutomaticAuthorizationId
+                ? "Com o Pix Automático autorizado no seu banco, ele é debitado sozinho no vencimento. Se não, pague por aqui para manter o acesso."
+                : "Pague até o vencimento para manter o acesso aos cursos."}
+            </p>
+            <Link
+              href={`/pagar/assinatura/${subscription.id}`}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white"
+            >
+              Pagar {formatMoney(Number(pixDue.amount))}
+            </Link>
+          </div>
         </div>
       )}
 

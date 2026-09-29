@@ -18,7 +18,7 @@ const store = vi.hoisted(() => ({
 }))
 
 const db = vi.hoisted(() => ({
-  studentSubscription: { findUnique: vi.fn(), update: vi.fn() },
+  studentSubscription: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
   subscriptionPayment: {
     count: vi.fn(),
     create: vi.fn(),
@@ -26,6 +26,7 @@ const db = vi.hoisted(() => ({
     findFirst: vi.fn(),
     findMany: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     deleteMany: vi.fn(),
   },
   student: { update: vi.fn() },
@@ -56,10 +57,14 @@ const asaas = vi.hoisted(() => {
     })),
     listPayments: vi.fn(async (..._args: unknown[]) => ({ data: [] as unknown[] })),
     motherAsaasKey: vi.fn(() => "mother-key"),
+    createPixAutomaticAuthorization: vi.fn(),
+    getPixAutomaticAuthorization: vi.fn(),
+    cancelPixAutomaticAuthorization: vi.fn(async () => ({})),
   }
 })
 vi.mock("@/lib/asaas/client", () => asaas)
 vi.mock("@/lib/asaas/payment-instrument", () => ({
+  asaasPixInstrument: vi.fn(async (id: string) => ({ qrCode: `qr-${id}`, qrCodeBase64: "img" })),
   asaasBoletoInstrument: vi.fn(async (p: { id: string }) => ({
     url: `https://boleto/${p.id}.pdf`,
     digitableLine: `linha-${p.id}`,
@@ -76,6 +81,7 @@ const mp = vi.hoisted(() => {
     MPApiError,
     cancelPayment: vi.fn(async () => ({})),
     createPayment: vi.fn(),
+    getPayment: vi.fn(),
     decryptTenantMpToken: vi.fn((v: string) => `plain:${v}`),
   }
 })
@@ -103,6 +109,8 @@ import {
   cancelOpenCarneRows,
   createSubscriptionCarne,
   emitCarneRow,
+  linkPixAutomaticFirstPayment,
+  openCarnePix,
 } from "./carne"
 import { noonUtc } from "./carne-schedule"
 
@@ -192,6 +200,14 @@ beforeEach(() => {
             : v
       }
       return row
+    },
+  )
+  db.subscriptionPayment.updateMany.mockImplementation(
+    async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+      const row = find(where.id)
+      if (!row || row.paidAt) return { count: 0 }
+      Object.assign(row, data)
+      return { count: 1 }
     },
   )
   db.subscriptionPayment.findMany.mockImplementation(async () =>
@@ -440,5 +456,291 @@ describe("cancelOpenCarneRows", () => {
     open({ mpPaymentId: "mp_1" })
     mp.cancelPayment.mockRejectedValueOnce(new mp.MPApiError(503))
     expect((await cancelOpenCarneRows("sub_1")).ok).toBe(false)
+  })
+})
+
+// ── Carnê no PIX (2026-09-29) ───────────────────────────────────────────────
+
+describe("carnê no PIX", () => {
+  const soon = () => new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+
+  it("Mercado Pago: PIX comum na conta da loja, sem pedir endereço, referência por linha", async () => {
+    store.sub = subscription({
+      gateway: "MP",
+      student: student({ cep: null, rua: null, numero: null, bairro: null, cidade: null, estado: null }),
+    })
+    mp.createPayment.mockResolvedValueOnce({
+      id: 7001,
+      point_of_interaction: { transaction_data: { qr_code: "pix-mp", qr_code_base64: "b64" } },
+    })
+
+    const r = await createSubscriptionCarne({
+      subscriptionId: "sub_1",
+      count: 1,
+      firstDueDate: soon(),
+      method: "PIX",
+    })
+
+    const [token, params, key] = mp.createPayment.mock.calls[0]
+    expect(token).toBe("plain:enc-mp")
+    expect(params).toMatchObject({
+      payment_method_id: "pix",
+      external_reference: "subbol_row_1",
+      notification_url: "https://hook/mp?tenant=unidade",
+      payer: { email: "a@x.com", identification: { type: "CPF", number: "39053344705" } },
+    })
+    expect(params.date_of_expiration).toBeTruthy()
+    expect(key).toBe("subbol_row_1_1")
+    expect(r).toMatchObject({ firstPix: { qrCode: "pix-mp" }, firstBoleto: null, pixAutomatic: false })
+    expect(store.rows[0]).toMatchObject({ billingType: "PIX", mpPaymentId: "7001", status: "PENDING" })
+    expect(asaas.createPixAutomaticAuthorization).not.toHaveBeenCalled()
+  })
+
+  it("Asaas: a 1ª cobrança é o QR da autorização de Pix Automático", async () => {
+    asaas.createPixAutomaticAuthorization.mockResolvedValueOnce({
+      id: "auth_1",
+      status: "CREATED",
+      payload: "qr-auto",
+      encodedImage: "img-auto",
+    })
+    const first = noonUtc("2099-10-10")
+
+    const r = await createSubscriptionCarne({
+      subscriptionId: "sub_1",
+      count: 1,
+      firstDueDate: first,
+      method: "PIX",
+    })
+
+    const [params, apiKey] = asaas.createPixAutomaticAuthorization.mock.calls[0]
+    expect(apiKey).toBe("plain:enc-asaas")
+    expect(params).toMatchObject({
+      customerId: "cus_1",
+      frequency: "MONTHLY",
+      contractId: "pmb_sub_sub_1",
+      // Os débitos começam no 2º ciclo: o 1º é o próprio QR.
+      startDate: "2099-11-10",
+      value: 59.9,
+      paymentCreationMode: "MANUAL",
+      immediateQrCode: { originalValue: 59.9 },
+    })
+    expect(r).toMatchObject({ pixAutomatic: true, firstPix: { qrCode: "qr-auto", qrCodeBase64: "img-auto" } })
+    // Nenhuma cobrança PIX comum por cima do QR.
+    expect(asaas.createPayment).not.toHaveBeenCalled()
+    expect(store.rows[0]).toMatchObject({ status: "PENDING", asaasPaymentId: null })
+    expect(db.studentSubscription.update).toHaveBeenCalledWith({
+      where: { id: "sub_1" },
+      data: { pixAutomaticAuthorizationId: "auth_1" },
+    })
+  })
+
+  it("Asaas: conta sem Pix Automático (4xx) segue no PIX comum", async () => {
+    asaas.createPixAutomaticAuthorization.mockRejectedValueOnce(new asaas.AsaasApiError(400))
+
+    const r = await createSubscriptionCarne({
+      subscriptionId: "sub_1",
+      count: 1,
+      firstDueDate: noonUtc("2099-10-10"),
+      method: "PIX",
+    })
+
+    expect(asaas.createPayment.mock.calls[0][0]).toMatchObject({
+      billingType: "PIX",
+      externalReference: "pmb_sub_sub_1",
+    })
+    expect(asaas.createPayment.mock.calls[0][0].pixAutomaticAuthorizationId).toBeUndefined()
+    expect(r).toMatchObject({ pixAutomatic: false, firstPix: { qrCode: "qr-pay_1" } })
+  })
+
+  it("Asaas fora do ar (5xx) NÃO vira PIX comum calado — a venda falha e quem chama desfaz", async () => {
+    asaas.createPixAutomaticAuthorization.mockRejectedValueOnce(new asaas.AsaasApiError(502))
+    await expect(
+      createSubscriptionCarne({
+        subscriptionId: "sub_1",
+        count: 1,
+        firstDueDate: noonUtc("2099-10-10"),
+        method: "PIX",
+      }),
+    ).rejects.toThrow()
+    expect(asaas.createPayment).not.toHaveBeenCalled()
+  })
+
+  it("vitalício no PIX não vira carnê (é cobrança única do gateway)", async () => {
+    store.sub = subscription({ interval: "LIFETIME" })
+    await expect(
+      createSubscriptionCarne({ subscriptionId: "sub_1", count: 1, firstDueDate: soon(), method: "PIX" }),
+    ).rejects.toThrow()
+    expect(store.rows).toHaveLength(0)
+  })
+
+  async function pixRow(over: Record<string, unknown> = {}) {
+    return db.subscriptionPayment.create({
+      data: {
+        subscriptionId: "sub_1",
+        tenantId: "ten_1",
+        number: 2,
+        amount: 59.9,
+        gateway: "ASAAS",
+        status: "SCHEDULED",
+        billingType: "PIX",
+        dueDate: noonUtc("2099-11-10"),
+        ...over,
+      },
+    })
+  }
+
+  it("ciclo seguinte com autorização ATIVA sai vinculado a ela (débito automático)", async () => {
+    store.sub = subscription({ billingType: "PIX", pixAutomaticAuthorizationId: "auth_1" })
+    asaas.getPixAutomaticAuthorization.mockResolvedValueOnce({ id: "auth_1", status: "ACTIVE" })
+    const row = await pixRow()
+
+    const r = await emitCarneRow(row.id)
+
+    expect(asaas.createPayment.mock.calls[0][0]).toMatchObject({
+      billingType: "PIX",
+      pixAutomaticAuthorizationId: "auth_1",
+    })
+    expect(r).toMatchObject({ status: "emitted", pix: { qrCode: "qr-pay_1" } })
+  })
+
+  it("autorização cancelada no app do banco: o ciclo sai como PIX comum", async () => {
+    store.sub = subscription({ billingType: "PIX", pixAutomaticAuthorizationId: "auth_1" })
+    asaas.getPixAutomaticAuthorization.mockResolvedValueOnce({ id: "auth_1", status: "CANCELLED" })
+    const row = await pixRow()
+
+    await emitCarneRow(row.id)
+
+    expect(asaas.createPayment.mock.calls[0][0].pixAutomaticAuthorizationId).toBeUndefined()
+  })
+
+  it("instrução de débito recusada (4xx) é refeita como PIX comum, não perde o ciclo", async () => {
+    store.sub = subscription({ billingType: "PIX", pixAutomaticAuthorizationId: "auth_1" })
+    asaas.getPixAutomaticAuthorization.mockResolvedValueOnce({ id: "auth_1", status: "ACTIVE" })
+    asaas.createPayment
+      .mockRejectedValueOnce(new asaas.AsaasApiError(400))
+      .mockResolvedValueOnce({ id: "pay_plain", dueDate: "2099-11-10", bankSlipUrl: null })
+    const row = await pixRow()
+
+    await emitCarneRow(row.id)
+
+    expect(asaas.createPayment).toHaveBeenCalledTimes(2)
+    expect(asaas.createPayment.mock.calls[1][0].pixAutomaticAuthorizationId).toBeUndefined()
+    expect(find(row.id)!.asaasPaymentId).toBe("pay_plain")
+  })
+
+  it("a 1ª linha nunca é vinculada à autorização — ela É o QR da autorização", async () => {
+    store.sub = subscription({ billingType: "PIX", pixAutomaticAuthorizationId: "auth_1" })
+    const row = await pixRow({ number: 1, status: "OVERDUE" })
+    await emitCarneRow(row.id)
+    expect(asaas.getPixAutomaticAuthorization).not.toHaveBeenCalled()
+    expect(asaas.createPayment.mock.calls[0][0].pixAutomaticAuthorizationId).toBeUndefined()
+  })
+
+  describe("openCarnePix", () => {
+    it("1ª linha de Pix Automático ainda válida: devolve o QR da autorização, sem emitir nada", async () => {
+      store.sub = subscription({ billingType: "PIX", pixAutomaticAuthorizationId: "auth_1" })
+      const row = await pixRow({ number: 1, status: "PENDING", dueDate: soon() })
+      db.subscriptionPayment.findFirst.mockResolvedValueOnce(find(row.id))
+      asaas.getPixAutomaticAuthorization.mockResolvedValueOnce({
+        id: "auth_1",
+        status: "CREATED",
+        payload: "qr-auto",
+        encodedImage: "img",
+      })
+
+      expect(await openCarnePix("sub_1")).toEqual({ qrCode: "qr-auto", qrCodeBase64: "img" })
+      expect(asaas.createPayment).not.toHaveBeenCalled()
+    })
+
+    it("QR da autorização recusado/expirado: a linha passa ao PIX comum na hora", async () => {
+      store.sub = subscription({ billingType: "PIX", pixAutomaticAuthorizationId: "auth_1" })
+      const row = await pixRow({ number: 1, status: "PENDING", dueDate: soon() })
+      db.subscriptionPayment.findFirst.mockResolvedValueOnce(find(row.id))
+      asaas.getPixAutomaticAuthorization.mockResolvedValueOnce({ id: "auth_1", status: "REFUSED" })
+
+      expect(await openCarnePix("sub_1")).toEqual({ qrCode: "qr-pay_1", qrCodeBase64: "img" })
+      expect(find(row.id)!.asaasPaymentId).toBe("pay_1")
+    })
+
+    it("MP: PIX já emitido é lido ao vivo; expirado não é mostrado", async () => {
+      store.sub = subscription({ gateway: "MP", billingType: "PIX" })
+      const row = await pixRow({ gateway: "MP", number: 1, status: "PENDING", mpPaymentId: "77", dueDate: soon() })
+      db.subscriptionPayment.findFirst.mockResolvedValue(find(row.id))
+      mp.getPayment.mockResolvedValueOnce({
+        status: "pending",
+        point_of_interaction: { transaction_data: { qr_code: "pix-vivo", qr_code_base64: "b" } },
+      })
+      expect(await openCarnePix("sub_1")).toEqual({ qrCode: "pix-vivo", qrCodeBase64: "b" })
+
+      mp.getPayment.mockResolvedValueOnce({ status: "cancelled" })
+      expect(await openCarnePix("sub_1")).toBeNull()
+    })
+  })
+
+  describe("linkPixAutomaticFirstPayment", () => {
+    function candidate(row: Record<string, unknown>) {
+      db.studentSubscription.findFirst.mockResolvedValueOnce({
+        id: "sub_1",
+        boletoCarne: true,
+        payments: [row],
+      })
+    }
+
+    it("liga o pagamento do QR à 1ª linha, pelo cliente e pelo valor — escopado à loja", async () => {
+      const row = await pixRow({ number: 1, status: "PENDING" })
+      candidate(find(row.id)!)
+
+      const sub = await linkPixAutomaticFirstPayment({
+        tenantId: "ten_1",
+        payment: { id: "pay_qr", customer: "cus_1", value: 59.9, billingType: "PIX" },
+      })
+
+      expect(sub).toEqual({ id: "sub_1", boletoCarne: true, payments: expect.any(Array) })
+      expect(db.studentSubscription.findFirst.mock.calls[0][0].where).toMatchObject({
+        tenantId: "ten_1",
+        asaasCustomerId: "cus_1",
+        pixAutomaticAuthorizationId: { not: null },
+      })
+      expect(find(row.id)!.asaasPaymentId).toBe("pay_qr")
+      expect(asaas.deletePayment).not.toHaveBeenCalled()
+    })
+
+    it("QR pago depois de a linha virar PIX comum: o PIX comum é removido (sem cobrança em dobro)", async () => {
+      const row = await pixRow({ number: 1, status: "PENDING", asaasPaymentId: "pay_plain" })
+      candidate(find(row.id)!)
+      asaas.deletePayment.mockResolvedValueOnce({ deleted: true, id: "pay_plain" })
+
+      await linkPixAutomaticFirstPayment({
+        tenantId: "ten_1",
+        payment: { id: "pay_qr", customer: "cus_1", value: 59.9, billingType: "PIX" },
+      })
+
+      expect(find(row.id)!.asaasPaymentId).toBe("pay_qr")
+      expect(asaas.deletePayment).toHaveBeenCalledWith("pay_plain", "unit-key")
+    })
+
+    it("valor diferente ou meio que não é PIX não casa", async () => {
+      const row = await pixRow({ number: 1, status: "PENDING" })
+      candidate(find(row.id)!)
+      expect(
+        await linkPixAutomaticFirstPayment({
+          tenantId: "ten_1",
+          payment: { id: "pay_x", customer: "cus_1", value: 10, billingType: "PIX" },
+        }),
+      ).toBeNull()
+      expect(
+        await linkPixAutomaticFirstPayment({
+          tenantId: "ten_1",
+          payment: { id: "pay_y", customer: "cus_1", value: 59.9, billingType: "BOLETO" },
+        }),
+      ).toBeNull()
+      expect(find(row.id)!.asaasPaymentId).toBeNull()
+    })
+  })
+
+  it("cancelar a assinatura cancela também a autorização de Pix Automático", async () => {
+    store.sub = subscription({ pixAutomaticAuthorizationId: "auth_1" })
+    await cancelOpenCarneRows("sub_1")
+    expect(asaas.cancelPixAutomaticAuthorization).toHaveBeenCalledWith("auth_1", "unit-key")
   })
 })

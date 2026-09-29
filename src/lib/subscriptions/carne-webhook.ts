@@ -42,6 +42,7 @@ export async function handleMpCarnePayment(
       paidAt: true,
       status: true,
       mpPaymentId: true,
+      billingType: true,
     },
   })
   if (!row || row.number === null) {
@@ -81,7 +82,7 @@ export async function handleMpCarnePayment(
       amount: payment.transaction_amount,
       paidAt: payment.date_approved ? new Date(payment.date_approved) : new Date(),
       dueDate: row.dueDate,
-      billingType: "BOLETO",
+      billingType: row.billingType === "PIX" ? "PIX" : "BOLETO",
     })
     return { ok: true, note: settled ? `${label} pago` : `${label} ja registrado` }
   }
@@ -96,7 +97,7 @@ export async function handleMpCarnePayment(
   }
 
   if (payment.status === "cancelled" || payment.status === "rejected") {
-    // Boleto que venceu sem pagamento. Se ainda é o boleto desta linha (e a
+    // Boleto (ou PIX) que venceu sem pagamento. Se ainda é o boleto desta linha (e a
     // linha não foi cancelada por nós), libera para reemissão.
     if (
       !row.paidAt &&

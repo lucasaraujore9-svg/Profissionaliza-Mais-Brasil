@@ -31,6 +31,7 @@ import {
   splitIdFromPayload,
 } from "@/lib/course-authoring/split-webhook"
 import { applyAsaasSubscriptionEvent } from "@/lib/subscriptions/asaas-events"
+import { linkPixAutomaticFirstPayment } from "@/lib/subscriptions/carne"
 
 /**
  * Campos da unidade que o processamento de MENSALIDADE precisa. Extraido para
@@ -599,6 +600,22 @@ export async function processAsaasWebhook(
         { id: payment.externalReference.slice("pmb_sub_".length) },
       )
       if (handledSub) return
+    }
+
+    // 1o pagamento de um PIX AUTOMATICO da vitrine PMB: o pagamento do QR da
+    // autorizacao chega sem `externalReference` e sem `subscription`, e cairia
+    // no fallback de mensalidade avulsa logo abaixo.
+    if (!payment.externalReference && !subscriptionId) {
+      const linked = await linkPixAutomaticFirstPayment({
+        tenantId: null,
+        payment,
+      })
+      if (
+        linked &&
+        (await handleStudentSubscriptionPayment(logId, event, payment, { id: linked.id }))
+      ) {
+        return
+      }
     }
 
     // Preenchido quando a cobranca e AVULSA (sem assinatura) e mesmo assim

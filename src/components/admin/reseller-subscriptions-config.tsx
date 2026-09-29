@@ -121,9 +121,10 @@ export function ResellerSubscriptionsConfig({
 
       {enabled && checkoutMode === "MP" && (
         <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
-          Esta unidade cobra pelo Mercado Pago: lá a assinatura recorrente é só
-          no cartão de crédito (PIX e boleto ficam para o plano vitalício). No
-          Asaas, os três meios valem para todas as periodicidades.
+          Esta unidade cobra pelo Mercado Pago: o cartão é debitado sozinho a cada
+          ciclo; no PIX e no boleto a plataforma gera uma cobrança por ciclo, que o
+          aluno paga. O Pix Automático (débito sem ação do aluno) só existe no
+          Asaas, com conta PJ elegível.
         </p>
       )}
 

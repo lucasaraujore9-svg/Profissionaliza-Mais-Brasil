@@ -99,6 +99,49 @@ export interface AsaasCreatePaymentParams {
   remoteIp?: string
   /** Rateio: ver AsaasSplit. Omitir quando nao ha nada a repartir. */
   splits?: AsaasSplit[]
+  /**
+   * Pix Automatico (modo MANUAL): cobranca debitada pela autorizacao ACTIVE do
+   * pagador. Tem que ser criada entre 2 e 10 dias uteis antes do vencimento.
+   */
+  pixAutomaticAuthorizationId?: string
+}
+
+// ── Pix Automatico (Jornada 3) ──
+export type AsaasPixAutomaticFrequency =
+  | "WEEKLY"
+  | "MONTHLY"
+  | "QUARTERLY"
+  | "SEMIANNUALLY"
+  | "ANNUALLY"
+
+export interface AsaasCreatePixAutomaticAuthorizationParams {
+  customerId: string
+  frequency: AsaasPixAutomaticFrequency
+  /** Ate 35 caracteres. */
+  contractId: string
+  /** YYYY-MM-DD — inicio da vigencia e dos pagamentos recorrentes. */
+  startDate: string
+  /** Valor FIXO dos debitos recorrentes. */
+  value: number
+  /** Ate 35 caracteres. */
+  description?: string
+  paymentCreationMode: "MANUAL"
+  /** 1o pagamento: o QR que cobra o 1o ciclo e pede a autorizacao junto. */
+  immediateQrCode: {
+    expirationSeconds: number
+    originalValue: number
+    description?: string
+  }
+}
+
+export interface AsaasPixAutomaticAuthorization {
+  id: string
+  status: "CREATED" | "ACTIVE" | "CANCELLED" | "REFUSED" | "EXPIRED"
+  customerId: string
+  contractId?: string
+  /** QR (copia e cola) do 1o pagamento + autorizacao. */
+  payload?: string | null
+  encodedImage?: string | null
 }
 
 // ── Subscription ──

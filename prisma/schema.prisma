@@ -1241,13 +1241,20 @@ model StudentSubscription {
   /// CREDIT_CARD (debito automatico), PIX ou BOLETO (fatura mensal manual).
   billingType String?        @map("billing_type")
 
-  /// Assinatura NO BOLETO (carne): a plataforma emite um boleto por ciclo, na
-  /// conta da loja, nos dois gateways — e nao existe recorrencia no gateway
-  /// (`asaasSubscriptionId`/`mpPreapprovalId` ficam null). Os boletos sao as
-  /// linhas numeradas de `SubscriptionPayment`, e o fim do periodo pago sai
-  /// delas (`carnePeriodEnd`), nao de "pagou, soma um ciclo". Ver
-  /// `src/lib/subscriptions/carne.ts`.
+  /// A PLATAFORMA emite a cobranca de cada ciclo (carne), na conta da loja, nos
+  /// dois gateways — e nao existe recorrencia no gateway
+  /// (`asaasSubscriptionId`/`mpPreapprovalId` ficam null). O nome ficou do
+  /// primeiro uso: desde 2026-09-29 o carne tambem e de PIX (`billingType`
+  /// diz qual). As cobrancas sao as linhas numeradas de `SubscriptionPayment`,
+  /// e o fim do periodo pago sai delas (`carnePeriodEnd`), nao de "pagou, soma
+  /// um ciclo". Ver `src/lib/subscriptions/carne.ts`.
   boletoCarne Boolean @default(false) @map("boleto_carne")
+
+  /// Autorizacao de Pix Automatico (Asaas) do carne no PIX. Com ela ACTIVE, as
+  /// cobrancas dos ciclos seguintes sao debitadas sem o aluno pagar cada uma;
+  /// sem ela (recusada, cancelada no banco, conta inelegivel) elas saem como
+  /// PIX comum. O 1o ciclo e pago no QR da propria autorizacao.
+  pixAutomaticAuthorizationId String? @unique @map("pix_automatic_authorization_id")
 
   // Ids da recorrencia no gateway
   mpPreapprovalId     String? @unique @map("mp_preapproval_id") // preapproval_xxxx

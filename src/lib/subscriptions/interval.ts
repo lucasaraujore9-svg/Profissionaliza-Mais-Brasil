@@ -147,6 +147,18 @@ export function asaasCycleFor(
 }
 
 /**
+ * Frequencia da autorizacao de Pix Automatico do Asaas. Outro vocabulario que o
+ * da assinatura (`ANNUALLY` la, `YEARLY` aqui em cima) — mesmo motivo de morar
+ * aqui. `null` no vitalicio, que nao tem debito recorrente.
+ */
+export function asaasPixAutomaticFrequencyFor(
+  interval: SubscriptionInterval,
+): "MONTHLY" | "QUARTERLY" | "SEMIANNUALLY" | "ANNUALLY" | null {
+  const cycle = asaasCycleFor(interval)
+  return cycle === "YEARLY" ? "ANNUALLY" : cycle
+}
+
+/**
  * `auto_recurring` do Mercado Pago. Sempre em MESES (o MP tambem aceita "days",
  * mas contar 90 dias daria trimestres que deslizam) e `null` no vitalicio, que
  * vira preferencia de pagamento unico.

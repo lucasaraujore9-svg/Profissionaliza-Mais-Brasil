@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { applyAsaasSubscriptionEvent } from "@/lib/subscriptions/asaas-events"
+import { linkPixAutomaticFirstPayment } from "@/lib/subscriptions/carne"
 import { getPayment, AsaasApiError } from "./client"
 import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
@@ -127,6 +128,13 @@ export async function processResellerAsaasWebhook(
         ? await prisma.studentSubscription.findFirst({
             where: { asaasSubscriptionId: payment.subscription, tenantId: tenant.id },
             select: { id: true, boletoCarne: true },
+          })
+        : null) ??
+      // 1º pagamento de um Pix Automático: chega sem referência nem assinatura.
+      (!payment.externalReference && !payment.subscription
+        ? await linkPixAutomaticFirstPayment({
+            tenantId: tenant.id,
+            payment,
           })
         : null)
     if (studentSub) {

@@ -2050,6 +2050,75 @@ configuracao da unidade.
   cada mil) entra pelas `SMTP_*` da Vercel; para ele virar o PRIMARIO, desative
   as caixas em /admin/configuracoes/email.
 
+### Assinatura no PIX nos dois gateways + Pix Automatico no Asaas (2026-09-29)
+
+A assinatura recorrente no Mercado Pago so aceitava cartao e boleto: a
+recorrencia do MP pela API (`preapproval`) so faz cartao, e as unidades de MP
+(6 das 8 com o modulo ligado) nao tinham PIX recorrente. No Asaas o PIX
+recorrente existia (assinatura nativa `billingType: PIX`), mas o aluno pagava
+cada ciclo na mao e ninguem o avisava de que o PIX do mes tinha saido.
+
+- **O carne deixou de ser so boleto.** PIX recorrente, nos dois gateways, e o
+  mesmo carne da plataforma (uma cobranca por ciclo, linhas numeradas de
+  `SubscriptionPayment`, renovacao pela varredura). `boletoCarne` passou a
+  significar "a plataforma emite cada ciclo" (o nome ficou do 1o uso) e
+  `billingType` diz o meio. Regra unica em `usesPlatformCycles`
+  (`carne-schedule.ts`, PURO): boleto sempre, PIX so na recorrente — o
+  vitalicio no PIX continua cobranca unica do gateway. As 3 rotas de checkout e
+  a pagina `/pagar/assinatura` passam por ela.
+- **Nenhum gateway emite o carne de PIX inteiro de uma vez** (o QR expira): a
+  linha sai na janela de 7 dias, como o boleto do MP. O QR nao e guardado — a
+  pagina le AO VIVO (`openCarnePix`) e emite na hora a linha cujo PIX expirou,
+  senao o aluno que chegasse depois do vencimento esperaria o cron. No MP o PIX
+  usa a mesma referencia por linha (`subbol_`) do boleto: o `cancelled` do PIX
+  expirado cai em `carne-webhook.ts`, que libera a linha para reemissao.
+- **Pix Automatico (so Asaas, Jornada 3, modo `MANUAL`).** A 1a cobranca do
+  carne de PIX no Asaas e o QR de uma autorizacao
+  (`POST /v3/pix/automatic/authorizations`): pagar o QR paga o 1o ciclo e pede
+  ao banco a autorizacao dos debitos seguintes. As linhas 2..N saem com
+  `pixAutomaticAuthorizationId` quando a autorizacao esta `ACTIVE`, **perguntado
+  ao vivo** a cada emissao — o aluno cancela pelo app do banco quando quiser.
+  Sem autorizacao ativa (recusada, cancelada, conta inelegivel, instrucao
+  recusada com 4xx) a cobranca sai como PIX comum, que o aluno paga na nossa
+  pagina. Por isso **nenhum evento novo de webhook e necessario**.
+  - `MANUAL` e nao `SUBSCRIPTION` de proposito: com `MANUAL` o Pix Automatico
+    reusa o carne inteiro (agenda, renovacao, periodo pago por `carnePeriodEnd`,
+    cancelamento) e o fallback para PIX comum e o mesmo codigo. O Asaas exige a
+    instrucao entre 2 e 10 dias uteis antes do vencimento; a janela de 7 dias
+    corridos da ~5 uteis.
+  - **Elegibilidade:** conta PJ aprovada, CNPJ ativo ha 6+ meses. Nao ha
+    endpoint de consulta: tenta-se criar a autorizacao e o 4xx cai no PIX
+    comum. **5xx NAO cai** — a venda falha e o chamador desfaz, senao uma
+    instabilidade do Asaas viraria PIX comum calado.
+  - **O pagamento do QR chega sem `externalReference` e sem `subscription`**
+    (o Asaas so o cria depois de pago). `linkPixAutomaticFirstPayment` o
+    reconhece pelo CLIENTE Asaas + autorizacao + 1a linha nao paga + mesmo
+    valor, escopado a loja, nos dois processadores (`process.ts` para a
+    vitrine PMB, `reseller-process.ts` para a unidade). Se a varredura ja tinha
+    emitido um PIX comum por cima da linha (QR expirado), ele e removido —
+    senao o aluno pagaria o ciclo em dobro.
+  - Cancelar a assinatura cancela tambem a autorizacao (`cancelOpenCarneRows`).
+- **Coluna nova:** `StudentSubscription.pixAutomaticAuthorizationId`
+  (migration `20260929_subscription_pix_recurring`, aditiva, idempotente, sem
+  backfill). As 2 assinaturas Asaas PIX ativas continuam na assinatura nativa
+  antiga, que segue funcionando.
+- **Telas:** os tres meios em toda loja (`SUBSCRIPTION_METHODS`);
+  `/pagar/assinatura` no carne de PIX mostra so o PIX em aberto; `/aluno/assinatura`
+  ganhou o aviso "PIX da assinatura vence em ..." com o link de pagamento (no
+  carne de PIX nao ha lista de cobrancas: o QR e gerado na hora).
+- Testes em `carne.test.ts` (16 casos novos) e `store-payment.test.ts`,
+  **verificados por mutacao** (6/6): vincular a 1a linha a autorizacao, ignorar
+  o status da autorizacao, engolir 5xx, nao remover o PIX comum duplicado, nao
+  conferir o valor no casamento e nao cancelar a autorizacao.
+- **NAO validado contra os gateways reais.** Antes de anunciar: no SANDBOX do
+  Asaas, (1) conferir que a conta de teste e elegivel e que o pagamento do QR
+  chega com o `customer` da autorizacao; (2) que a cobranca do 2o ciclo com
+  `pixAutomaticAuthorizationId` e aceita a 7 dias do vencimento; (3) que uma
+  cobranca com instrucao RECUSADA (sem saldo) ainda gera QR para o aluno pagar
+  na mao — se nao gerar, `openCarnePix` devolve "sem PIX em aberto" e o aluno
+  so regulariza pelo cartao. No MP, uma assinatura no PIX de verdade conferindo
+  a liquidacao e a reemissao do PIX expirado.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

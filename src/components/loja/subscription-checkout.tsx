@@ -11,8 +11,8 @@ import {
   isRecurringInterval,
   type SubscriptionIntervalValue,
 } from "@/lib/subscriptions/interval"
-import { subscriptionMethods } from "@/components/loja/subscription-pay-form"
-import { carneBoletoNotice } from "@/lib/subscriptions/carne-schedule"
+import { SUBSCRIPTION_METHODS } from "@/components/loja/subscription-pay-form"
+import { carneBoletoNotice, carnePixNotice } from "@/lib/subscriptions/carne-schedule"
 import {
   BoletoAddressFields,
   EMPTY_BOLETO_ADDRESS,
@@ -47,11 +47,9 @@ interface Props {
   /** Rota de contratacao. Muda entre a vitrine PMB e a da unidade. */
   endpoint?: string
   /**
-   * Gateway da loja. Decide os MEIOS oferecidos: a recorrencia do Mercado Pago
-   * exige cartao tokenizado no browser e nao emite PIX por ciclo (o boleto por
-   * ciclo e a assinatura no boleto da plataforma). Oferecer PIX numa loja de MP
-   * levaria a um 400 depois de a pessoa preencher tudo — o mesmo erro do
-   * incidente "revenda sem PIX".
+   * Gateway da loja: decide como o cartao e capturado (tokenizado no browser no
+   * MP) e se o boleto pede endereco. PIX e boleto recorrentes sao o carne da
+   * plataforma nos dois gateways.
    */
   gateway?: "MP" | "ASAAS"
   /** Public key da conta MP da unidade — necessaria para tokenizar. */
@@ -72,9 +70,7 @@ export function SubscriptionCheckout({
   mpPublicKey = null,
 }: Props) {
   const recurring = isRecurringInterval(interval)
-  // Os meios que a loja realmente aceita: a recorrência do MP é só cartão; o
-  // pagamento único do MP aceita PIX e cartão; o Asaas, os três.
-  const methods = subscriptionMethods(gateway, recurring)
+  const methods = SUBSCRIPTION_METHODS
   const [method, setMethod] = useState<Method>(methods[0])
   const [address, setAddress] = useState(EMPTY_BOLETO_ADDRESS)
   // O boleto do Mercado Pago exige o endereço completo do pagador.
@@ -85,6 +81,7 @@ export function SubscriptionCheckout({
     subscriptionId: string | null
     authorized: boolean
     pix?: { qrCode: string; qrCodeBase64: string }
+    pixAutomatic?: boolean
     boleto?: { url: string; digitableLine?: string }
   } | null>(null)
 
@@ -199,6 +196,7 @@ export function SubscriptionCheckout({
         subscriptionId: body.data?.subscriptionId ?? null,
         authorized: Boolean(body.data?.authorized),
         pix: body.data?.pix ?? undefined,
+        pixAutomatic: Boolean(body.data?.pixAutomatic),
         boleto: body.data?.boleto ?? undefined,
       })
     } catch {
@@ -213,7 +211,7 @@ export function SubscriptionCheckout({
       <PixInstrumentResult
         qrCode={done.pix.qrCode}
         qrCodeBase64={done.pix.qrCodeBase64}
-        waitingText="Assim que o pagamento for confirmado, seus cursos são liberados na sua área do aluno."
+        waitingText={`${done.pixAutomatic ? `${carnePixNotice(interval, true)} ` : ""}Assim que o pagamento for confirmado, seus cursos são liberados na sua área do aluno.`}
       />
     )
   }
@@ -353,7 +351,9 @@ export function SubscriptionCheckout({
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
             {method === "BOLETO"
               ? carneBoletoNotice(interval)
-              : recurring
+              : method === "PIX" && recurring
+                ? carnePixNotice(interval)
+                : recurring
                 ? `A cada ${INTERVAL_PERIOD_LABEL[interval]} uma nova cobrança fica disponível para pagar na sua área do aluno. No cartão, a cobrança é automática.`
                 : "Você paga uma única vez e o acesso ao plano fica liberado para sempre."}
           </p>

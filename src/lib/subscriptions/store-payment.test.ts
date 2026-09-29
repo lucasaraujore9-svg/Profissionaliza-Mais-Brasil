@@ -52,6 +52,7 @@ vi.mock("./carne", () => {
       firstBoleto: { url: "https://mp.test/boleto.pdf", digitableLine: "2379" },
     })),
     resetSubscriptionCarne: vi.fn(async () => undefined),
+    openCarnePix: vi.fn(async () => ({ qrCode: "pix-aberto", qrCodeBase64: "b64" })),
   }
 })
 vi.mock("./plans", () => ({
@@ -81,7 +82,12 @@ vi.mock("@/lib/logger", () => {
 
 import { createSubscriptionAtGateway } from "./checkout"
 import { settleSubscriptionCycle } from "./renew"
-import { CarneInputError, resetSubscriptionCarne, startSelfServiceCarne } from "./carne"
+import {
+  CarneInputError,
+  openCarnePix,
+  resetSubscriptionCarne,
+  startSelfServiceCarne,
+} from "./carne"
 import { getPlanForCheckout } from "./plans"
 import { payStoreSubscription } from "./store-payment"
 
@@ -89,6 +95,7 @@ const gatewayCall = createSubscriptionAtGateway as unknown as ReturnType<typeof 
 const planLookup = getPlanForCheckout as unknown as ReturnType<typeof vi.fn>
 const startCarne = startSelfServiceCarne as unknown as ReturnType<typeof vi.fn>
 const resetCarne = resetSubscriptionCarne as unknown as ReturnType<typeof vi.fn>
+const openPix = openCarnePix as unknown as ReturnType<typeof vi.fn>
 
 const mpTenant = {
   id: "t1",
@@ -122,6 +129,7 @@ function pendingSub(over: Record<string, unknown> = {}) {
     asaasSubscriptionId: null,
     externalReference: null,
     boletoCarne: false,
+    billingType: null,
     studentId: "stu_1",
     student: {
       id: "stu_1",
@@ -192,21 +200,48 @@ describe("payStoreSubscription", () => {
     })
   })
 
-  it("recorrência no MP não aceita PIX", async () => {
+  it("PIX recorrente no MP vira carnê de PIX (antes era recusado: a recorrência do MP pela API só faz cartão)", async () => {
+    startCarne.mockResolvedValueOnce({
+      count: 1,
+      amount: 90,
+      firstBoleto: null,
+      firstPix: { qrCode: "pix-mp", qrCodeBase64: "b64" },
+      pixAutomatic: false,
+    })
     const res = await payStoreSubscription(mpTenant, {
       subscriptionId: "sub_1",
       paymentMethod: "PIX",
     })
-    expect(res).toMatchObject({ ok: false, code: "METHOD_NOT_SUPPORTED" })
+    expect(res).toEqual({
+      ok: true,
+      authorized: false,
+      pix: { qrCode: "pix-mp", qrCodeBase64: "b64" },
+    })
+    expect(startCarne).toHaveBeenCalledWith(expect.objectContaining({ method: "PIX" }))
     expect(gatewayCall).not.toHaveBeenCalled()
   })
 
-  it("Asaas aceita PIX e cobra na chave da unidade", async () => {
+  it("PIX recorrente no Asaas também é carnê, e avisa quando o QR pede o Pix Automático", async () => {
+    startCarne.mockResolvedValueOnce({
+      count: 1,
+      amount: 90,
+      firstBoleto: null,
+      firstPix: { qrCode: "pix-auto", qrCodeBase64: "b64" },
+      pixAutomatic: true,
+    })
     const res = await payStoreSubscription(asaasTenant, {
       subscriptionId: "sub_1",
       paymentMethod: "PIX",
     })
-    expect(res.ok).toBe(true)
+    expect(res).toMatchObject({ ok: true, pix: { qrCode: "pix-auto" }, pixAutomatic: true })
+    expect(startCarne).toHaveBeenCalledWith(expect.objectContaining({ method: "PIX" }))
+    expect(gatewayCall).not.toHaveBeenCalled()
+  })
+
+  it("PIX no vitalício segue como cobrança única no gateway, não carnê", async () => {
+    rowIs({ interval: "LIFETIME" })
+    await payStoreSubscription(asaasTenant, { subscriptionId: "sub_1", paymentMethod: "PIX" })
+    expect(startCarne).not.toHaveBeenCalled()
     expect(gatewayCall.mock.calls[0][1]).toBe("ASAAS")
     expect(gatewayCall.mock.calls[0][2].asaasApiKey).toBe("dec:enc_asaas")
   })
@@ -376,7 +411,8 @@ describe("payStoreSubscription — cobrança aberta no Asaas", () => {
 
 describe("payStoreSubscription — vitrine PMB", () => {
   it("só enxerga assinatura da PMB e cobra na conta-mãe", async () => {
-    rowIs({ tenantId: null, gateway: "ASAAS" })
+    // Vitalício: PIX é cobrança única no gateway (o recorrente seria carnê).
+    rowIs({ tenantId: null, gateway: "ASAAS", interval: "LIFETIME" })
 
     await payStoreSubscription(null, { subscriptionId: "sub_1", paymentMethod: "PIX" })
 
@@ -412,6 +448,7 @@ describe("payStoreSubscription — assinatura NO BOLETO", () => {
     expect(startCarne).toHaveBeenCalledWith({
       subscriptionId: "sub_1",
       studentId: "stu_1",
+      method: "BOLETO",
       address: ADDRESS,
     })
     // Nenhuma recorrência no gateway: quem emite os boletos é a plataforma.
@@ -489,5 +526,37 @@ describe("payStoreSubscription — assinatura NO BOLETO", () => {
     expect(res).toMatchObject({ ok: true, pix: { qrCode: "pix-copia-e-cola" } })
     expect(startCarne).not.toHaveBeenCalled()
     expect(gatewayCall).not.toHaveBeenCalled()
+  })
+
+  it("carnê de PIX: a página devolve o PIX em aberto, lido ao vivo, sem criar cobrança", async () => {
+    rowIs({
+      boletoCarne: true,
+      billingType: "PIX",
+      status: "ACTIVE",
+      externalReference: "pmb_sub_sub_1",
+    })
+    const res = await payStoreSubscription(mpTenant, { subscriptionId: "sub_1", paymentMethod: "PIX" })
+    expect(res).toEqual({
+      ok: true,
+      authorized: false,
+      pix: { qrCode: "pix-aberto", qrCodeBase64: "b64" },
+    })
+    expect(openPix).toHaveBeenCalledWith("sub_1")
+    expect(startCarne).not.toHaveBeenCalled()
+    expect(gatewayCall).not.toHaveBeenCalled()
+  })
+
+  it("carnê de PIX do MP não troca de meio", async () => {
+    rowIs({ boletoCarne: true, billingType: "PIX", status: "ACTIVE", externalReference: "x" })
+    const res = await payStoreSubscription(mpTenant, mpCard)
+    expect(res).toMatchObject({ ok: false, code: "METHOD_NOT_SUPPORTED" })
+    expect(openPix).not.toHaveBeenCalled()
+  })
+
+  it("carnê de PIX sem PIX na janela não cobra nada", async () => {
+    rowIs({ boletoCarne: true, billingType: "PIX", status: "ACTIVE", externalReference: "x" })
+    openPix.mockResolvedValueOnce(null)
+    const res = await payStoreSubscription(mpTenant, { subscriptionId: "sub_1", paymentMethod: "PIX" })
+    expect(res).toMatchObject({ ok: false, code: "NO_OPEN_CHARGE" })
   })
 })

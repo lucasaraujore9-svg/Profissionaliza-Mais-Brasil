@@ -17,6 +17,8 @@ import type {
   AsaasWebhookConfig,
   AsaasWebhookConfigInput,
   AsaasWebhookConfigList,
+  AsaasCreatePixAutomaticAuthorizationParams,
+  AsaasPixAutomaticAuthorization,
 } from "./types"
 import { contextLogger } from "@/lib/logger"
 import { decrypt } from "@/lib/crypto"
@@ -359,6 +361,47 @@ export async function updatePayment(
   params: AsaasUpdatePaymentParams,
 ): Promise<AsaasPayment> {
   return request<AsaasPayment>("PUT", `/payments/${paymentId}`, params)
+}
+
+/**
+ * Pix Automatico — autorizacao com QR imediato (Jornada 3): o QR cobra o 1o
+ * ciclo e pede ao banco do pagador a autorizacao dos debitos seguintes.
+ * Exige conta PJ elegivel; conta inelegivel responde 4xx.
+ */
+export async function createPixAutomaticAuthorization(
+  params: AsaasCreatePixAutomaticAuthorizationParams,
+  apiKey: string,
+): Promise<AsaasPixAutomaticAuthorization> {
+  return request<AsaasPixAutomaticAuthorization>(
+    "POST",
+    "/pix/automatic/authorizations",
+    params,
+    apiKey,
+  )
+}
+
+export async function getPixAutomaticAuthorization(
+  id: string,
+  apiKey: string,
+): Promise<AsaasPixAutomaticAuthorization> {
+  return request<AsaasPixAutomaticAuthorization>(
+    "GET",
+    `/pix/automatic/authorizations/${id}`,
+    undefined,
+    apiKey,
+  )
+}
+
+export async function cancelPixAutomaticAuthorization(
+  id: string,
+  apiKey: string,
+): Promise<AsaasPixAutomaticAuthorization> {
+  return request<AsaasPixAutomaticAuthorization>(
+    "DELETE",
+    `/pix/automatic/authorizations/${id}`,
+    undefined,
+    apiKey,
+  )
 }
 
 export async function getBillingInfo(paymentId: string, apiKey?: string): Promise<AsaasBillingInfo> {

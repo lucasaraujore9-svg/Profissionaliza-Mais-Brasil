@@ -100,6 +100,7 @@ export async function runSubscriptionCarneSweep(
       interval: true,
       priceAtPurchase: true,
       gateway: true,
+      billingType: true,
     },
     take: BATCH,
   })
@@ -133,7 +134,8 @@ export async function runSubscriptionCarneSweep(
             amount: s.priceAtPurchase,
             gateway: s.gateway,
             status: CARNE_STATUS.SCHEDULED,
-            billingType: "BOLETO",
+            // O meio do carnê: a renovação segue no boleto ou no PIX.
+            billingType: s.billingType === "PIX" ? "PIX" : "BOLETO",
             dueDate: n.dueDate,
           },
         })
@@ -166,6 +168,7 @@ export async function runSubscriptionCarneSweep(
     select: {
       id: true,
       number: true,
+      billingType: true,
       subscription: {
         select: { id: true, studentId: true, tenantId: true, plan: { select: { name: true } } },
       },
@@ -179,12 +182,15 @@ export async function runSubscriptionCarneSweep(
       if (emitted.status !== "emitted") continue
       result.emitted++
       if ((row.number ?? 0) > 1) {
+        const pix = row.billingType === "PIX"
         await createNotification({
           audience: "STUDENT",
           studentId: row.subscription.studentId,
           level: "INFO",
-          title: "Boleto da assinatura disponível",
-          body: `O boleto ${row.number} da sua assinatura ${row.subscription.plan.name} já pode ser pago.`,
+          title: pix ? "PIX da assinatura disponível" : "Boleto da assinatura disponível",
+          body: pix
+            ? `A cobrança ${row.number} da sua assinatura ${row.subscription.plan.name} já pode ser paga pelo PIX. Com o Pix Automático autorizado, ela é debitada sozinha no vencimento.`
+            : `O boleto ${row.number} da sua assinatura ${row.subscription.plan.name} já pode ser pago.`,
           category: "student-billing",
           href: "/aluno/assinatura",
         }).catch(swallow("subscription.carne.notify"))

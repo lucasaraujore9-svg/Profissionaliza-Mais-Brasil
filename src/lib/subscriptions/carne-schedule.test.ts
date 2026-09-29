@@ -8,6 +8,7 @@ import {
   checkCarneRequest,
   defaultCarneCount,
   noonUtc,
+  usesPlatformCycles,
 } from "./carne-schedule"
 
 /**
@@ -207,5 +208,19 @@ describe("helpers", () => {
     expect(carneDueInDays(3, new Date("2026-09-17T02:00:00Z")).toISOString()).toBe(
       "2026-09-19T12:00:00.000Z",
     )
+  })
+})
+
+describe("usesPlatformCycles", () => {
+  it("boleto é sempre carnê; PIX só na recorrente; cartão nunca", () => {
+    expect(usesPlatformCycles("BOLETO", "MONTHLY")).toBe(true)
+    expect(usesPlatformCycles("BOLETO", "LIFETIME")).toBe(true)
+    // PIX recorrente é carnê nos DOIS gateways — o MP não faz recorrência no
+    // PIX pela API, e o Asaas usa o carnê para o Pix Automático.
+    expect(usesPlatformCycles("PIX", "MONTHLY")).toBe(true)
+    expect(usesPlatformCycles("PIX", "ANNUAL")).toBe(true)
+    // Vitalício no PIX é cobrança única do gateway.
+    expect(usesPlatformCycles("PIX", "LIFETIME")).toBe(false)
+    expect(usesPlatformCycles("CREDIT_CARD", "MONTHLY")).toBe(false)
   })
 })

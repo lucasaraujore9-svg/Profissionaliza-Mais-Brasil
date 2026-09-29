@@ -423,11 +423,9 @@ async function createMpSubscriptionForPlan(
 
   if (!input.cardToken) {
     // A recorrência do MP sem token só existiria como página do Mercado Pago
-    // (`init_point`), e o aluno de uma loja paga sempre na página da loja. O
-    // boleto nem chega aqui: é a assinatura no boleto (`carne.ts`).
-    throw new SubscriptionCheckoutInputError(
-      "Esta loja aceita assinatura no cartão de crédito ou no boleto",
-    )
+    // (`init_point`), e o aluno de uma loja paga sempre na página da loja. PIX
+    // e boleto recorrentes nem chegam aqui: são o carnê (`carne.ts`).
+    throw new SubscriptionCheckoutInputError("Dados do cartão obrigatórios")
   }
 
   const preapproval = await createPreapproval(

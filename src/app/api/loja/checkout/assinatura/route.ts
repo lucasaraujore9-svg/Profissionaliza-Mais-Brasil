@@ -9,7 +9,6 @@ import { provisionStudentAccess } from "@/lib/students/access"
 import { buildGuardianWrite } from "@/lib/students/guardian"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
-import { isRecurringInterval } from "@/lib/subscriptions/interval"
 import {
   createSubscriptionAtGateway,
   SubscriptionCheckoutInputError,
@@ -20,6 +19,7 @@ import {
   discardSubscriptionCarne,
   startSelfServiceCarne,
 } from "@/lib/subscriptions/carne"
+import { usesPlatformCycles } from "@/lib/subscriptions/carne-schedule"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { decryptTenantAsaasKey } from "@/lib/asaas/client"
@@ -142,28 +142,12 @@ export const POST = withRequestContext(
       return NextResponse.json({ error: "Plano indisponível" }, { status: 404 })
     }
 
-    // MP não faz RECORRÊNCIA com PIX: o preapproval exige cartão, e o boleto
-    // recorrente é o carnê da plataforma. A restrição é da recorrência, não da
-    // loja — um plano VITALÍCIO no MP é uma cobrança comum e aceita PIX. Por
-    // isso a checagem roda depois de carregar o plano: aplicá-la antes recusaria
-    // PIX numa compra única que o gateway aceita sem problema.
-    if (
-      gateway === "MP" &&
-      isRecurringInterval(plan.interval) &&
-      data.paymentMethod === "PIX"
-    ) {
-      return NextResponse.json(
-        {
-          error: "Esta loja aceita assinatura no cartão de crédito ou no boleto",
-          code: "METHOD_NOT_SUPPORTED",
-        },
-        { status: 400 },
-      )
-    }
-    // Assinatura no boleto: um boleto por ciclo, emitido pela plataforma.
-    const payWithCarne = data.paymentMethod === "BOLETO"
+    // Assinatura no boleto — ou no PIX, se recorrente: uma cobrança por ciclo,
+    // emitida pela plataforma (no Asaas, o PIX vem com Pix Automático). É o
+    // que dá PIX recorrente às lojas de Mercado Pago, cuja recorrência pela API
+    // só existe no cartão.
     // O boleto do MP recusa pagador sem endereço completo.
-    if (payWithCarne && gateway === "MP" && !data.enderecoBoleto) {
+    if (data.paymentMethod === "BOLETO" && gateway === "MP" && !data.enderecoBoleto) {
       return NextResponse.json(
         {
           error: "Informe o endereço completo para gerar o boleto.",
@@ -273,11 +257,12 @@ export const POST = withRequestContext(
       select: { id: true },
     })
 
-    if (payWithCarne) {
+    if (usesPlatformCycles(data.paymentMethod, plan.interval)) {
       try {
         const carne = await startSelfServiceCarne({
           subscriptionId: subscription.id,
           studentId: student.id,
+          method: data.paymentMethod,
           address: data.enderecoBoleto,
         })
         return NextResponse.json({
@@ -285,6 +270,8 @@ export const POST = withRequestContext(
             subscriptionId: subscription.id,
             authorized: false,
             boleto: carne.firstBoleto ?? undefined,
+            pix: carne.firstPix ?? undefined,
+            pixAutomatic: carne.pixAutomatic || undefined,
           },
         })
       } catch (err) {
@@ -299,7 +286,7 @@ export const POST = withRequestContext(
           "falha ao gerar o boleto da assinatura",
         )
         return NextResponse.json(
-          { error: "Não foi possível gerar o boleto. Tente novamente." },
+          { error: "Não foi possível gerar a cobrança. Tente novamente." },
           { status: 502 },
         )
       }

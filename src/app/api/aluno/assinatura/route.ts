@@ -17,6 +17,7 @@ import {
   discardSubscriptionCarne,
   startSelfServiceCarne,
 } from "@/lib/subscriptions/carne"
+import { usesPlatformCycles } from "@/lib/subscriptions/carne-schedule"
 import { cancelSubscriptionAccess } from "@/lib/subscriptions/cancel"
 import { isRecurringInterval } from "@/lib/subscriptions/interval"
 import { contextLogger } from "@/lib/logger"
@@ -140,16 +141,6 @@ export const POST = withRequestContext(
         { status: 400 },
       )
     }
-    // Mesma restrição da loja: a recorrência do MP não emite PIX por ciclo.
-    if (gateway === "MP" && isRecurringInterval(plan.interval) && data.paymentMethod === "PIX") {
-      return NextResponse.json(
-        {
-          error: "Esta loja aceita assinatura no cartão de crédito ou no boleto",
-          code: "METHOD_NOT_SUPPORTED",
-        },
-        { status: 400 },
-      )
-    }
 
     const pendingCutoff = new Date(Date.now() - PENDING_CHECKOUT_TTL_MS)
     const alreadyLive = await prisma.studentSubscription.findFirst({
@@ -204,17 +195,20 @@ export const POST = withRequestContext(
 
     // Boleto é a assinatura no boleto (carnê), igual às vitrines: um boleto por
     // ciclo, emitido pela plataforma.
-    if (data.paymentMethod === "BOLETO") {
+    if (usesPlatformCycles(data.paymentMethod, plan.interval)) {
       try {
         const carne = await startSelfServiceCarne({
           subscriptionId: subscription.id,
           studentId: student.id,
+          method: data.paymentMethod,
         })
         return NextResponse.json({
           data: {
             subscriptionId: subscription.id,
             authorized: false,
             boleto: carne.firstBoleto ?? undefined,
+            pix: carne.firstPix ?? undefined,
+            pixAutomatic: carne.pixAutomatic || undefined,
           },
         })
       } catch (err) {
@@ -227,7 +221,7 @@ export const POST = withRequestContext(
           "falha ao gerar o boleto da assinatura do aluno logado",
         )
         return NextResponse.json(
-          { error: "Não foi possível gerar o boleto. Tente novamente." },
+          { error: "Não foi possível gerar a cobrança. Tente novamente." },
           { status: 502 },
         )
       }

@@ -30,9 +30,10 @@ import type { StoreSubscriptionPaymentInput } from "./checkout-schema"
 import {
   CarneInputError,
   resetSubscriptionCarne,
+  openCarnePix,
   startSelfServiceCarne,
 } from "./carne"
-import { CARNE_OPEN_STATUSES } from "./carne-schedule"
+import { CARNE_OPEN_STATUSES, usesPlatformCycles, type CarneMethod } from "./carne-schedule"
 
 /**
  * PAGAMENTO de uma assinatura na página da PLATAFORMA (`/pagar/assinatura/<id>`)
@@ -72,6 +73,8 @@ export type StorePaymentResult =
       authorized: boolean
       pix?: PixInstrument
       boleto?: BoletoInstrument
+      /** O PIX mostrado também pede a autorização do Pix Automático. */
+      pixAutomatic?: boolean
     }
   | { ok: false; status: number; error: string; code: string }
 
@@ -101,6 +104,7 @@ const PAYABLE_SELECT = {
   asaasSubscriptionId: true,
   externalReference: true,
   boletoCarne: true,
+  billingType: true,
   studentId: true,
   student: { select: PAYER_SELECT },
 } as const
@@ -116,6 +120,7 @@ type PayableSubscription = {
   asaasSubscriptionId: string | null
   externalReference: string | null
   boletoCarne: boolean
+  billingType: string | null
   studentId: string
 }
 
@@ -357,18 +362,13 @@ async function payUnderLock(
     )
   }
 
-  // BOLETO, nos dois gateways, é a assinatura no boleto: um boleto por ciclo,
-  // emitido pela plataforma na conta da loja.
-  if (data.paymentMethod === "BOLETO") return startCarne(sub, data, resolved)
-
-  const recurring = isRecurringInterval(sub.interval)
-  if (resolved.gateway === "MP" && recurring && data.paymentMethod !== "CREDIT_CARD") {
-    return fail(
-      400,
-      "METHOD_NOT_SUPPORTED",
-      "Esta loja aceita assinatura no cartão de crédito ou no boleto",
-    )
+  // BOLETO — e PIX na recorrente —, nos dois gateways, é o carnê: uma cobrança
+  // por ciclo, emitida pela plataforma na conta da loja (no Asaas, o PIX com
+  // Pix Automático).
+  if (usesPlatformCycles(data.paymentMethod, sub.interval)) {
+    return startCarne(sub, data, resolved, data.paymentMethod)
   }
+
   const cardCheck = checkCard(data, resolved.gateway)
   if (cardCheck) return cardCheck
 
@@ -423,6 +423,7 @@ async function startCarne(
   sub: PayableSubscription,
   data: StoreSubscriptionPaymentInput,
   resolved: ResolvedAccount,
+  method: CarneMethod,
 ): Promise<StorePaymentResult> {
   // O carnê é emitido no gateway ATIVO da loja agora (que pode não ser o da
   // venda, se a loja trocou de gateway depois de mandar o link).
@@ -436,12 +437,15 @@ async function startCarne(
     const carne = await startSelfServiceCarne({
       subscriptionId: sub.id,
       studentId: sub.studentId,
+      method,
       address: resolved.gateway === "MP" ? data.enderecoBoleto : undefined,
     })
     return {
       ok: true,
       authorized: false,
       ...(carne.firstBoleto ? { boleto: carne.firstBoleto } : {}),
+      ...(carne.firstPix ? { pix: carne.firstPix } : {}),
+      ...(carne.pixAutomatic ? { pixAutomatic: true } : {}),
     }
   } catch (err) {
     await resetSubscriptionCarne(sub.id)
@@ -465,6 +469,21 @@ async function payCarneBoleto(
   payer: PayerData,
   remoteIp: string | undefined,
 ): Promise<StorePaymentResult> {
+  // Assinatura no PIX: o PIX em aberto, lido ao vivo (e emitido na hora, se o
+  // anterior expirou). No 1º ciclo de um Pix Automático, o QR da autorização.
+  if (sub.billingType === "PIX" && (data.paymentMethod === "PIX" || sub.gateway === "MP")) {
+    if (data.paymentMethod !== "PIX") {
+      return fail(400, "METHOD_NOT_SUPPORTED", "Esta assinatura é paga por PIX.")
+    }
+    const pix = await openCarnePix(sub.id)
+    return pix
+      ? { ok: true, authorized: false, pix }
+      : fail(
+          409,
+          "NO_OPEN_CHARGE",
+          "Não há PIX em aberto agora. O próximo fica disponível 7 dias antes do vencimento.",
+        )
+  }
   if (sub.gateway === "ASAAS") {
     return payOpenAsaasCharge(sub, data, resolved, payer, remoteIp)
   }

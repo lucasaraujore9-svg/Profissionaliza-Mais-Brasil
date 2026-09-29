@@ -12,6 +12,7 @@ import { subscriptionCarneView } from "@/lib/subscriptions/carne-view"
 import { hasCompleteBoletoAddress } from "@/lib/installments/mp-boleto"
 import { SubscriptionPayForm } from "@/components/loja/subscription-pay-form"
 import { InstallmentsSection } from "@/components/aluno/installments-section"
+import { isWithinRevealWindow } from "@/lib/installments/schedule"
 
 /**
  * Página de pagamento de uma ASSINATURA na plataforma — o único lugar onde o
@@ -62,6 +63,7 @@ export async function SubscriptionPaymentPage({
       asaasSubscriptionId: true,
       externalReference: true,
       boletoCarne: true,
+      billingType: true,
       plan: { select: { name: true, description: true } },
       student: {
         select: {
@@ -213,11 +215,13 @@ export async function SubscriptionPaymentPage({
 }
 
 function PlanCard({
+  label,
   planName,
   description,
   studentName,
   children,
 }: {
+  label: string
   planName: string
   description: string | null
   studentName: string | null
@@ -226,7 +230,7 @@ function PlanCard({
   return (
     <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-6">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-        Assinatura no boleto
+        {label}
       </p>
       <h2 className="mt-1 text-lg font-bold text-[var(--color-pmb-green-900)]">{planName}</h2>
       {description && <p className="mt-2 text-sm text-gray-600">{description}</p>}
@@ -256,6 +260,7 @@ async function CarnePayment({
     status: string
     interval: SubscriptionInterval
     gateway: "MP" | "ASAAS"
+    billingType: string | null
     priceAtPurchase: unknown
     plan: { name: string; description: string | null }
     student: { nome: string | null }
@@ -278,28 +283,41 @@ async function CarnePayment({
     },
   })
   const now = new Date()
-  const carne = subscriptionCarneView({ id: subscriptionId, planName: sub.plan.name }, rows, now)
-  // O boleto que se paga agora: o mais antigo em aberto que já foi emitido.
+  const pix = sub.billingType === "PIX"
+  // No PIX a lista não ajuda (o QR expira e é gerado na hora do pagamento): a
+  // tela mostra só o formulário, que busca o PIX em aberto ao vivo.
+  const carne = pix
+    ? null
+    : subscriptionCarneView({ id: subscriptionId, planName: sub.plan.name }, rows, now)
+  // O que se paga agora. Boleto: o mais antigo em aberto que já foi emitido.
+  // PIX: o mais antigo em aberto dentro da janela — emitido na hora, se preciso.
   const open = rows.find(
-    (r) => !r.paidAt && r.status !== "CANCELLED" && (r.asaasPaymentId || r.bankSlipUrl),
+    (r) =>
+      !r.paidAt &&
+      r.status !== "CANCELLED" &&
+      (pix
+        ? isWithinRevealWindow({ number: r.number ?? 1, dueDate: r.dueDate }, now)
+        : r.asaasPaymentId || r.bankSlipUrl),
   )
   const price = Number(open?.amount ?? sub.priceAtPurchase)
+  const unidade = pix ? "PIX" : "boleto"
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
       <div className="mx-auto max-w-3xl space-y-6 px-4 md:px-6">
         <header>
           <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
-            {open ? "Pagar boleto da assinatura" : "Assinatura no boleto"}
+            {open ? `Pagar ${unidade} da assinatura` : `Assinatura no ${unidade}`}
           </h1>
           <p className="mt-1 text-sm text-gray-600">
             {open
-              ? "Pague o boleto em aberto para manter o acesso aos cursos."
-              : "Nenhum boleto em aberto agora. O próximo fica disponível 7 dias antes do vencimento."}
+              ? `Pague o ${unidade} em aberto para manter o acesso aos cursos.`
+              : `Nenhum ${unidade} em aberto agora. O próximo fica disponível 7 dias antes do vencimento.`}
           </p>
         </header>
 
         <PlanCard
+          label={`Assinatura no ${unidade}`}
           planName={sub.plan.name}
           description={sub.plan.description}
           studentName={sub.student.nome}
@@ -311,7 +329,7 @@ async function CarnePayment({
             <span className="text-sm text-gray-500"> {INTERVAL_PRICE_SUFFIX[sub.interval]}</span>
           </p>
           <p className="mt-1 text-sm text-gray-500">
-            Um boleto por ciclo, renovado automaticamente até o cancelamento.
+            Uma cobrança por ciclo, renovada automaticamente até o cancelamento.
           </p>
         </PlanCard>
 
@@ -323,7 +341,7 @@ async function CarnePayment({
           />
         )}
 
-        {open && sub.gateway === "ASAAS" && (
+        {open && (pix || sub.gateway === "ASAAS") && (
           <SubscriptionPayForm
             subscriptionId={subscriptionId}
             planName={sub.plan.name}
@@ -335,6 +353,7 @@ async function CarnePayment({
             renewal
             carneOpen
             defaultHolderName={sub.student.nome ?? ""}
+            methods={pix ? ["PIX"] : undefined}
           />
         )}
       </div>
