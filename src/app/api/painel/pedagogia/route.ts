@@ -6,7 +6,8 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
 import { parsePolicy } from "@/lib/pedagogia/policy"
 import { inputToPolicy, pedagogyInputSchema, policyToInput } from "@/lib/pedagogia/schema"
-import { syncTenantPedagogyToLms } from "@/lib/pedagogia/sync"
+import { syncOverriddenEnrollmentsToLms, syncTenantPedagogyToLms } from "@/lib/pedagogia/sync"
+import { afterResponse } from "@/lib/after-response"
 
 /**
  * REGRAS PEDAGOGICAS padrao da unidade (ordem / ritmo / horario).
@@ -94,6 +95,9 @@ export const PUT = withRequestContext(
       { id: ctx.tenantId, slug: before.slug },
       policy,
     )
+    // Alunos com ordem propria guardam a politica inteira no LMS e precisam de
+    // um PATCH cada — fora da resposta, para a tela nao ficar pendurada.
+    if (propagado) afterResponse(() => syncOverriddenEnrollmentsToLms(ctx.tenantId, policy))
 
     // A regra alcanca aluno que JA COMPROU: quem mudou o acesso de quem pagou
     // precisa ficar na trilha, com o antes e o depois.

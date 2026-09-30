@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import type { ManagementScope, StudentData } from "./types"
 import { apiBase } from "./types"
 import { CheckoutLink } from "@/components/shared/checkout-link"
+import { ReleaseRuleCell } from "./release-rule-cell"
 import { VerifyPaymentButton } from "@/components/shared/verify-payment-button"
 import { Button } from "@/components/ui/button"
 import {
@@ -106,6 +107,10 @@ export function FinancialTab({
   // de recebimento da rede. A rota exige SUPER_ADMIN de qualquer forma; isto é
   // só o gate visual, para o botão não aparecer e falhar.
   const canManageCota = scope.kind === "admin"
+  // A ordem das aulas e regra da UNIDADE (a vitrine PMB nao tem); so o painel
+  // a troca, e so aparece quando alguma matricula aceita a troca.
+  const showReleaseRule =
+    scope.kind === "painel" && student.enrollments.some((e) => e.releaseRule)
 
   async function cancelEnrollment(enrollmentId: string, removeAccess: boolean) {
     setTarget(null)
@@ -202,6 +207,9 @@ export function FinancialTab({
                   {student.paceGateEnabled && (
                     <th className="px-4 py-2 font-semibold">Cota de aulas</th>
                   )}
+                  {showReleaseRule && (
+                    <th className="px-4 py-2 font-semibold">Liberação das aulas</th>
+                  )}
                   <th className="px-4 py-2 font-semibold">Início</th>
                   <th className="px-4 py-2 font-semibold">Checkout</th>
                   <th className="px-4 py-2 font-semibold">Ações</th>
@@ -286,6 +294,14 @@ export function FinancialTab({
                             canManage={canManageCota}
                             loading={cotaLoading === e.id}
                             onToggle={(exempt) => setCota(e.id, exempt)}
+                          />
+                        </td>
+                      )}
+                      {showReleaseRule && (
+                        <td className="px-4 py-3">
+                          <ReleaseRuleCell
+                            url={`${apiBase(scope, student.id)}/enrollments/${e.id}/pedagogia`}
+                            rule={e.releaseRule}
                           />
                         </td>
                       )}

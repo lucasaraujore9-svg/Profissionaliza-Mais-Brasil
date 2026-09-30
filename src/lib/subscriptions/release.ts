@@ -174,6 +174,7 @@ async function activateCourse(
     existing
       ? `sub:${sub.id}:${course.id}:reactivate:${existing.id}:${leftAt?.getTime() ?? 0}`
       : `sub:${sub.id}:${course.id}`,
+    existing?.id,
   )
 
   if (existing) {

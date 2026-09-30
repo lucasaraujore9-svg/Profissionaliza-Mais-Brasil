@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -37,15 +39,25 @@ const MODOS = [
   },
 ]
 
+type CursoRegra = { courseId: string; nome: string; proprio: boolean }
+
+/**
+ * Formulario das regras de estudo. Serve a unidade (padrao) e UM curso
+ * (`endpoint` = `/api/painel/cursos/:id/pedagogia`). `acoes` entra ao lado do
+ * salvar — o "voltar as regras da unidade" do curso.
+ */
 export function PedagogyForm({
   inicial,
   alcance,
-  overrides,
+  endpoint = "/api/painel/pedagogia",
+  acoes,
 }: {
   inicial: PedagogyInput
   alcance: { proprios: number; parceira: number }
-  overrides: { courseId: string; nome: string; proprio: boolean }[]
+  endpoint?: string
+  acoes?: React.ReactNode
 }) {
+  const router = useRouter()
   const [v, setV] = React.useState<PedagogyInput>(inicial)
   const [salvando, setSalvando] = React.useState(false)
   const set = <K extends keyof PedagogyInput>(k: K, val: PedagogyInput[K]) =>
@@ -54,7 +66,7 @@ export function PedagogyForm({
   async function salvar() {
     setSalvando(true)
     try {
-      const res = await fetch("/api/painel/pedagogia", {
+      const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(v),
@@ -74,6 +86,7 @@ export function PedagogyForm({
       } else {
         toast.success("Regras de estudo atualizadas")
       }
+      router.refresh()
     } catch {
       toast.error("Falha de conexão ao salvar")
     } finally {
@@ -280,33 +293,122 @@ export function PedagogyForm({
           )}
         </Card>
 
-        {overrides.length > 0 && (
-          <Card className="p-6 space-y-3">
-            <div>
-              <h2 className="font-semibold">Cursos com regra própria</h2>
-              <p className="text-sm text-muted-foreground">
-                Estes cursos ignoram as regras acima e seguem a configuração individual deles.
-              </p>
-            </div>
-            <ul className="divide-y text-sm">
-              {overrides.map((o) => (
-                <li key={o.courseId} className="flex items-center justify-between py-2">
-                  <span>{o.nome}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {o.proprio ? "todas as regras" : "só horário"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-2">
+          {acoes}
           <Button onClick={salvar} disabled={salvando}>
             {salvando ? "Salvando…" : "Salvar regras"}
           </Button>
         </div>
       </div>
     </WriteGate>
+  )
+}
+
+/**
+ * Cursos com regra propria + escolha de um curso para configurar. Fica FORA do
+ * `WriteGate` (a pagina o renderiza a parte): quem so tem `pedagogia.view`
+ * tambem precisa navegar ate a regra de um curso para CONSULTA-LA.
+ */
+export function CursosComRegra({
+  cursos,
+  overrides,
+}: {
+  cursos: CursoRegra[]
+  overrides: CursoRegra[]
+}) {
+  const router = useRouter()
+  const [escolhido, setEscolhido] = React.useState("")
+  const comRegra = new Set(overrides.map((o) => o.courseId))
+  const semRegra = cursos.filter((c) => !comRegra.has(c.courseId))
+
+  return (
+    <Card className="p-6 space-y-4">
+      <div>
+        <h2 className="font-semibold">Regra própria por curso</h2>
+        <p className="text-sm text-muted-foreground">
+          Um curso com regra própria ignora as regras acima. A mudança vale também para quem já
+          comprou o curso.
+        </p>
+      </div>
+
+      {overrides.length > 0 && (
+        <ul className="divide-y text-sm">
+          {overrides.map((o) => (
+            <li key={o.courseId} className="flex items-center justify-between gap-3 py-2">
+              <span>{o.nome}</span>
+              <span className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">
+                  {o.proprio ? "todas as regras" : "só horário"}
+                </span>
+                <Link
+                  href={`/painel/pedagogia/cursos/${o.courseId}`}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  Abrir
+                </Link>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {semRegra.length > 0 && (
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="cursoRegra">Definir regra para o curso</Label>
+            <select
+              id="cursoRegra"
+              className="h-10 w-72 max-w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={escolhido}
+              onChange={(e) => setEscolhido(e.target.value)}
+            >
+              <option value="">Escolha um curso…</option>
+              {semRegra.map((c) => (
+                <option key={c.courseId} value={c.courseId}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button
+            variant="outline"
+            disabled={!escolhido}
+            onClick={() => router.push(`/painel/pedagogia/cursos/${escolhido}`)}
+          >
+            Configurar
+          </Button>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/** Remove a regra propria do curso: ele volta a seguir o padrao da unidade. */
+export function RemoverRegraCurso({ courseId }: { courseId: string }) {
+  const router = useRouter()
+  const [removendo, setRemovendo] = React.useState(false)
+
+  async function remover() {
+    setRemovendo(true)
+    try {
+      const res = await fetch(`/api/painel/cursos/${courseId}/pedagogia`, { method: "DELETE" })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json.error ?? "Não foi possível remover")
+        return
+      }
+      toast.success("O curso voltou a seguir as regras da unidade")
+      router.refresh()
+    } catch {
+      toast.error("Falha de conexão ao remover")
+    } finally {
+      setRemovendo(false)
+    }
+  }
+
+  return (
+    <Button variant="ghost" onClick={remover} disabled={removendo}>
+      {removendo ? "Removendo…" : "Voltar às regras da unidade"}
+    </Button>
   )
 }

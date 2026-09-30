@@ -90,3 +90,10 @@ export function policyToInput(p: PedagogyPolicy): PedagogyInput {
     accessEnd: minutesToHhmm(p.accessEndMin),
   }
 }
+
+/** Troca da ORDEM de uma matricula depois da venda (ver `order-override.ts`). */
+export const orderOverrideInputSchema = z.object({
+  releaseMode: z.enum(["FREE", "SEQUENTIAL", "DRIP"]),
+  dripDays: z.number().int().min(1).max(MAX_DRIP_DAYS),
+  dripUnit: z.enum(["LESSON", "MODULE"]),
+})

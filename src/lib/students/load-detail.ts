@@ -15,6 +15,7 @@ import {
   isPaceGatedPlan,
 } from "@/lib/enrollment/pace-gate"
 import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
+import { resolveEnrollmentPolicy } from "@/lib/pedagogia/order-override"
 
 /**
  * Carrega o aluno completo + matriculas + pagamentos + notas + notificacoes
@@ -50,7 +51,9 @@ export async function loadStudentDetail(args: {
   const student = await prisma.student.findFirst({
     where,
     include: {
-      tenant: { select: { name: true, slug: true, customDomain: true, domainVerified: true } },
+      tenant: {
+        select: { name: true, slug: true, customDomain: true, domainVerified: true, pedagogyPolicy: true },
+      },
       enrollments: {
         orderBy: { createdAt: "desc" },
         include: {
@@ -86,7 +89,7 @@ export async function loadStudentDetail(args: {
   if (!student) return null
 
   const enrollmentIds = student.enrollments.map((e) => e.id)
-  const [payments, notifications] = await Promise.all([
+  const [payments, notifications, tenantCourses] = await Promise.all([
     prisma.payment.findMany({
       where: { enrollmentId: { in: enrollmentIds } },
       orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
@@ -105,7 +108,17 @@ export async function loadStudentDetail(args: {
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
+    // Regra de estudo do curso NESTA vitrine, para mostrar a ordem efetiva de
+    // cada matricula. Busca por (tenant, curso), igual a propagacao ao LMS.
+    prisma.tenantCourse.findMany({
+      where: {
+        tenantId: student.tenantId,
+        courseId: { in: student.enrollments.map((e) => e.courseId) },
+      },
+      select: { courseId: true, pedagogyPolicy: true },
+    }),
   ])
+  const coursePolicy = new Map(tenantCourses.map((t) => [t.courseId, t.pedagogyPolicy]))
 
   // Senha da plataforma de aulas (EA): guardada criptografada (AES-256-GCM).
   // Descriptografamos para exibir na gestão. Valores legados em texto puro ou
@@ -251,6 +264,7 @@ export async function loadStudentDetail(args: {
       paceAllowedPercent: isPaceGatedPlan(e) ? computeAllowedPercent(e) : null,
       paceBlocked: e.paceBlockedAt !== null,
       paceExemptAt: e.paceExemptAt?.toISOString() ?? null,
+      releaseRule: releaseRuleOf(e, student.tenant.pedagogyPolicy, coursePolicy.get(e.courseId)),
     })),
     payments: payments.map((p) => ({
       id: p.id,
@@ -279,5 +293,25 @@ export async function loadStudentDetail(args: {
       readAt: n.readAt?.toISOString() ?? null,
     })),
     courseAccess,
+  }
+}
+
+/**
+ * Ordem de liberacao efetiva da matricula, para a unidade trocar depois da
+ * venda. `null` onde a troca nao se aplica: vitrine PMB, curso sem controle
+ * aula a aula ou matricula cancelada.
+ */
+function releaseRuleOf(
+  e: { tenantId: string | null; lmsEnrollmentId: string | null; status: string; pedagogyOrder: unknown },
+  tenantPolicy: unknown,
+  coursePolicy: unknown,
+): StudentData["enrollments"][number]["releaseRule"] {
+  if (!e.tenantId || !e.lmsEnrollmentId || e.status === "CANCELLED") return null
+  const p = resolveEnrollmentPolicy(tenantPolicy, coursePolicy, e.pedagogyOrder)
+  return {
+    releaseMode: p.releaseMode,
+    dripDays: p.dripDays,
+    dripUnit: p.dripUnit,
+    custom: e.pedagogyOrder != null,
   }
 }

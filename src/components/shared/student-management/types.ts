@@ -51,6 +51,17 @@ export interface StudentEnrollmentItem {
   paceBlocked: boolean
   /** Liberacao manual concedida (SUPER_ADMIN) — desarma a trava. */
   paceExemptAt: string | null
+
+  /**
+   * Ordem de liberacao das aulas efetiva desta matricula. `custom` = a unidade
+   * trocou so para este aluno. `null` = troca nao se aplica a esta matricula.
+   */
+  releaseRule: {
+    releaseMode: "FREE" | "SEQUENTIAL" | "DRIP"
+    dripDays: number
+    dripUnit: "LESSON" | "MODULE"
+    custom: boolean
+  } | null
 }
 
 export interface StudentPaymentItem {

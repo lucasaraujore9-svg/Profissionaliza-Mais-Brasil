@@ -1031,6 +1031,7 @@ async function provisionLmsAccess(
   const pedagogy = await pedagogyForNewEnrollment(
     tenant.isPmbVitrine ? null : tenant.id,
     enrollment.course.id,
+    enrollment.id,
   )
 
   let res: LmsEnrollmentResponse
@@ -1169,6 +1170,8 @@ export async function provisionCourseForStudent(
   student: { id: string; nome: string; email: string | null },
   course: { id: string; nome: string; provider: CourseProvider; lmsCourseId: string | null },
   idempotencyKey: string,
+  /** Matricula existente sendo reprovisionada ("Retomar" da assinatura): leva a ordem propria dela. */
+  enrollmentId?: string,
 ): Promise<{
   lmsEnrollmentId: string | null
   lmsOrigin: string | null
@@ -1192,6 +1195,7 @@ export async function provisionCourseForStudent(
         pedagogy: await pedagogyForNewEnrollment(
           tenant.isPmbVitrine ? null : tenant.id,
           course.id,
+          enrollmentId,
         ),
       },
       idempotencyKey,

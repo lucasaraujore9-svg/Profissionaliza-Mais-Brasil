@@ -1,6 +1,7 @@
 import "server-only"
 import { prisma } from "@/lib/prisma"
 import { DEFAULT_POLICY, parsePolicy, resolvePolicy, type PedagogyPolicy } from "./policy"
+import { resolveEnrollmentPolicy } from "./order-override"
 
 /**
  * Leitura das regras pedagogicas do banco. O unico modulo do PMB que sabe ONDE
@@ -42,12 +43,13 @@ export async function policyForEnrollment(enrollmentId: string): Promise<Pedagog
     select: {
       courseId: true,
       tenantId: true,
+      pedagogyOrder: true,
       tenant: { select: { pedagogyPolicy: true } },
       tenantCourse: { select: { pedagogyPolicy: true } },
     },
   })
   if (!e || !e.tenantId) return DEFAULT_POLICY
-  return resolvePolicy(e.tenant?.pedagogyPolicy, e.tenantCourse?.pedagogyPolicy)
+  return resolveEnrollmentPolicy(e.tenant?.pedagogyPolicy, e.tenantCourse?.pedagogyPolicy, e.pedagogyOrder)
 }
 
 /** Politica padrao da unidade (a tela de configuracao e o push ao LMS). */

@@ -3,7 +3,7 @@ import { requirePainelPage } from "@/lib/auth/painel-guard"
 import { prisma } from "@/lib/prisma"
 import { parsePolicy } from "@/lib/pedagogia/policy"
 import { policyToInput } from "@/lib/pedagogia/schema"
-import { PedagogyForm } from "@/components/painel/pedagogy-form"
+import { CursosComRegra, PedagogyForm } from "@/components/painel/pedagogy-form"
 
 export const metadata = { title: "Regras de estudo" }
 
@@ -30,7 +30,8 @@ export default async function PainelPedagogiaPage() {
     }),
     prisma.tenantCourse.findMany({
       where: { tenantId: ctx.tenantId, isVisible: true },
-      select: { courseId: true, course: { select: { provider: true } } },
+      select: { courseId: true, course: { select: { nome: true, provider: true } } },
+      orderBy: { course: { nome: "asc" } },
     }),
     prisma.tenantCourse.findMany({
       where: { tenantId: ctx.tenantId, pedagogyPolicy: { not: Prisma.DbNull } },
@@ -61,12 +62,19 @@ export default async function PainelPedagogiaPage() {
       <PedagogyForm
         inicial={policyToInput(parsePolicy(tenant?.pedagogyPolicy))}
         alcance={alcance}
-        overrides={overrides
-          .map((o) => ({
-            courseId: o.courseId,
-            nome: o.course.nome,
-            proprio: o.course.provider === "LMS",
-          }))}
+      />
+
+      <CursosComRegra
+        cursos={cursos.map((c) => ({
+          courseId: c.courseId,
+          nome: c.course.nome,
+          proprio: c.course.provider === "LMS",
+        }))}
+        overrides={overrides.map((o) => ({
+          courseId: o.courseId,
+          nome: o.course.nome,
+          proprio: o.course.provider === "LMS",
+        }))}
       />
     </div>
   )

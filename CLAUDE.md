@@ -2151,6 +2151,50 @@ Reuniao de suporte (Gilmar, unidade `otymus`). Tres relatos, um defeito real:
   `select app_internal.run_cron('/api/cron/diagnostico-ea-vinculos?ids=...')` e
   leia `net._http_response`.
 
+### Ordem das aulas trocavel por aluno depois da venda (2026-09-30)
+
+A unidade troca livre / sequencial / gotejamento de UM aluno num curso ja
+vendido: /painel/alunos/[id] → "Matriculas & financeiro" → coluna "Liberacao
+das aulas" (`pedagogia.manage` + recorte `ctx.scope.alunos`).
+
+- **So a ORDEM e sobrescrita** (`Enrollment.pedagogyOrder`: `releaseMode`,
+  `dripDays`, `dripUnit`). Cota diaria e horario seguem herdando curso/unidade.
+  Precedencia: matricula > curso na vitrine > unidade
+  (`lib/pedagogia/order-override.ts`, PURO, sem gemeo no LMS — ele recebe a
+  politica ja resolvida por `PATCH /enrollments/:id/policy`).
+- **Consequencia no LMS:** matricula com ordem propria guarda la a politica
+  INTEIRA, entao nao herda o `PUT /tenants/:id`. Por isso
+  `syncTenantPedagogyToLms` re-empurra essas matriculas, `syncCoursePedagogyToLms`
+  mescla o override de cada uma e `pedagogyForNewEnrollment` o leva no
+  reprovisionamento ("Retomar" da assinatura).
+- **LMS antes do banco:** a rota so grava depois de o LMS aceitar (502 e nada
+  muda). So vale para matricula com `lmsEnrollmentId` e nao cancelada — a
+  fornecedora legada nao tem controle aula a aula.
+- Gotejamento conta da data da MATRICULA: ligar num aluno antigo libera na hora
+  o que ja "venceu". Revisao do que ja foi concluido nunca e barrada.
+- Migration `20260930_enrollment_pedagogy_order` (aditiva, idempotente, sem
+  backfill — NULL = segue a regra de hoje).
+- **Regra por CURSO ganhou tela:** `/painel/pedagogia/cursos/[courseId]`
+  (a API `/api/painel/cursos/[id]/pedagogia` existia sem UI). Em
+  /painel/pedagogia, o card "Regra propria por curso" lista os cursos com regra
+  e deixa escolher outro. Fica FORA do `WriteGate`: quem so tem
+  `pedagogia.view` navega para consultar. O formulario usa `key` pelo estado
+  "tem regra/nao tem" — sem isso, depois de "Voltar as regras da unidade" o
+  estado antigo continuava na tela e salvar recriava o override removido.
+
+**Revisao antes do commit: 5 defeitos, todos corrigidos.**
+- O "Retomar" da assinatura reprovisiona por `provisionCourseForStudent`, e
+  nao por `provisionLmsAccess`. So um dos dois levava a ordem propria.
+  Ao mexer no que viaja na matricula, confira os DOIS caminhos de
+  provisionamento.
+- Re-empurrar as matriculas com ordem propria saiu do PUT da unidade para
+  `afterResponse` (`syncOverriddenEnrollmentsToLms`): N PATCHes com retry
+  penduravam a tela.
+- Propagacao passou a usar `status != CANCELLED`, o mesmo recorte da rota. Com
+  so ACTIVE/COMPLETED, a matricula SUSPENDED voltava a ACTIVE com a regra velha.
+- Se o banco falha depois de o LMS aceitar, a rota devolve ao LMS a regra que o
+  banco ainda tem.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

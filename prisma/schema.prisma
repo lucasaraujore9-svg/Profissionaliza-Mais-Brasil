@@ -1580,6 +1580,13 @@ model Enrollment {
   paceExemptAt       DateTime? @map("pace_exempt_at")
   paceExemptByUserId String?   @map("pace_exempt_by_user_id") // escalar (sem FK), so auditoria
 
+  // Ordem de liberacao das aulas SO desta matricula (livre / sequencial /
+  // gotejamento), definida pela unidade DEPOIS da venda. Guarda apenas os tres
+  // campos da ORDEM (`releaseMode`, `dripDays`, `dripUnit`); ritmo e horario
+  // continuam herdando curso/unidade. null = segue a regra do curso/unidade.
+  // Ver src/lib/pedagogia/order-override.ts.
+  pedagogyOrder Json? @map("pedagogy_order")
+
   // Matricula nascida de uma ASSINATURA (nao de uma compra avulsa). Criada sob
   // demanda, quando o assinante abre o curso pela primeira vez.
   //
