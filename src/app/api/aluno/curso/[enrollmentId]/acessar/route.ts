@@ -99,12 +99,19 @@ export async function GET(
       tenantExternalId: enrollment.tenantId ?? undefined,
       ...sessionFields,
       // O `returnUrl` do SSO é um PATH INTERNO da plataforma de aulas (lá ele
-      // passa por `safeInternalPath`, que descarta URL absoluta). Num e-book
-      // mandamos o aluno direto para o leitor: o botão dele diz "Ler e-book" e
-      // parar numa lista de conteúdos seria pedir mais um clique para chegar
-      // onde o rótulo já prometeu. Sem `lmsSlug` (linha antiga) cai no padrão.
-      ...(enrollment.course.contentType === "EBOOK" && enrollment.course.lmsSlug
-        ? { returnUrl: `/curso/${enrollment.course.lmsSlug}/ler` }
+      // passa por `safeInternalPath`, que descarta URL absoluta). Vai SEMPRE o
+      // curso que o aluno clicou: sem ele o LMS abre `/inicio`, que destaca o
+      // ÚLTIMO curso estudado — o aluno clicava num curso e caía em outro
+      // (chamado otymus, 29/09). `/continuar` retoma de onde ele parou NAQUELE
+      // curso; no e-book, o leitor direto (o botão dele diz "Ler e-book").
+      // Sem `lmsSlug` (nenhuma linha hoje) cai no padrão.
+      ...(enrollment.course.lmsSlug
+        ? {
+            returnUrl:
+              enrollment.course.contentType === "EBOOK"
+                ? `/curso/${enrollment.course.lmsSlug}/ler`
+                : `/curso/${enrollment.course.lmsSlug}/continuar`,
+          }
         : {}),
     })
     return NextResponse.redirect(url)

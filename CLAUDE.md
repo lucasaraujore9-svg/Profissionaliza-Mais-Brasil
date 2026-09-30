@@ -2132,10 +2132,15 @@ Reuniao de suporte (Gilmar, unidade `otymus`). Tres relatos, um defeito real:
   de idempotencia do MP (`matricula:metodo`) devolvia o pagamento antigo. Reuso
   agora exige o mesmo valor e o valor entra na chave do MP. **Regra geral:
   qualquer reuso de cobranca por idempotencia precisa incluir o VALOR.**
-- **"Curso de PC abre Necropsia" (nao e nosso).** A EA tem vinculado ao login
-  exatamente o que as matriculas dizem (verificado pela rota abaixo). Nosso botao
-  so abre `login.php`, sem curso: quem escolhe o curso aberto e a plataforma —
-  sessao antiga no navegador ou tela da fornecedora.
+- **Clicar num curso do LMS abria OUTRO curso (corrigido).** O SSO de
+  `/api/aluno/curso/[id]/acessar` so mandava `returnUrl` no e-book; curso comum
+  caia no `/inicio` do LMS, que destaca o ULTIMO curso estudado. Agora vai sempre
+  `/curso/<lmsSlug>/continuar` (retoma de onde parou NAQUELE curso; e-book segue
+  em `/ler`). Nada muda no LMS — a rota ja existia la.
+- **"Curso de PC abre Necropsia" (EA, nao e nosso).** A EA tem vinculado ao
+  login exatamente o que as matriculas dizem (verificado pela rota abaixo). Nosso
+  botao so abre `login.php`, sem curso: quem escolhe o curso aberto e a
+  plataforma — sessao antiga no navegador ou tela da fornecedora.
 - **"Macrame so abre uma aula" (nao e defeito).** Unidade sem regra gravada ja e
   `FREE` (`DEFAULT_POLICY`); quem trava e a PROVA de cada aula no LMS. O suporte
   explicou como "regra sequencial gravada na matricula" — isso nao existe.
