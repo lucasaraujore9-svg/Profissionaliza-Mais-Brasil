@@ -12,6 +12,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     studentSubscription: { findUnique: vi.fn(), update: vi.fn() },
     enrollment: { findMany: vi.fn(), updateMany: vi.fn() },
+    subscriptionPayment: { updateMany: vi.fn(async () => ({ count: 0 })) },
     certificate: { updateMany: vi.fn() },
   },
 }))
@@ -79,6 +80,15 @@ beforeEach(() => {
 })
 
 describe("cancelSubscriptionAccess", () => {
+  it("assinatura do Asaas removida: as cobranças abertas locais viram CANCELLED (o Asaas as exclui)", async () => {
+    await cancelSubscriptionAccess("sub_1", "REQUESTED")
+    expect(cancelAsaas).toHaveBeenCalled()
+    expect(prisma.subscriptionPayment.updateMany).toHaveBeenCalledWith({
+      where: { subscriptionId: "sub_1", paidAt: null, status: { in: ["PENDING", "OVERDUE"] } },
+      data: { status: "CANCELLED" },
+    })
+  })
+
   it("revoga os cursos e cancela as matriculas da assinatura", async () => {
     const r = await cancelSubscriptionAccess("sub_1", "PAST_DUE")
     expect(unlink).toHaveBeenCalledTimes(2)

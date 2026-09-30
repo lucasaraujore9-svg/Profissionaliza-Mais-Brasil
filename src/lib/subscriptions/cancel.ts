@@ -75,6 +75,17 @@ async function stopGatewayRecurrence(
         sub.asaasSubscriptionId,
         keys.asaasApiKey ?? motherAsaasKey(),
       )
+      // Remover a assinatura no Asaas EXCLUI as cobranças pendentes/vencidas
+      // dela (doc "Remover assinatura"). As linhas locais em aberto seguiriam
+      // PENDING para sempre — o webhook `PAYMENT_DELETED` só trata o carnê.
+      await prisma.subscriptionPayment.updateMany({
+        where: {
+          subscriptionId: sub.id,
+          paidAt: null,
+          status: { in: ["PENDING", "OVERDUE"] },
+        },
+        data: { status: "CANCELLED" },
+      })
       return { ok: true }
     }
     if (sub.mpPreapprovalId) {

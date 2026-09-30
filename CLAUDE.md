@@ -2217,6 +2217,21 @@ CPF com login ("faca login... recompra autenticada usa /api/aluno/comprar") — 
   a `/aluno/assinar` (ou `/aluno/assinatura` para quem ja assina). Pagamento do
   combo mostra o combo no resumo e e a vista, como na loja.
 
+### Limpeza de cadastros de teste (2026-09-30)
+
+`/api/cron/limpar-cadastros-teste?tenant=<slug>&ids=<studentId>,...` (Bearer
+CRON_SECRET, dry-run; `apply=1` executa). So alcanca aluno SEM matricula,
+certificado ou ciclo de assinatura pago; cancela as assinaturas vivas no
+gateway da unidade e anonimiza pelo mesmo fluxo LGPD de `DELETE /api/aluno/conta`
+(agora em `lib/lgpd/anonymize-student.ts`). Cobranca que nao cai no gateway
+bloqueia a anonimizacao. Disparo por `app_internal.run_cron(...)`.
+
+Primeiro uso: 4 cadastros de teste da `capacitaprobrasil` (os 5 com pagamento
+ficaram, por decisao do dono). Descoberta no caminho: ao remover assinatura
+nativa do Asaas, as cobrancas abertas locais ficavam PENDING para sempre (o
+Asaas as exclui, mas `PAYMENT_DELETED` so e tratado no carne) — `cancel.ts`
+passou a marca-las CANCELLED.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
