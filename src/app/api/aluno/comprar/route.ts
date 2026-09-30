@@ -36,11 +36,18 @@ import {
 } from "@/lib/checkout/free-enrollment"
 import { contextLogger } from "@/lib/logger"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
+import { startStudentPackagePurchase } from "@/lib/packages/student-purchase"
 
-const createSchema = z.object({
-  courseId: z.string().min(1),
-  couponCode: z.string().trim().max(64).optional(),
-})
+// Curso avulso (`courseId`) OU combo (`packageId`) — um dos dois.
+const createSchema = z
+  .object({
+    courseId: z.string().min(1).optional(),
+    packageId: z.string().min(1).optional(),
+    couponCode: z.string().trim().max(64).optional(),
+  })
+  .refine((v) => Boolean(v.courseId) !== Boolean(v.packageId), {
+    message: "Informe o curso ou o combo",
+  })
 
 interface ResellerTenant {
   id: string
@@ -507,13 +514,37 @@ export const POST = withRequestContext(
     return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
   }
 
-  if (!isPmbTenantSlug(studentTenant.slug)) {
-    return handleResellerInit(
-      studentTenant.id,
-      session.studentId,
-      studentTenant,
-      parsed.data,
-    )
+  const isPmbStudent = isPmbTenantSlug(studentTenant.slug)
+  const { packageId, couponCode } = parsed.data
+  if (packageId) {
+    // Combo na vitrine PMB pela área do aluno ainda não existe: o catálogo PMB
+    // (`/api/aluno/catalogo`) nem lista combos.
+    if (isPmbStudent) {
+      return NextResponse.json(
+        { error: "Combos são comprados pela página do combo na loja." },
+        { status: 400 },
+      )
+    }
+    return startStudentPackagePurchase({
+      tenant: studentTenant,
+      studentId: session.studentId,
+      packageId,
+      couponCode,
+    })
+  }
+  // O `refine` do schema garante um dos dois; estreitar aqui evita que um
+  // `courseId` indefinido chegue a um `where` — onde o Prisma o IGNORA e o
+  // filtro casaria qualquer curso.
+  const courseId = parsed.data.courseId
+  if (!courseId) {
+    return NextResponse.json({ error: "Informe o curso" }, { status: 400 })
+  }
+
+  if (!isPmbStudent) {
+    return handleResellerInit(studentTenant.id, session.studentId, studentTenant, {
+      courseId,
+      couponCode,
+    })
   }
 
   // Defesa em profundidade: daqui em diante é a venda direta PMB (conta Asaas/MP
@@ -547,7 +578,7 @@ export const POST = withRequestContext(
   // Quem PAGA nesta venda direta PMB — responsavel financeiro quando houver.
   const payer = resolvePayer(student)
   const course = await prisma.course.findUnique({
-    where: { id: parsed.data.courseId },
+    where: { id: courseId },
     select: {
       status: true,
       precoVitrineMain: true,

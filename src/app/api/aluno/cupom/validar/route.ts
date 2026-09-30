@@ -4,13 +4,20 @@ import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { isPmbTenantSlug } from "@/lib/checkout/assert-tenant-gateway"
 import { lookupCouponForScope } from "@/lib/coupons/lookup"
+import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import { rateLimitByKey, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
-const bodySchema = z.object({
-  code: z.string().trim().min(1).max(64),
-  courseId: z.string().min(1),
-})
+// Curso avulso OU combo — o mesmo par que `/api/aluno/comprar` aceita.
+const bodySchema = z
+  .object({
+    code: z.string().trim().min(1).max(64),
+    courseId: z.string().min(1).optional(),
+    packageId: z.string().min(1).optional(),
+  })
+  .refine((v) => Boolean(v.courseId) !== Boolean(v.packageId), {
+    message: "Informe o curso ou o combo",
+  })
 
 /**
  * PRÉVIA de cupom na recompra do aluno logado (/aluno/comprar).
@@ -71,9 +78,22 @@ export const POST = withRequestContext(
     // de outro lugar (ou aceitar um valor do client) faria a prévia prometer um
     // total diferente do cobrado.
     let basePrice: number
-    if (isPmb) {
+    const { courseId, packageId } = parsed.data
+    if (packageId) {
+      // Combo só é vendido ao aluno logado na loja da unidade.
+      const pkg = isPmb ? null : await getPackageForCheckout(tenant.id, packageId)
+      if (!pkg) {
+        return NextResponse.json(
+          { error: "Combo não encontrado", code: "PACKAGE_NOT_FOUND" },
+          { status: 404 },
+        )
+      }
+      basePrice = pkg.price
+    } else if (!courseId) {
+      return NextResponse.json({ error: "Informe o curso" }, { status: 400 })
+    } else if (isPmb) {
       const course = await prisma.course.findFirst({
-        where: { id: parsed.data.courseId, status: "ATIVO" },
+        where: { id: courseId, status: "ATIVO" },
         select: {
           precoVitrineMain: true,
           precoPromocional: true,
@@ -93,7 +113,7 @@ export const POST = withRequestContext(
       const tenantCourse = await prisma.tenantCourse.findFirst({
         where: {
           tenantId: tenant.id,
-          courseId: parsed.data.courseId,
+          courseId,
           isVisible: true,
           price: { gt: 0 },
           course: { status: "ATIVO" },

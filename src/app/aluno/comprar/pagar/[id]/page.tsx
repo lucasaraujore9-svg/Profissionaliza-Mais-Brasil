@@ -56,6 +56,10 @@ export default async function StudentPagarPage({ params }: PagarPageProps) {
       originalAmount: true,
       discountAmount: true,
       installmentsTotal: true,
+      // Combo: o resumo mostra o COMBO (a matrícula primária aponta para o 1º
+      // curso dele, que não é o que o aluno comprou).
+      packagePrimary: true,
+      coursePackage: { select: { name: true, coverImageUrl: true } },
       course: {
         select: {
           nome: true,
@@ -107,17 +111,20 @@ export default async function StudentPagarPage({ params }: PagarPageProps) {
   }
 
   const isMonthly = enrollment.paymentType === "MONTHLY"
-  const maxInstallments = isMonthly ? 1 : MAX_CARD_INSTALLMENTS
+  const pkg = enrollment.packagePrimary ? enrollment.coursePackage : null
+  // Combo é à vista, como no checkout de combo da loja.
+  const maxInstallments = isMonthly || pkg ? 1 : MAX_CARD_INSTALLMENTS
 
   const summary = (
     <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
       <OrderSummary
-        courseName={enrollment.course.nome}
+        courseName={pkg?.name ?? enrollment.course.nome}
         courseCategory={
           enrollment.course.categoriaLoja ?? enrollment.course.categoriaInterna
         }
         courseHours={enrollment.course.cargaHoraria}
         courseImageUrl={
+          pkg?.coverImageUrl ??
           enrollment.tenantCourse?.customCapaUrl ??
           enrollment.course.capaOverride ??
           enrollment.course.capaImageUrl
@@ -127,7 +134,7 @@ export default async function StudentPagarPage({ params }: PagarPageProps) {
         finalPrice={Number(enrollment.finalAmount)}
         couponCode={enrollment.coupon?.code ?? null}
         parcelasSugeridas={
-          isMonthly
+          isMonthly || pkg
             ? null
             : displayInterestFreeInstallments(
                 enrollment.tenant.interestFreeInstallments,
@@ -157,7 +164,7 @@ export default async function StudentPagarPage({ params }: PagarPageProps) {
               enrollmentId={enrollment.id}
               amount={Number(enrollment.finalAmount)}
               interestFreeInstallments={
-                isMonthly ? 1 : enrollment.tenant.interestFreeInstallments
+                isMonthly || pkg ? 1 : enrollment.tenant.interestFreeInstallments
               }
               defaultNome={enrollment.student.nome ?? undefined}
               defaultEmail={payerEmail}

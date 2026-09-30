@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Search, ShoppingBag, CheckCircle2 } from "lucide-react"
+import Link from "next/link"
+import { Loader2, Search, ShoppingBag, CheckCircle2, Repeat } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,43 @@ interface CatalogCourse {
   paymentType: "ONE_TIME" | "MONTHLY"
   monthlyMonths: number | null
   ownedStatus: "PENDING" | "ACTIVE" | "COMPLETED" | null
+  /** Combo (pacote): mesma grade e mesmo resumo, outro identificador na compra. */
+  kind?: "course" | "package"
+}
+
+interface CatalogPackage {
+  id: string
+  nome: string
+  slug: string
+  capa: string | null
+  price: number
+  courseCount: number
+  ownedStatus: "PENDING" | "ACTIVE" | "COMPLETED" | null
+}
+
+/** Rótulo da categoria dos combos — é o que o aluno procura ("combo"). */
+const COMBOS_CATEGORY = "COMBOS"
+
+function packageAsItem(p: CatalogPackage): CatalogCourse {
+  return {
+    id: p.id,
+    nome: p.nome,
+    slug: p.slug,
+    descricao: `Combo com ${p.courseCount} ${p.courseCount === 1 ? "curso" : "cursos"}. Pagamento à vista.`,
+    capa: p.capa,
+    categoria: COMBOS_CATEGORY,
+    price: p.price,
+    installments: null,
+    paymentType: "ONE_TIME",
+    monthlyMonths: null,
+    ownedStatus: p.ownedStatus,
+    kind: "package",
+  }
+}
+
+/** Corpo que identifica o item — curso avulso ou combo. */
+function itemRef(item: CatalogCourse): { courseId: string } | { packageId: string } {
+  return item.kind === "package" ? { packageId: item.id } : { courseId: item.id }
 }
 
 function brl(value: number): string {
@@ -51,6 +89,7 @@ export function StudentBuyClient() {
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [modalError, setModalError] = useState<string | null>(null)
+  const [subscription, setSubscription] = useState<{ available: boolean; active: boolean } | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -61,7 +100,12 @@ export function StudentBuyClient() {
           setError(body.error ?? "Falha ao carregar catálogo")
           return
         }
-        setCourses(body.data.courses ?? [])
+        // Combos primeiro: é o que a loja destaca na vitrine.
+        setCourses([
+          ...((body.data.packages ?? []) as CatalogPackage[]).map(packageAsItem),
+          ...(body.data.courses ?? []),
+        ])
+        setSubscription(body.data.subscription ?? null)
       } catch {
         setError("Erro de rede ao carregar catálogo")
       } finally {
@@ -117,7 +161,7 @@ export function StudentBuyClient() {
       const res = await fetch("/api/aluno/cupom/validar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, courseId: selected.id }),
+        body: JSON.stringify({ code, ...itemRef(selected) }),
       })
       const body = await res.json()
       if (!res.ok || !body.data) {
@@ -138,7 +182,7 @@ export function StudentBuyClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          courseId: selected.id,
+          ...itemRef(selected),
           // O servidor revalida e recalcula o cupom ao criar a matrícula — a
           // prévia acima é só o que o aluno vê.
           couponCode: coupon?.code,
@@ -227,6 +271,26 @@ export function StudentBuyClient() {
           </select>
         )}
       </div>
+
+      {subscription?.available && (
+        <Link
+          href={subscription.active ? "/aluno/assinatura" : "/aluno/assinar"}
+          className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--color-pmb-green)]/25 bg-[var(--color-pmb-lime-50)] p-4 text-sm text-[var(--color-pmb-green-900)] transition-colors hover:bg-[var(--color-pmb-lime-50)]/70"
+        >
+          <span className="flex items-center gap-3">
+            <Repeat className="h-5 w-5 shrink-0 text-[var(--color-pmb-green)]" />
+            <span>
+              <strong className="block">Assinaturas</strong>
+              {subscription.active
+                ? "Você já assina. Veja os cursos do seu plano."
+                : "Estude vários cursos pagando uma mensalidade."}
+            </span>
+          </span>
+          <span className="shrink-0 font-semibold text-[var(--color-pmb-green)]">
+            {subscription.active ? "Minha assinatura" : "Ver planos"} →
+          </span>
+        </Link>
+      )}
 
       {feedback && (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -397,7 +461,7 @@ export function StudentBuyClient() {
               ) : null}
               {finalPrice <= 0 && (
                 <p className="pt-1 text-[11px] text-green-700">
-                  O cupom cobre o valor inteiro — o curso é liberado na hora, sem
+                  O cupom cobre o valor inteiro — {selected?.kind === "package" ? "o combo é liberado" : "o curso é liberado"} na hora, sem
                   pagamento.
                 </p>
               )}

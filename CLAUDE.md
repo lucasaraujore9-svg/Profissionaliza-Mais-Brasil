@@ -2195,6 +2195,28 @@ das aulas" (`pedagogia.manage` + recorte `ctx.scope.alunos`).
 - Se o banco falha depois de o LMS aceitar, a rota devolve ao LMS a regra que o
   banco ainda tem.
 
+### Aluno logado compra combo e ve assinatura em /aluno/comprar (2026-09-30)
+
+Chamado Capacita Pro Brasil: quem ja tinha cadastro nao comprava COMBO nem
+assinatura. O checkout anonimo de combo (`/api/loja/checkout/package`) recusa
+CPF com login ("faca login... recompra autenticada usa /api/aluno/comprar") — e
+`/api/aluno/comprar` so aceitava curso avulso. `/aluno/comprar` listava so cursos
+(busca "combo" vazia), e `/aluno/assinar` nao tinha link no menu.
+
+- **`/api/aluno/comprar` aceita `packageId`** (loja da unidade), via
+  `startStudentPackagePurchase` (`lib/packages/student-purchase.ts`): mesmas
+  regras do checkout de combo da loja (preco do escopo, matricula PRIMARIA,
+  cupom, 100% sem gateway, PENDING reaproveitada), com o aluno da SESSAO e sem
+  recoletar dados (menor sem responsavel e recusado). Vitrine PMB: recusa
+  explicita. `/api/aluno/cupom/validar` aceita `packageId` para a previa.
+- **Cuidado com `courseId` opcional:** o schema virou "curso OU combo", e o
+  `courseId` e estreitado ANTES de ramificar — `courseId: undefined` num `where`
+  do Prisma e IGNORADO e o filtro casaria qualquer curso.
+- **Tela:** combos entram na MESMA grade, categoria "COMBOS" (herdam busca,
+  filtro, resumo com cupom e "Concluir compra"); cartao "Assinaturas" no topo leva
+  a `/aluno/assinar` (ou `/aluno/assinatura` para quem ja assina). Pagamento do
+  combo mostra o combo no resumo e e a vista, como na loja.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
