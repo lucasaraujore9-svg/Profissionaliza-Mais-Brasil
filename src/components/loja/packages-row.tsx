@@ -75,7 +75,7 @@ function PackageCard({ pkg, hrefBase }: { pkg: VitrinePackageCard; hrefBase: str
             <Layers className="h-10 w-10" aria-hidden />
           </div>
         )}
-        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[var(--color-pmb-green)] px-2.5 py-1 text-[11px] font-bold text-white shadow">
+        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[var(--brand-btn)] px-2.5 py-1 text-[11px] font-bold text-[var(--brand-btn-on)] shadow">
           <Layers className="h-3 w-3" aria-hidden /> Pacote
         </span>
       </div>

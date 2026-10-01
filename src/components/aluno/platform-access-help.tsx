@@ -88,7 +88,7 @@ export function PlatformAccessHelp() {
           type="button"
           onClick={resend}
           disabled={sending}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--brand-btn)] px-4 py-2.5 text-sm font-semibold text-[var(--brand-btn-on)] transition-colors hover:bg-[var(--brand-btn-hover)] disabled:opacity-50"
         >
           <Mail className="h-4 w-4 shrink-0" />
           {sending ? "Enviando..." : "Reenviar por e-mail"}

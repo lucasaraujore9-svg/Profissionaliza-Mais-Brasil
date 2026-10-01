@@ -26,7 +26,7 @@ export function HeroBanner({
   // TAMBÉM o fallback quando o banner existe mas suas imagens não carregam (ex.:
   // Storage 402/indisponível), para a vitrine nunca ficar com a tela preta.
   const defaultHero = (
-    <section className="relative overflow-hidden bg-[var(--color-pmb-green)] text-white">
+    <section className="relative overflow-hidden bg-[var(--brand-dark)] text-[var(--brand-dark-on)]">
       <div
         aria-hidden
         className="absolute inset-0 opacity-[0.08] pointer-events-none"
@@ -41,8 +41,8 @@ export function HeroBanner({
             Aprenda uma profissão e comece a ganhar seu próprio dinheiro.
           </h1>
 
-          <p className="mt-4 text-[16px] md:text-[18px] leading-relaxed text-white/85">
-            Cursos online profissionalizantes com <strong className="font-bold text-white">certificado</strong>.
+          <p className="mt-4 text-[16px] md:text-[18px] leading-relaxed text-[var(--brand-dark-on)]/85">
+            Cursos online profissionalizantes com <strong className="font-bold text-[var(--brand-dark-on)]">certificado</strong>.
             Aprenda no celular, no seu ritmo, e comece a atuar rapidamente no mercado.
           </p>
 
@@ -66,13 +66,13 @@ export function HeroBanner({
             />
             <button
               type="submit"
-              className="rounded-lg bg-[var(--color-pmb-gold)] px-5 py-3 text-[15px] font-bold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-gold-600)] transition-colors whitespace-nowrap"
+              className="rounded-lg bg-[var(--brand-cta)] px-5 py-3 text-[15px] font-bold text-[var(--brand-cta-on)] hover:bg-[var(--brand-cta-hover)] transition-colors whitespace-nowrap"
             >
               Buscar
             </button>
           </form>
 
-          <ul className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-white/85">
+          <ul className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-[var(--brand-dark-on)]/85">
             <li className="flex items-center gap-1.5">
               <span className="grid h-4 w-4 place-items-center rounded-full bg-[var(--color-pmb-lime)] text-[var(--color-pmb-green)] text-[10px] font-black">
                 ✓

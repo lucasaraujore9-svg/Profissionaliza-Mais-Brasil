@@ -208,7 +208,7 @@ export default async function StudentCoursesPage({
           </p>
           <Link
             href="/aluno/comprar"
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[var(--brand-btn)] px-5 py-2.5 text-sm font-semibold text-[var(--brand-btn-on)] shadow-sm transition-colors hover:bg-[var(--brand-btn-hover)]"
           >
             <ShoppingBag className="h-4 w-4" />
             Ver catálogo de cursos
@@ -267,7 +267,7 @@ export default async function StudentCoursesPage({
                 className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md"
               >
                 {/* Capa do curso (com fallback visual quando não há imagem) */}
-                <div className="relative h-36 w-full bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-900)]">
+                <div className="relative h-36 w-full bg-gradient-to-br from-[var(--brand-dark)] to-[var(--brand-dark-deep)]">
                   {capa ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -325,7 +325,7 @@ export default async function StudentCoursesPage({
                           className={`h-2 rounded-full transition-all ${
                             paceBlocked
                               ? "bg-amber-500"
-                              : "bg-[var(--color-pmb-green)]"
+                              : "bg-[var(--brand-btn)]"
                           }`}
                           style={{
                             width: `${Math.max(0, Math.min(100, percent))}%`,
@@ -421,7 +421,7 @@ export default async function StudentCoursesPage({
                         href={`/api/aluno/curso/${e.id}/acessar`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--brand-btn)] px-4 py-2.5 text-sm font-semibold text-[var(--brand-btn-on)] shadow-sm transition-colors hover:bg-[var(--brand-btn-hover)]"
                       >
                         {/* "Acessar aulas" num e-book prometeria uma tela que
                             não existe — o rótulo vem da fonte única do tipo. */}
@@ -433,7 +433,7 @@ export default async function StudentCoursesPage({
                         href={plataformaLoginUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--brand-btn)] px-4 py-2.5 text-sm font-semibold text-[var(--brand-btn-on)] shadow-sm transition-colors hover:bg-[var(--brand-btn-hover)]"
                       >
                         Acessar aulas
                         <ExternalLink className="h-4 w-4" />

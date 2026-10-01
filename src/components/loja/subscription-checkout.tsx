@@ -238,7 +238,7 @@ export function SubscriptionCheckout({
         {done.authorized ? (
           <a
             href="/aluno/assinatura"
-            className="mt-5 inline-flex rounded-xl bg-[var(--color-pmb-green)] px-5 py-3 text-sm font-semibold text-white"
+            className="mt-5 inline-flex rounded-xl bg-[var(--brand-btn)] px-5 py-3 text-sm font-semibold text-[var(--brand-btn-on)]"
           >
             Ver meus cursos
           </a>
@@ -247,7 +247,7 @@ export function SubscriptionCheckout({
             // A página de pagamento da plataforma — nunca a fatura do gateway.
             <a
               href={`/pagar/assinatura/${done.subscriptionId}`}
-              className="mt-5 inline-flex rounded-xl bg-[var(--color-pmb-green)] px-5 py-3 text-sm font-semibold text-white"
+              className="mt-5 inline-flex rounded-xl bg-[var(--brand-btn)] px-5 py-3 text-sm font-semibold text-[var(--brand-btn-on)]"
             >
               Pagar {money(price)}
             </a>
@@ -412,7 +412,7 @@ export function SubscriptionCheckout({
       <button
         type="submit"
         disabled={loading}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-pmb-green)] px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-btn)] px-5 py-3.5 text-sm font-semibold text-[var(--brand-btn-on)] disabled:opacity-60"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
         {recurring ? "Assinar" : "Comprar acesso vitalício"} {planName} ·{" "}

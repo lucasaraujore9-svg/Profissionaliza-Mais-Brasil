@@ -152,7 +152,7 @@ export function CourseDetailView({
   return (
     <div className="bg-[var(--color-pmb-mist)] pb-24 lg:pb-0">
       {/* HERO ---------------------------------------------------- */}
-      <section className="relative overflow-hidden bg-[var(--color-pmb-green)] text-white">
+      <section className="relative overflow-hidden bg-[var(--brand-dark)] text-[var(--brand-dark-on)]">
         {course.imageUrl ? (
           <>
             <Image
@@ -165,7 +165,7 @@ export function CourseDetailView({
             />
             <div
               aria-hidden
-              className="absolute inset-0 bg-gradient-to-br from-[var(--color-pmb-green)]/95 via-[var(--color-pmb-green)]/85 to-black/70"
+              className="absolute inset-0 bg-gradient-to-br from-[var(--brand-dark)]/95 via-[var(--brand-dark)]/85 to-black/70"
             />
           </>
         ) : (
@@ -182,7 +182,7 @@ export function CourseDetailView({
         <div className="relative mx-auto max-w-[1280px] px-4 py-8 md:px-6 md:py-12">
           <Link
             href={backHref}
-            className="inline-flex items-center gap-1.5 text-[13px] text-white/80 hover:text-white"
+            className="inline-flex items-center gap-1.5 text-[13px] text-[var(--brand-dark-on)]/80 hover:text-[var(--brand-dark-on)]"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             {backLabel}
@@ -197,40 +197,40 @@ export function CourseDetailView({
                 {course.nome}
               </h1>
               {paragrafos[0] && (
-                <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-white/85 md:text-[16px]">
+                <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-[var(--brand-dark-on)]/85 md:text-[16px]">
                   {paragrafos[0]}
                 </p>
               )}
 
-              <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-[13.5px] text-white/85">
+              <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-[13.5px] text-[var(--brand-dark-on)]/85">
                 <span className="flex items-center gap-1.5">
                   <ShieldCheck
-                    className="h-4 w-4 text-[var(--color-pmb-gold)]"
+                    className="h-4 w-4 text-[var(--brand-dark-highlight)]"
                     aria-hidden
                   />
-                  <span className="text-white/85">Certificado oficial pelo Grupo Bolsa Mais Brasil</span>
+                  <span className="text-[var(--brand-dark-on)]/85">Certificado oficial pelo Grupo Bolsa Mais Brasil</span>
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <Clock className="h-4 w-4 text-[var(--color-pmb-gold)]" aria-hidden />
+                  <Clock className="h-4 w-4 text-[var(--brand-dark-highlight)]" aria-hidden />
                   {cargaHoraria}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <PlayCircle className="h-4 w-4 text-[var(--color-pmb-gold)]" aria-hidden />
+                  <PlayCircle className="h-4 w-4 text-[var(--brand-dark-highlight)]" aria-hidden />
                   {course.qtdAulas} aulas
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <Award className="h-4 w-4 text-[var(--color-pmb-gold)]" aria-hidden />
+                  <Award className="h-4 w-4 text-[var(--brand-dark-highlight)]" aria-hidden />
                   Certificado incluso
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-[var(--color-pmb-gold)]" aria-hidden />
+                  <ShieldCheck className="h-4 w-4 text-[var(--brand-dark-highlight)]" aria-hidden />
                   7 dias de garantia
                 </span>
               </div>
             </div>
 
             {course.imageUrl && (
-              <div className="relative hidden overflow-hidden rounded-2xl border border-white/15 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.5)] lg:block lg:aspect-[4/3]">
+              <div className="relative hidden overflow-hidden rounded-2xl border border-[var(--brand-dark-on)]/15 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.5)] lg:block lg:aspect-[4/3]">
                 <Image
                   src={course.imageUrl}
                   alt={course.nome}
@@ -367,21 +367,21 @@ export function CourseDetailView({
             </div>
 
             {/* Certificado */}
-            <div className="overflow-hidden rounded-2xl border border-[rgba(2,89,24,0.1)] bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-900)] p-6 text-white md:p-8">
+            <div className="overflow-hidden rounded-2xl border border-[rgba(2,89,24,0.1)] bg-gradient-to-br from-[var(--brand-dark)] to-[var(--brand-dark-deep)] p-6 text-[var(--brand-dark-on)] md:p-8">
               <div className="flex items-start gap-4">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/20">
-                  <GraduationCap className="h-6 w-6 text-[var(--color-pmb-gold)]" aria-hidden />
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[var(--brand-dark-on)]/20">
+                  <GraduationCap className="h-6 w-6 text-[var(--brand-dark-highlight)]" aria-hidden />
                 </span>
                 <div>
                   <h3 className="text-[18px] font-black md:text-[22px]">
                     Certificado reconhecido nacionalmente
                   </h3>
-                  <p className="mt-2 text-[14px] leading-relaxed text-white/85">
+                  <p className="mt-2 text-[14px] leading-relaxed text-[var(--brand-dark-on)]/85">
                     Ao concluir todas as aulas você recebe um certificado
                     digital com {cargaHoraria} de carga horária, código de
                     validação único e QR-code para verificação.
                   </p>
-                  <p className="mt-2 text-[13px] text-white/70">
+                  <p className="mt-2 text-[13px] text-[var(--brand-dark-on)]/70">
                     Aceito por empresas, concursos e como atividade
                     complementar em faculdades.
                   </p>

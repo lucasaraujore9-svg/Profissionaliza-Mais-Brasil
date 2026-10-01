@@ -101,7 +101,7 @@ export function ForgotForm() {
       <Button
         type="submit"
         size="lg"
-        className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+        className="w-full bg-[var(--brand-btn)] text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
         disabled={state.kind === "submitting"}
       >
         {state.kind === "submitting" ? (

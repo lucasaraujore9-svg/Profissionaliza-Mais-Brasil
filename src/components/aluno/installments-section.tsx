@@ -126,10 +126,10 @@ function ParcelaRow({
               href={parcela.invoiceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-white ${
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold ${
                 isOverdue
-                  ? "bg-rose-600 hover:bg-rose-700"
-                  : "bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-700)]"
+                  ? "bg-rose-600 text-white hover:bg-rose-700"
+                  : "bg-[var(--brand-btn)] text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
               }`}
             >
               {isOverdue ? "Pagar boleto vencido" : "Ver boleto"}

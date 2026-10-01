@@ -85,7 +85,7 @@ export default async function StudentCertificatesPage() {
                     <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                       <Link
                         href={`/aluno/certificados/${c.id}`}
-                        className="rounded-md bg-[var(--color-pmb-green)] px-3 py-1.5 font-semibold text-white hover:bg-[var(--color-pmb-green-700)]"
+                        className="rounded-md bg-[var(--brand-btn)] px-3 py-1.5 font-semibold text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
                       >
                         Visualizar
                       </Link>

@@ -111,7 +111,7 @@ export default async function StudentDashboardPage() {
           className="group flex flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--color-pmb-green)]/20 bg-white p-6 shadow-sm transition-all hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex min-w-0 items-center gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-pmb-green)] text-white">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-btn)] text-[var(--brand-btn-on)]">
               <BookOpen className="h-6 w-6" />
             </span>
             <div className="min-w-0">
@@ -128,7 +128,7 @@ export default async function StudentDashboardPage() {
               </p>
             </div>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-transform group-hover:translate-x-0.5">
+          <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-btn)] px-4 py-2.5 text-sm font-semibold text-[var(--brand-btn-on)] shadow-sm transition-transform group-hover:translate-x-0.5">
             {hasNoEnrollments ? "Escolher cursos" : "Ver meus cursos"}
             <ArrowRight className="h-4 w-4" />
           </span>
@@ -141,14 +141,14 @@ export default async function StudentDashboardPage() {
           href={continueHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="group flex flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--color-pmb-green)]/20 bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-900)] p-6 text-white shadow-sm transition-all hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
+          className="group flex flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--color-pmb-green)]/20 bg-gradient-to-br from-[var(--brand-dark)] to-[var(--brand-dark-deep)] p-6 text-[var(--brand-dark-on)] shadow-sm transition-all hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex min-w-0 items-center gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-pmb-gold)] text-[var(--color-pmb-green-900)]">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-cta)] text-[var(--brand-cta-on)]">
               <GraduationCap className="h-6 w-6" />
             </span>
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-pmb-lime)]">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--brand-dark-accent)]">
                 Continue estudando
               </p>
               <p className="mt-0.5 truncate text-lg font-semibold">
@@ -156,7 +156,7 @@ export default async function StudentDashboardPage() {
               </p>
               {continueEnrollment.progressPercent !== null &&
                 continueEnrollment.progressPercent !== undefined && (
-                  <p className="mt-0.5 text-xs text-white/80">
+                  <p className="mt-0.5 text-xs text-[var(--brand-dark-on)]/80">
                     {continueEnrollment.progressPercent}% concluído
                   </p>
                 )}
@@ -238,7 +238,7 @@ export default async function StudentDashboardPage() {
               Pague no Pix e comece a estudar agora.
             </p>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white transition-colors group-hover:bg-[var(--color-pmb-green-700)]">
+          <span className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[var(--brand-btn)] px-4 py-2.5 text-sm font-semibold text-[var(--brand-btn-on)] transition-colors group-hover:bg-[var(--brand-btn-hover)]">
             Ver catálogo
             <ArrowRight className="h-4 w-4" />
           </span>

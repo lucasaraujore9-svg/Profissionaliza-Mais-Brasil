@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Upload, Loader2, Trash2 } from "lucide-react"
+import { Upload, Loader2, Trash2, ChevronDown, AlertTriangle } from "lucide-react"
 import Image from "next/image"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,16 +17,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  resolveTheme,
+  themeWarnings,
+  type TenantTheme,
+  type ThemeColorKey,
+  type Tone,
+} from "@/lib/tenant/theme"
 
 export interface VitrineConfig {
   name: string
   tagline: string | null
   description: string | null
   logoUrl: string | null
+  logoDarkUrl: string | null
   faviconUrl: string | null
   appIconUrl: string | null
   primaryColor: string
   secondaryColor: string
+  theme: TenantTheme
   whatsapp: string | null
   whatsappFloatEnabled: boolean
   whatsappFloatSide: "right" | "left"
@@ -39,7 +48,14 @@ export interface VitrineConfig {
   supportHours: string | null
 }
 
-export type VitrineAssetKind = "logo" | "favicon" | "appicon"
+export type VitrineAssetKind = "logo" | "logodark" | "favicon" | "appicon"
+
+const ASSET_LABEL: Record<VitrineAssetKind, string> = {
+  logo: "a logo",
+  logodark: "a logo para fundo escuro",
+  favicon: "o favicon",
+  appicon: "o ícone do app",
+}
 
 interface VitrineConfigFormProps {
   config: VitrineConfig
@@ -60,6 +76,7 @@ export function VitrineConfigForm({
   // Qual asset o diálogo de confirmação está prestes a remover (null = fechado).
   const [removeKind, setRemoveKind] = useState<VitrineAssetKind | null>(null)
   const logoInputRef = useRef<HTMLInputElement | null>(null)
+  const logoDarkInputRef = useRef<HTMLInputElement | null>(null)
   const faviconInputRef = useRef<HTMLInputElement | null>(null)
   const appIconInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -69,6 +86,16 @@ export function VitrineConfigForm({
   ) => {
     onChange({ ...config, [key]: value })
   }
+
+  const updateTheme = <K extends keyof TenantTheme>(key: K, value: TenantTheme[K]) => {
+    onChange({ ...config, theme: { ...config.theme, [key]: value } })
+  }
+
+  // Mesma conta que a loja faz: o que aparece como "automático" aqui é
+  // exatamente a cor que vai para a página.
+  const resolved = resolveTheme(config)
+  const warnings = themeWarnings(config)
+  const isAuto = (...keys: ThemeColorKey[]) => keys.every((k) => config.theme[k] === null)
 
   async function handleFile(kind: VitrineAssetKind, file: File | null) {
     if (!file) return
@@ -100,15 +127,25 @@ export function VitrineConfigForm({
           Envie os elementos gráficos da sua marca.
         </p>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-3">
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <AssetUploader
-            label="Logo"
+            label="Logo para fundo claro"
             hint="PNG com fundo transparente • horizontal, ideal 480 × 160 px (mín. 200 × 200 px se quadrada) • máx 5MB"
             previewUrl={config.logoUrl}
             uploading={uploading === "logo"}
             inputRef={logoInputRef}
             onChoose={(file) => handleFile("logo", file)}
             onRemove={() => setRemoveKind("logo")}
+          />
+          <AssetUploader
+            label="Logo para fundo escuro"
+            hint="Versão clara (branca) da sua logo • PNG com fundo transparente • opcional"
+            previewUrl={config.logoDarkUrl}
+            previewBackground={resolved.dark}
+            uploading={uploading === "logodark"}
+            inputRef={logoDarkInputRef}
+            onChoose={(file) => handleFile("logodark", file)}
+            onRemove={() => setRemoveKind("logodark")}
           />
           <AssetUploader
             label="Favicon"
@@ -130,6 +167,12 @@ export function VitrineConfigForm({
             onRemove={() => setRemoveKind("appicon")}
           />
         </div>
+
+        <p className="mt-3 text-[11px] text-gray-500">
+          A <strong className="font-semibold text-[var(--color-pmb-green-900)]">logo para fundo escuro</strong>{" "}
+          aparece no rodapé, no topo escuro e na tela de login. Se você não
+          enviar, usamos a logo principal dentro de uma placa branca.
+        </p>
 
         <p className="mt-3 text-[11px] text-gray-500">
           O <strong className="font-semibold text-[var(--color-pmb-green-900)]">ícone do app</strong>{" "}
@@ -161,24 +204,164 @@ export function VitrineConfigForm({
       </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Paleta de cores</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Cores da marca</h3>
         <p className="mt-1 text-xs text-gray-600">
-          As cores serão aplicadas no tempo real do preview ao lado.
+          Escolha só estas duas cores: o sistema monta o resto sozinho e cuida
+          para o texto ficar sempre legível. Valem para a loja, o login, o
+          pagamento e a área do aluno.
         </p>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <ColorField
             id="primary-color"
-            label="Primária"
+            label="Cor principal"
             value={config.primaryColor}
             onChange={(v) => update("primaryColor", v)}
           />
           <ColorField
             id="secondary-color"
-            label="Secundária"
+            label="Cor de destaque"
             value={config.secondaryColor}
             onChange={(v) => update("secondaryColor", v)}
           />
+        </div>
+
+        {warnings.length > 0 && (
+          <ul className="mt-4 space-y-2">
+            {warnings.map((w) => (
+              <li
+                key={w.fix}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="flex-1">{w.message}</span>
+                <button
+                  type="button"
+                  onClick={() => updateTheme(w.fix, null)}
+                  className="font-semibold underline underline-offset-2"
+                >
+                  Corrigir para mim
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <p className="mt-6 text-xs font-semibold text-[var(--color-pmb-green-900)]">
+          Ajustes opcionais
+        </p>
+        <p className="mt-1 text-xs text-gray-600">
+          Quer uma cor diferente em algum lugar? Abra o item e troque. Tudo que
+          você não mexer continua no automático.
+        </p>
+
+        <div className="mt-3 space-y-2">
+          <ThemeBlock
+            title="Botões"
+            description="A cor dos botões da loja e da área do aluno."
+            auto={isAuto("buttonBg", "buttonText", "ctaBg", "ctaText")}
+          >
+            <ButtonGroup title="Botões de destaque" example="Comprar, Quero estudar">
+              <AutoColorField
+                id="cta-bg"
+                label="Cor do botão"
+                value={config.theme.ctaBg}
+                auto={resolved.cta}
+                onChange={(v) => updateTheme("ctaBg", v)}
+              />
+              <AutoColorField
+                id="cta-text"
+                label="Cor do texto"
+                value={config.theme.ctaText}
+                auto={resolved.ctaOn}
+                onChange={(v) => updateTheme("ctaText", v)}
+              />
+            </ButtonGroup>
+            <ButtonGroup title="Botões comuns" example="Entrar, Pagar, Continuar">
+              <AutoColorField
+                id="btn-bg"
+                label="Cor do botão"
+                value={config.theme.buttonBg}
+                auto={resolved.btn}
+                onChange={(v) => updateTheme("buttonBg", v)}
+              />
+              <AutoColorField
+                id="btn-text"
+                label="Cor do texto"
+                value={config.theme.buttonText}
+                auto={resolved.btnOn}
+                onChange={(v) => updateTheme("buttonText", v)}
+              />
+            </ButtonGroup>
+          </ThemeBlock>
+
+          <ThemeBlock
+            title="Áreas claras"
+            description="Partes de fundo branco: lista de cursos, páginas, formulários."
+            auto={isAuto("lightTitle")}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AutoColorField
+                id="light-title"
+                label="Cor dos títulos e links"
+                value={config.theme.lightTitle}
+                auto={resolved.ink}
+                onChange={(v) => updateTheme("lightTitle", v)}
+              />
+            </div>
+          </ThemeBlock>
+
+          <ThemeBlock
+            title="Áreas escuras"
+            description="Faixas coloridas: rodapé, banners e topo das páginas."
+            auto={isAuto("darkBg", "darkText")}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AutoColorField
+                id="dark-bg"
+                label="Cor do fundo"
+                value={config.theme.darkBg}
+                auto={resolved.dark}
+                onChange={(v) => updateTheme("darkBg", v)}
+              />
+              <AutoColorField
+                id="dark-text"
+                label="Cor do texto"
+                value={config.theme.darkText}
+                auto={resolved.darkOn}
+                onChange={(v) => updateTheme("darkText", v)}
+              />
+            </div>
+          </ThemeBlock>
+
+          <ThemeBlock
+            title="Claro ou escuro"
+            description="Escolha se o topo, o rodapé e o menu do aluno são claros ou escuros."
+            auto={
+              config.theme.headerTone === "light" &&
+              config.theme.footerTone === "dark" &&
+              config.theme.studentMenuTone === "dark"
+            }
+            autoLabel="Padrão"
+          >
+            <div className="grid gap-4 sm:grid-cols-3">
+              <ToneField
+                label="Topo da loja"
+                value={config.theme.headerTone}
+                onChange={(v) => updateTheme("headerTone", v)}
+              />
+              <ToneField
+                label="Rodapé da loja"
+                value={config.theme.footerTone}
+                onChange={(v) => updateTheme("footerTone", v)}
+              />
+              <ToneField
+                label="Menu da área do aluno"
+                value={config.theme.studentMenuTone}
+                onChange={(v) => updateTheme("studentMenuTone", v)}
+              />
+            </div>
+          </ThemeBlock>
         </div>
       </section>
 
@@ -385,19 +568,16 @@ export function VitrineConfigForm({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Remover{" "}
-              {removeKind === "favicon"
-                ? "o favicon"
-                : removeKind === "appicon"
-                  ? "o ícone do app"
-                  : "o logo"}
+              Remover {removeKind ? ASSET_LABEL[removeKind] : ""}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {removeKind === "favicon"
                 ? "A aba do navegador voltará a usar a sua logo como ícone. Se você também não tiver logo, o navegador exibe o ícone padrão dele."
                 : removeKind === "appicon"
                   ? "Quem instalar a loja no celular a partir de agora verá a sua favicon (ou a logo) como ícone. Quem já instalou continua com o ícone atual até reinstalar."
-                  : "A vitrine voltará a exibir o nome da loja sem logo até você enviar uma nova imagem."}
+                  : removeKind === "logodark"
+                    ? "As áreas escuras voltarão a usar a logo principal dentro de uma placa branca."
+                    : "A vitrine voltará a exibir o nome da loja sem logo até você enviar uma nova imagem."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -425,6 +605,8 @@ interface AssetUploaderProps {
   // por baixo do fundo escolhido.
   accept?: string
   previewUrl: string | null
+  /** Fundo da prévia — a logo de fundo escuro precisa ser vista sobre ele. */
+  previewBackground?: string
   uploading: boolean
   inputRef: React.RefObject<HTMLInputElement | null>
   onChoose: (file: File | null) => void
@@ -436,6 +618,7 @@ function AssetUploader({
   hint,
   accept = "image/png,image/jpeg,image/webp",
   previewUrl,
+  previewBackground = "#ffffff",
   uploading,
   inputRef,
   onChoose,
@@ -452,7 +635,10 @@ function AssetUploader({
               <span>Processando...</span>
             </>
           ) : previewUrl ? (
-            <div className="relative flex h-full w-full items-center justify-center bg-white">
+            <div
+              className="relative flex h-full w-full items-center justify-center"
+              style={{ backgroundColor: previewBackground }}
+            >
               <Image
                 src={previewUrl}
                 alt={label}
@@ -544,6 +730,134 @@ function ColorField({ id, label, value, onChange }: ColorFieldProps) {
         <span className="font-mono text-xs font-semibold text-[var(--color-pmb-green-900)]">
           {value.toUpperCase()}
         </span>
+      </div>
+    </div>
+  )
+}
+
+interface ThemeBlockProps {
+  title: string
+  description: string
+  /** Nada foi trocado neste bloco. */
+  auto: boolean
+  autoLabel?: string
+  children: React.ReactNode
+}
+
+// <details> nativo: abre e fecha sem estado, funciona por teclado e continua
+// consultável em modo somente leitura (fieldset disabled não o trava).
+function ThemeBlock({
+  title,
+  description,
+  auto,
+  autoLabel = "Automático",
+  children,
+}: ThemeBlockProps) {
+  return (
+    <details className="group rounded-xl border border-gray-200 bg-gray-50/50 open:bg-white">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-[var(--color-pmb-green-900)]">
+            {title}
+          </span>
+          <span className="block text-xs text-gray-600">{description}</span>
+        </span>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+            auto
+              ? "bg-gray-100 text-gray-600"
+              : "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-900)]"
+          }`}
+        >
+          {auto ? autoLabel : "Personalizado"}
+        </span>
+        <ChevronDown
+          className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180"
+          aria-hidden
+        />
+      </summary>
+      <div className="space-y-4 border-t border-gray-200 px-4 py-4">{children}</div>
+    </details>
+  )
+}
+
+function ButtonGroup({
+  title,
+  example,
+  children,
+}: {
+  title: string
+  example: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-[var(--color-pmb-green-900)]">
+        {title} <span className="font-normal text-gray-500">({example})</span>
+      </p>
+      <div className="mt-2 grid gap-4 sm:grid-cols-2">{children}</div>
+    </div>
+  )
+}
+
+interface AutoColorFieldProps {
+  id: string
+  label: string
+  /** Cor escolhida à mão, ou `null` = automático. */
+  value: string | null
+  /** A cor que o automático está usando agora (mostrada enquanto `value` é nulo). */
+  auto: string
+  onChange: (value: string | null) => void
+}
+
+function AutoColorField({ id, label, value, auto, onChange }: AutoColorFieldProps) {
+  return (
+    <div>
+      <Label htmlFor={id}>{label}</Label>
+      <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
+        <input
+          id={id}
+          type="color"
+          value={value ?? auto}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-7 w-7 cursor-pointer rounded border-0 bg-transparent"
+        />
+        {value === null ? (
+          <span className="text-xs text-gray-600">Automático</span>
+        ) : (
+          <>
+            <span className="font-mono text-xs font-semibold text-[var(--color-pmb-green-900)]">
+              {value.toUpperCase()}
+            </span>
+            <button
+              type="button"
+              onClick={() => onChange(null)}
+              className="ml-auto text-[11px] font-semibold text-gray-600 underline underline-offset-2"
+            >
+              Voltar ao automático
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ToneField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: Tone
+  onChange: (value: Tone) => void
+}) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div className="mt-1.5 grid grid-cols-2 gap-2">
+        <SideOption label="Claro" active={value === "light"} onClick={() => onChange("light")} />
+        <SideOption label="Escuro" active={value === "dark"} onClick={() => onChange("dark")} />
       </div>
     </div>
   )

@@ -390,7 +390,7 @@ export function NotificationBell({ variant = "light" }: NotificationBellProps) {
                         </p>
                       </div>
                       {!isRead && (
-                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--color-pmb-green)]" />
+                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--brand-btn)]" />
                       )}
                     </div>
                   )

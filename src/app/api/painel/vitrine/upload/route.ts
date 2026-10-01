@@ -26,6 +26,8 @@ const ALLOWED_TYPES = new Set([
 // para a coluna do banner silenciosamente.
 const KIND_FIELD = {
   logo: "logoUrl",
+  // Logo para fundo escuro (rodape, topo escuro, painel do login).
+  logodark: "logoDarkUrl",
   banner: "bannerUrl",
   favicon: "faviconUrl",
   // Icone do app instalado. Chega do painel JA composto (quadrado, com fundo
@@ -75,7 +77,7 @@ export const POST = withRequestContext(
 
     if (!isAssetKind(kind)) {
       return NextResponse.json(
-        { error: "kind deve ser 'logo', 'banner', 'favicon' ou 'appicon'" },
+        { error: "kind deve ser 'logo', 'logodark', 'banner', 'favicon' ou 'appicon'" },
         { status: 400 },
       )
     }
@@ -103,6 +105,7 @@ export const POST = withRequestContext(
         name: true,
         customDomain: true,
         logoUrl: true,
+        logoDarkUrl: true,
         bannerUrl: true,
         faviconUrl: true,
         appIconUrl: true,
@@ -188,7 +191,7 @@ export const DELETE = withRequestContext(
     const kind = (url.searchParams.get("kind") ?? "").trim()
     if (!isAssetKind(kind)) {
       return NextResponse.json(
-        { error: "kind deve ser 'logo', 'banner', 'favicon' ou 'appicon'" },
+        { error: "kind deve ser 'logo', 'logodark', 'banner', 'favicon' ou 'appicon'" },
         { status: 400 },
       )
     }
@@ -201,6 +204,7 @@ export const DELETE = withRequestContext(
         name: true,
         customDomain: true,
         logoUrl: true,
+        logoDarkUrl: true,
         bannerUrl: true,
         faviconUrl: true,
         appIconUrl: true,

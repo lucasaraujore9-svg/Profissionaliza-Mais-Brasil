@@ -93,7 +93,7 @@ export function PwaInstallPrompt() {
   return (
     <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-[var(--color-pmb-green)]/30 bg-white p-4 shadow-2xl">
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-pmb-green)] text-white">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-btn)] text-[var(--brand-btn-on)]">
           <Download className="h-4 w-4" />
         </span>
         <div className="flex-1">
@@ -124,7 +124,7 @@ export function PwaInstallPrompt() {
         <button
           type="button"
           onClick={install}
-          className="flex-1 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)]"
+          className="flex-1 rounded-lg bg-[var(--brand-btn)] px-3 py-2 text-xs font-semibold text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
         >
           Instalar
         </button>

@@ -110,7 +110,7 @@ export function PlanDetailView({
       <div className="mx-auto max-w-6xl px-4 md:px-6">
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1 text-sm font-medium text-[var(--brand-primary,var(--color-pmb-green-700))] hover:underline"
+          className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-pmb-green-700)] hover:underline"
         >
           <ArrowLeft className="h-4 w-4" /> {backLabel}
         </Link>
@@ -148,7 +148,7 @@ export function PlanDetailView({
                     {plan.courseCount === 1 ? "curso" : "cursos"}
                   </span>
                 </div>
-                <h1 className="mt-3 text-2xl font-black leading-tight text-[var(--brand-primary,var(--color-pmb-green-900))] md:text-3xl">
+                <h1 className="mt-3 text-2xl font-black leading-tight text-[var(--color-pmb-green-900)] md:text-3xl">
                   {plan.name}
                 </h1>
                 {plan.description && (
@@ -160,7 +160,7 @@ export function PlanDetailView({
             </div>
 
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
-              <h2 className="text-base font-semibold text-[var(--brand-primary,var(--color-pmb-green-900))]">
+              <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
                 O que está incluso
               </h2>
               <ul className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -170,7 +170,7 @@ export function PlanDetailView({
                       <b.icon className="h-4 w-4" aria-hidden />
                     </span>
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold text-[var(--brand-primary,var(--color-pmb-green-900))]">
+                      <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
                         {b.title}
                       </div>
                       <p className="mt-0.5 text-xs leading-relaxed text-gray-600">
@@ -184,7 +184,7 @@ export function PlanDetailView({
 
             {plan.courses.length > 0 && (
               <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
-                <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--brand-primary,var(--color-pmb-green-900))]">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--color-pmb-green-900)]">
                   <BookOpen className="h-5 w-5 text-[var(--color-pmb-green)]" />
                   {restantes > 0
                     ? "Alguns dos cursos deste plano"
@@ -212,7 +212,7 @@ export function PlanDetailView({
                         </div>
                       )}
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-[var(--brand-primary,var(--color-pmb-green-900))]">
+                        <div className="truncate text-sm font-semibold text-[var(--color-pmb-green-900)]">
                           {c.nome}
                         </div>
                         <div className="text-xs text-gray-500">
@@ -231,7 +231,7 @@ export function PlanDetailView({
                     {allCoursesHref && (
                       <Link
                         href={allCoursesHref}
-                        className="font-semibold text-[var(--brand-primary,var(--color-pmb-green-700))] hover:underline"
+                        className="font-semibold text-[var(--color-pmb-green-700)] hover:underline"
                       >
                         Ver o catálogo
                       </Link>
@@ -247,7 +247,7 @@ export function PlanDetailView({
               <div className="text-xs font-medium text-gray-500">
                 {recurring ? "Assinatura" : "Acesso vitalício"}
               </div>
-              <div className="mt-1 font-mono text-3xl font-bold text-[var(--brand-primary,var(--color-pmb-green-900))]">
+              <div className="mt-1 font-mono text-3xl font-bold text-[var(--color-pmb-green-900)]">
                 {formatBRL(plan.price)}
                 {/* Sufixo por PERIODICIDADE: "/mes" fixo num plano anual
                     anunciaria 12x o preco real; no vitalicio nao ha sufixo. */}
@@ -261,7 +261,7 @@ export function PlanDetailView({
 
               <Link
                 href={ctaHref}
-                className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-[var(--brand-primary,var(--color-pmb-green))] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[var(--color-pmb-green-700)]"
+                className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-[var(--brand-btn)] px-4 py-3 text-sm font-bold text-[var(--brand-btn-on)] transition-colors hover:bg-[var(--brand-btn-hover)]"
               >
                 {ctaLabel}
               </Link>

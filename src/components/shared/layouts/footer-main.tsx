@@ -97,7 +97,15 @@ interface FooterMainProps {
    * institucional). A vitrine do revendedor passa os dados do tenant:
    * `logoUrl: null` exibe o nome da unidade em texto (nunca a logo da PMB).
    */
-  brand?: { name: string; logoUrl: string | null; description: string | null }
+  brand?: {
+    name: string
+    logoUrl: string | null
+    description: string | null
+    /** Logo de fundo claro sobre rodapé escuro: mantém a placa branca. */
+    logoPlate?: boolean
+  }
+  /** Rodapé escuro (padrão) ou claro — escolha da unidade em /painel/vitrine. */
+  tone?: "light" | "dark"
   /**
    * Sobrescreve os contatos de atendimento. A vitrine passa os contatos do
    * tenant (`buildTenantSupportContacts`); sem isso usa os contatos da PMB.
@@ -116,7 +124,16 @@ export function FooterMain({
   hideSejaRevendedor = false,
   brand,
   support: supportOverride,
+  tone = "dark",
 }: FooterMainProps) {
+  // `--footer-fg` é o texto do rodapé; os tons mais fracos saem dele por
+  // opacidade, então claro e escuro compartilham as mesmas classes.
+  const surface =
+    tone === "dark"
+      ? "bg-[var(--brand-dark)] [--footer-fg:var(--brand-dark-on)] [--footer-accent:var(--brand-dark-accent)]"
+      : "border-t border-[rgba(2,89,24,0.1)] bg-[var(--color-pmb-mist)] [--footer-fg:var(--brand-ink-900)] [--footer-accent:var(--color-pmb-green)]"
+  // PMB (sem `brand`) sempre usa a placa: a logo institucional é de fundo claro.
+  const logoPlate = tone === "dark" && (brand ? brand.logoPlate !== false : true)
   const support = supportOverride ?? getSupportContacts()
   const social = socialOverride ?? getSocialLinks()
   const brandName = brand?.name ?? "Profissionaliza Mais Brasil"
@@ -140,7 +157,7 @@ export function FooterMain({
   )
 
   return (
-    <footer className="bg-[var(--color-pmb-green)] text-white">
+    <footer className={`${surface} text-[var(--footer-fg)]`}>
       <div className="mx-auto max-w-[1280px] px-4 pt-14 pb-8 md:px-6">
         <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
@@ -148,7 +165,11 @@ export function FooterMain({
               <Link
                 href="/"
                 aria-label={brandName}
-                className="inline-flex items-center rounded-lg bg-white p-2"
+                className={
+                  logoPlate
+                    ? "inline-flex items-center rounded-lg bg-white p-2"
+                    : "inline-flex items-center"
+                }
               >
                 <Image
                   src={logoSrc}
@@ -163,28 +184,28 @@ export function FooterMain({
               <Link
                 href="/"
                 aria-label={brandName}
-                className="inline-flex items-center text-xl font-black text-white"
+                className="inline-flex items-center text-xl font-black"
               >
                 {brandName}
               </Link>
             )}
 
-            <p className="mt-4 max-w-sm text-[13.5px] leading-relaxed text-white/75">
+            <p className="mt-4 max-w-sm text-[13.5px] leading-relaxed text-[var(--footer-fg)]/75">
               {brandDescription}
             </p>
 
-            <ul className="mt-5 space-y-2 text-[13px] text-white/80">
+            <ul className="mt-5 space-y-2 text-[13px] text-[var(--footer-fg)]/80">
               {support.phoneLabel && support.phoneUrl && (
                 <li className="flex items-center gap-2">
                   {support.isWhatsapp ? (
                     <MessageCircle
-                      className="h-4 w-4 text-[var(--color-pmb-lime)]"
+                      className="h-4 w-4 text-[var(--footer-accent)]"
                       strokeWidth={2.25}
                       aria-hidden
                     />
                   ) : (
                     <Phone
-                      className="h-4 w-4 text-[var(--color-pmb-lime)]"
+                      className="h-4 w-4 text-[var(--footer-accent)]"
                       strokeWidth={2.25}
                       aria-hidden
                     />
@@ -203,7 +224,7 @@ export function FooterMain({
               {support.email && (
                 <li className="flex items-center gap-2">
                   <Mail
-                    className="h-4 w-4 text-[var(--color-pmb-lime)]"
+                    className="h-4 w-4 text-[var(--footer-accent)]"
                     strokeWidth={2.25}
                     aria-hidden
                   />
@@ -218,7 +239,7 @@ export function FooterMain({
               {support.hours && (
                 <li className="flex items-center gap-2">
                   <Clock
-                    className="h-4 w-4 text-[var(--color-pmb-lime)]"
+                    className="h-4 w-4 text-[var(--footer-accent)]"
                     strokeWidth={2.25}
                     aria-hidden
                   />
@@ -238,7 +259,7 @@ export function FooterMain({
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Instagram"
-                    className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+                    className="grid h-9 w-9 place-items-center rounded-full bg-[var(--footer-fg)]/10 transition-colors hover:bg-[var(--footer-fg)]/20"
                   >
                     <IconInstagram className="h-4 w-4" aria-hidden />
                   </a>
@@ -249,7 +270,7 @@ export function FooterMain({
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Facebook"
-                    className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+                    className="grid h-9 w-9 place-items-center rounded-full bg-[var(--footer-fg)]/10 transition-colors hover:bg-[var(--footer-fg)]/20"
                   >
                     <IconFacebook className="h-4 w-4" aria-hidden />
                   </a>
@@ -260,7 +281,7 @@ export function FooterMain({
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="YouTube"
-                    className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+                    className="grid h-9 w-9 place-items-center rounded-full bg-[var(--footer-fg)]/10 transition-colors hover:bg-[var(--footer-fg)]/20"
                   >
                     <IconYoutube className="h-4 w-4" aria-hidden />
                   </a>
@@ -271,7 +292,7 @@ export function FooterMain({
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="TikTok"
-                    className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+                    className="grid h-9 w-9 place-items-center rounded-full bg-[var(--footer-fg)]/10 transition-colors hover:bg-[var(--footer-fg)]/20"
                   >
                     <IconTiktok className="h-4 w-4" aria-hidden />
                   </a>
@@ -293,7 +314,7 @@ export function FooterMain({
           <FooterColumn title="Institucional" links={institucionalLinks} />
         </div>
 
-        <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-white/10 pt-6 text-[12px] text-white/60 md:flex-row md:items-center">
+        <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-[var(--footer-fg)]/10 pt-6 text-[12px] text-[var(--footer-fg)]/60 md:flex-row md:items-center">
           <p>
             © {new Date().getFullYear()} {brandName} · Todos os direitos
             reservados
@@ -315,15 +336,15 @@ interface FooterColumnProps {
 function FooterColumn({ title, links }: FooterColumnProps) {
   return (
     <div>
-      <h3 className="text-[12px] font-black uppercase tracking-widest text-[var(--color-pmb-lime)]">
+      <h3 className="text-[12px] font-black uppercase tracking-widest text-[var(--footer-accent)]">
         {title}
       </h3>
-      <ul className="mt-4 space-y-2.5 text-[13.5px] text-white/80">
+      <ul className="mt-4 space-y-2.5 text-[13.5px] text-[var(--footer-fg)]/80">
         {links.map((link) => (
           <li key={`${link.href}-${link.label}`}>
             <Link
               href={link.href}
-              className="whitespace-pre-line transition-colors hover:text-white hover:underline"
+              className="whitespace-pre-line transition-colors hover:text-[var(--footer-fg)] hover:underline"
             >
               {link.label}
             </Link>

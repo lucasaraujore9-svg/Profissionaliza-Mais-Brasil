@@ -19,14 +19,9 @@ import { VisitorTracker } from "@/components/loja/visitor-tracker"
 import { resolveVitrinePixels, resolvePmbSelfPixels } from "@/lib/tracking/resolve"
 import { TrackingPixels } from "@/components/shared/tracking-pixels"
 import { isPmbAutomationEnabled } from "@/lib/automation/context"
+import { TenantThemeStyle } from "@/components/shared/tenant-theme-style"
+import { logoForTone, resolveTheme } from "@/lib/tenant/theme"
 
-const PMB_GREEN_DEFAULT = "#025918"
-const PMB_GOLD_DEFAULT = "#F2B705"
-
-function isCustomColor(value: string | null | undefined, fallback: string): boolean {
-  if (!value) return false
-  return value.toLowerCase() !== fallback.toLowerCase()
-}
 
 // Título/descrição/favicon por contexto: no domínio do revendedor puxam o nome,
 // a descrição e a logo da unidade; sem tenant, a identidade institucional PMB.
@@ -110,23 +105,9 @@ export default async function MainLayout({
   }
 
   // Com tenant: aplica a identidade da unidade (mesma lógica do loja/layout).
-  const primary = tenant.primaryColor ?? PMB_GREEN_DEFAULT
-  const secondary = tenant.secondaryColor ?? PMB_GOLD_DEFAULT
-
-  const customStyle: React.CSSProperties = {}
-  if (isCustomColor(tenant.primaryColor, PMB_GREEN_DEFAULT)) {
-    Object.assign(customStyle, {
-      "--color-pmb-green": primary,
-      "--color-pmb-green-700": primary,
-      "--color-pmb-green-900": primary,
-    })
-  }
-  if (isCustomColor(tenant.secondaryColor, PMB_GOLD_DEFAULT)) {
-    Object.assign(customStyle, {
-      "--color-pmb-gold": secondary,
-      "--color-pmb-gold-600": secondary,
-    })
-  }
+  const theme = resolveTheme(tenant)
+  const headerLogo = logoForTone(theme.headerTone, tenant)
+  const footerLogo = logoForTone(theme.footerTone, tenant)
 
   const instagramUrl = normalizeSocialUrl(tenant.instagram, "instagram")
   const facebookUrl = normalizeSocialUrl(tenant.facebook, "facebook")
@@ -144,7 +125,8 @@ export default async function MainLayout({
   const pixels = await resolveVitrinePixels(tenant.id)
 
   return (
-    <div style={customStyle} className="contents">
+    <div className="contents">
+      <TenantThemeStyle tenant={tenant} />
       <TrackingPixels pixels={pixels} />
       {tenant.automationEnabled ? <VisitorTracker /> : null}
       {origin ? (
@@ -167,8 +149,9 @@ export default async function MainLayout({
       ) : null}
       <NavbarMain
         categorias={categorias}
-        tenantLogoUrl={tenant.logoUrl ?? null}
+        tenantLogoUrl={headerLogo.url}
         tenantName={tenant.name ?? null}
+        tone={theme.headerTone}
         tecnica={{ enabled: tecnica.enabled, label: tecnica.label, url: tecnica.url }}
         courseHrefBase="/curso"
       />
@@ -183,9 +166,11 @@ export default async function MainLayout({
           tiktok: tiktokUrl,
         }}
         sejaRevendedorHref={sejaRevendedorHref}
+        tone={theme.footerTone}
         brand={{
           name: tenant.name,
-          logoUrl: tenant.logoUrl,
+          logoUrl: footerLogo.url,
+          logoPlate: footerLogo.plate,
           description: tenant.description ?? tenant.tagline,
         }}
         support={buildTenantSupportContacts({

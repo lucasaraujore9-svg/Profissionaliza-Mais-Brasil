@@ -16,6 +16,8 @@ import {
 } from "@/lib/auth/impersonate"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { getCurrentTenant } from "@/lib/tenant/current"
+import { TenantThemeStyle } from "@/components/shared/tenant-theme-style"
+import { resolveTheme } from "@/lib/tenant/theme"
 import { getRequestOrigin } from "@/lib/seo/host"
 import {
   tenantVitrineMetadata,
@@ -62,6 +64,7 @@ interface TenantBranding {
   primaryColor: string | null
   secondaryColor: string | null
   logoUrl: string | null
+  theme: unknown
 }
 
 /**
@@ -78,6 +81,7 @@ async function resolveActiveTenant(): Promise<TenantBranding | null> {
     primaryColor: true,
     secondaryColor: true,
     logoUrl: true,
+    theme: true,
   } as const
   const tenantId = h.get("x-tenant-id")
   if (tenantId) {
@@ -141,15 +145,19 @@ export default async function AlunoLayout({
     redirect("/logout?next=/login")
   }
 
-  // PMB tenant placeholder mantém cores PMB padrão (não propaga branding
-  // específico). Para revendedores reais, propagamos primary/secondary/logo.
+  // PMB tenant placeholder mantém a identidade da plataforma. Para unidades
+  // reais, as cores vão em :root (TenantThemeStyle) — a área inteira segue a
+  // identidade, não só o menu — e o shell recebe o que é dele.
   const isPmb = tenant?.id && tenant?.name?.includes("Vitrine")
-  const branding = !isPmb && tenant
+  const brandTenant = !isPmb && tenant ? tenant : null
+  const theme = brandTenant ? resolveTheme(brandTenant) : null
+  const branding = brandTenant && theme
     ? {
-        brandPrimary: tenant.primaryColor ?? undefined,
-        brandAccent: tenant.secondaryColor ?? undefined,
-        storeName: tenant.name,
-        logoUrl: tenant.logoUrl ?? undefined,
+        brandAccent: theme.cta,
+        brandAccentOn: theme.ctaOn,
+        menuTone: theme.studentMenuTone,
+        storeName: brandTenant.name,
+        logoUrl: brandTenant.logoUrl ?? undefined,
       }
     : {}
 
@@ -163,6 +171,7 @@ export default async function AlunoLayout({
       )}
       {/* Sessão derrubada por outro aparelho sai da tela sem esperar um clique. */}
       <StudentSessionWatch />
+      <TenantThemeStyle tenant={brandTenant} />
       <StudentShell
         // Só o que o shell desenha: o objeto inteiro iria para o payload RSC,
         // e o id da sessão não tem o que fazer no navegador.

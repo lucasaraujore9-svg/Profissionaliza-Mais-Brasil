@@ -159,7 +159,7 @@ export function NotificationsPage() {
                 type="button"
                 onClick={markAll}
                 disabled={marking}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--brand-btn)] px-3 py-2 text-xs font-semibold text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)] disabled:opacity-50"
               >
                 {marking ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -208,7 +208,7 @@ export function NotificationsPage() {
                 onClick={() => setFilter(f)}
                 className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                   filter === f
-                    ? "bg-[var(--color-pmb-green)] text-white"
+                    ? "bg-[var(--brand-btn)] text-[var(--brand-btn-on)]"
                     : "text-gray-600 hover:bg-gray-50"
                 }`}
               >
@@ -278,7 +278,7 @@ export function NotificationsPage() {
                         {n.title}
                       </p>
                       {!isRead && (
-                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--color-pmb-green)]" />
+                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--brand-btn)]" />
                       )}
                     </div>
                     {n.body && (

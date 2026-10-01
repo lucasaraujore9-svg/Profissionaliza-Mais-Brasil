@@ -1,6 +1,8 @@
 import type { Metadata } from "next"
 import { BrandPanel } from "@/components/auth/brand-panel"
 import { getCurrentTenant } from "@/lib/tenant/current"
+import { TenantThemeStyle } from "@/components/shared/tenant-theme-style"
+import { logoForTone } from "@/lib/tenant/theme"
 
 // Título por contexto: no domínio do revendedor usa o nome da unidade.
 export async function generateMetadata(): Promise<Metadata> {
@@ -25,14 +27,6 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-const PMB_GREEN_DEFAULT = "#025918"
-const PMB_GOLD_DEFAULT = "#F2B705"
-
-function isCustomColor(value: string | null | undefined, fallback: string): boolean {
-  if (!value) return false
-  return value.toLowerCase() !== fallback.toLowerCase()
-}
-
 export default async function AuthLayout({
   children,
 }: {
@@ -40,29 +34,16 @@ export default async function AuthLayout({
 }) {
   const tenant = await getCurrentTenant()
 
-  const customStyle: React.CSSProperties = {}
-  if (tenant && isCustomColor(tenant.primaryColor, PMB_GREEN_DEFAULT)) {
-    Object.assign(customStyle, {
-      "--color-pmb-green": tenant.primaryColor,
-      "--color-pmb-green-700": tenant.primaryColor,
-      "--color-pmb-green-900": tenant.primaryColor,
-    })
-  }
-  if (tenant && isCustomColor(tenant.secondaryColor, PMB_GOLD_DEFAULT)) {
-    Object.assign(customStyle, {
-      "--color-pmb-gold": tenant.secondaryColor,
-      "--color-pmb-gold-600": tenant.secondaryColor,
-    })
-  }
+  // O painel da marca é uma área escura: usa a logo para fundo escuro.
+  const logo = logoForTone("dark", tenant ?? {})
 
   return (
-    <div
-      style={customStyle}
-      className="flex min-h-screen bg-[var(--color-pmb-mist)]"
-    >
+    <div className="flex min-h-screen bg-[var(--color-pmb-mist)]">
+      <TenantThemeStyle tenant={tenant} />
       <BrandPanel
         tenantName={tenant?.name ?? null}
-        tenantLogoUrl={tenant?.logoUrl ?? null}
+        tenantLogoUrl={logo.url}
+        logoPlate={logo.plate}
       />
 
       <div className="flex w-full items-center justify-center bg-white px-6 py-12 lg:w-1/2">

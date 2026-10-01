@@ -75,7 +75,7 @@ function SidebarContent({
 }: SidebarContentProps) {
   return (
     <>
-      <div className="flex h-20 items-center gap-3 border-b border-white/10 px-6">
+      <div className="flex h-20 items-center gap-3 border-b border-[var(--menu-fg)]/10 px-6">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5">
           {/* Logo da unidade se houver; revenda sem logo usa um ícone neutro
               (nunca a logo PMB). Só o contexto PMB puro (sem storeName) exibe a
@@ -89,10 +89,7 @@ function SidebarContent({
               className="h-full w-full object-contain"
             />
           ) : storeName ? (
-            <GraduationCap
-              className="h-6 w-6"
-              style={{ color: "var(--shell-accent)" }}
-            />
+            <GraduationCap className="h-6 w-6 text-[var(--brand-ink)]" />
           ) : (
             <Image
               src="/images/logo.png"
@@ -105,10 +102,7 @@ function SidebarContent({
         </div>
         <div className="flex flex-col leading-tight">
           <span className="font-display text-sm">{storeName ?? "Profissionaliza"}</span>
-          <span
-            className="text-[10px] font-semibold uppercase tracking-wider"
-            style={{ color: "var(--shell-accent)" }}
-          >
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--menu-fg)]/70">
             Área do aluno
           </span>
         </div>
@@ -128,8 +122,8 @@ function SidebarContent({
               className={cn(
                 "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors",
                 isActive
-                  ? "font-semibold text-[color:var(--color-pmb-green-900,#0a3622)]"
-                  : "text-white/85 hover:bg-white/10 hover:text-white",
+                  ? "font-semibold text-[var(--shell-accent-on)]"
+                  : "text-[var(--menu-fg)]/85 hover:bg-[var(--menu-fg)]/10 hover:text-[var(--menu-fg)]",
               )}
               style={
                 isActive
@@ -144,10 +138,10 @@ function SidebarContent({
         })}
       </nav>
 
-      <div className="border-t border-white/10 p-4">
+      <div className="border-t border-[var(--menu-fg)]/10 p-4">
         <div className="flex items-center gap-3">
           <div
-            className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-[color:var(--color-pmb-green-900,#0a3622)]"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-[var(--shell-accent-on)]"
             style={{ backgroundColor: "var(--shell-accent)" }}
           >
             {initialsOf(session.name)}
@@ -156,13 +150,13 @@ function SidebarContent({
             <p className="truncate text-xs font-semibold">
               {session.name ?? "Aluno"}
             </p>
-            <p className="truncate text-[10px] text-white/65">{session.email}</p>
+            <p className="truncate text-[10px] text-[var(--menu-fg)]/65">{session.email}</p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => void signOutToLogin()}
-          className="mt-3 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+          className="mt-3 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-[var(--menu-fg)]/80 transition-colors hover:bg-[var(--menu-fg)]/10 hover:text-[var(--menu-fg)]"
         >
           <LogOut className="h-4 w-4" />
           Sair
@@ -177,10 +171,14 @@ interface StudentShellProps {
   children: React.ReactNode
   /** O aluno tem assinatura viva — libera o item "Minha assinatura" no menu. */
   hasSubscription?: boolean
-  /** Cor primária do tenant (vitrine). Default = verde PMB. */
-  brandPrimary?: string
-  /** Cor de destaque do tenant. Default = lime PMB. */
+  /**
+   * Item ativo do menu (fundo + texto), já resolvidos pelo tema da unidade.
+   * Ausentes = padrão da plataforma (lime com verde escuro).
+   */
   brandAccent?: string
+  brandAccentOn?: string
+  /** Menu escuro (padrão) ou claro — escolha da unidade em /painel/vitrine. */
+  menuTone?: "light" | "dark"
   /** Nome/marca da loja para exibir no shell. */
   storeName?: string
   /** Logo da loja. Cai pra logo PMB padrão se ausente. */
@@ -192,8 +190,9 @@ interface StudentShellProps {
 export function StudentShell({
   session,
   children,
-  brandPrimary,
   brandAccent,
+  brandAccentOn,
+  menuTone = "dark",
   storeName,
   logoUrl,
   dismissedTours = [],
@@ -202,23 +201,22 @@ export function StudentShell({
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  // Tokens herdados do tenant da vitrine. Antes a área do aluno usava sempre
-  // var(--color-pmb-green), ignorando o branding configurado em /painel/vitrine —
-  // aluno em vitrine roxa via tudo verde PMB. Agora, se o layout pai injetou
-  // primaryColor/secondaryColor, usamos esses; caso contrário, fallback para
-  // os tokens PMB padrão.
-  const styleVars: React.CSSProperties = {
-    "--shell-primary": brandPrimary ?? "var(--color-pmb-green)",
+  // As cores da unidade chegam por :root (TenantThemeStyle, no layout). Aqui só
+  // o que é do menu: o item ativo e se a barra é clara ou escura. `--menu-fg` é
+  // o texto do menu; os tons mais fracos saem dele por opacidade.
+  const styleVars = {
     "--shell-accent": brandAccent ?? "var(--color-pmb-lime)",
+    "--shell-accent-on": brandAccentOn ?? "var(--brand-ink-900)",
   } as React.CSSProperties
+  const menuSurface =
+    menuTone === "dark"
+      ? "bg-[var(--brand-dark)] text-[var(--menu-fg)] [--menu-fg:var(--brand-dark-on)]"
+      : "border-r border-gray-200 bg-white text-[var(--menu-fg)] [--menu-fg:var(--brand-ink-900)]"
 
   return (
     <div className="flex min-h-screen bg-gray-50" style={styleVars}>
       {/* Sidebar desktop (lg+) */}
-      <aside
-        className="hidden w-60 flex-col text-white lg:flex"
-        style={{ backgroundColor: "var(--shell-primary)" }}
-      >
+      <aside className={cn("hidden w-60 flex-col lg:flex", menuSurface)}>
         <SidebarContent
           session={session}
           pathname={pathname}
@@ -238,13 +236,15 @@ export function StudentShell({
             onClick={() => setMobileOpen(false)}
           />
           <aside
-            className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col text-white shadow-xl lg:hidden"
-            style={{ backgroundColor: "var(--shell-primary)" }}
+            className={cn(
+              "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col shadow-xl lg:hidden",
+              menuSurface,
+            )}
           >
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
-              className="absolute right-3 top-3 z-10 rounded-md p-1 text-white/80 hover:bg-white/10"
+              className="absolute right-3 top-3 z-10 rounded-md p-1 text-[var(--menu-fg)]/80 hover:bg-[var(--menu-fg)]/10"
               aria-label="Fechar menu"
             >
               <X className="h-5 w-5" />

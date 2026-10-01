@@ -316,6 +316,14 @@ model Tenant {
   appIconUrl     String? @map("app_icon_url")
   primaryColor   String  @default("#2563eb") @map("primary_color") // Azul padrao
   secondaryColor String  @default("#1e40af") @map("secondary_color")
+  // Logo para FUNDO ESCURO (rodape, topo escuro, painel do login). `logoUrl` e a
+  // logo para fundo claro. Cada area usa a sua e cai na outra quando falta.
+  logoDarkUrl    String? @map("logo_dark_url")
+  // Ajuste fino da identidade: cor dos botoes, dos titulos, das areas escuras e
+  // se topo/rodape/menu do aluno sao claros ou escuros. NULL (ou campo nulo
+  // dentro dele) = automatico, derivado das duas cores acima. Forma e defaults
+  // em src/lib/tenant/theme.ts (`TenantTheme`), a fonte unica.
+  theme          Json?
   bannerUrl      String? @map("banner_url")
   tagline        String? // Frase curta da vitrine
   description    String? // Descricao longa

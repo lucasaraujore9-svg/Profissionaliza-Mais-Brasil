@@ -162,7 +162,7 @@ export function LeadInquiryCard({
         <button
           type="submit"
           disabled={status === "submitting" || !consent}
-          className="flex w-full items-center justify-center gap-1.5 rounded-md bg-[var(--color-pmb-green)] px-3 py-2.5 text-[12.5px] font-bold uppercase tracking-wide text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-1.5 rounded-md bg-[var(--brand-btn)] px-3 py-2.5 text-[12.5px] font-bold uppercase tracking-wide text-[var(--brand-btn-on)] transition-colors hover:bg-[var(--brand-btn-hover)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {status === "submitting" ? (
             <>

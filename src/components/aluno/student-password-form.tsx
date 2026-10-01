@@ -111,7 +111,7 @@ export function StudentPasswordForm({
           type="button"
           onClick={save}
           disabled={saving}
-          className="rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+          className="rounded-lg bg-[var(--brand-btn)] px-4 py-2 text-sm font-semibold text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)] disabled:opacity-50"
         >
           {saving ? "Salvando..." : isFirstTime ? "Definir senha" : "Alterar senha"}
         </button>

@@ -397,7 +397,7 @@ export function StudentBuyClient() {
                         onClick={() => openBuy(c)}
                         disabled={submitting && selected?.id === c.id}
                         data-tour="aluno-comprar:comprar"
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--brand-btn)] px-3 py-2 text-xs font-semibold text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)] disabled:opacity-50"
                       >
                         {submitting && selected?.id === c.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />

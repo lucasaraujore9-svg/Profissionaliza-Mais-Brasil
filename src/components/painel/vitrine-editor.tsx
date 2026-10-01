@@ -12,15 +12,17 @@ import { VitrinePreview } from "./vitrine-preview"
 import { BlockSkeleton } from "@/components/shared/loading-skeletons"
 import { clientLogger } from "@/lib/logger-client"
 import { composeAppIcon } from "@/lib/pwa/compose-app-icon"
+import { DEFAULT_THEME } from "@/lib/tenant/theme"
 
 // Campo do config que cada asset alimenta. Sem esse mapa o upload do favicon
 // sobrescreveria a logo no estado local (a API grava na coluna certa, mas a tela
 // mostraria o arquivo errado até o próximo reload).
 const ASSET_FIELD: Record<
   VitrineAssetKind,
-  "logoUrl" | "faviconUrl" | "appIconUrl"
+  "logoUrl" | "logoDarkUrl" | "faviconUrl" | "appIconUrl"
 > = {
   logo: "logoUrl",
+  logodark: "logoDarkUrl",
   favicon: "faviconUrl",
   appicon: "appIconUrl",
 }
@@ -30,10 +32,12 @@ const defaultConfig: VitrineConfig = {
   tagline: null,
   description: null,
   logoUrl: null,
+  logoDarkUrl: null,
   faviconUrl: null,
   appIconUrl: null,
   primaryColor: "#025918", // --color-pmb-green
   secondaryColor: "#014712", // --color-pmb-green-700
+  theme: DEFAULT_THEME,
   whatsapp: null,
   whatsappFloatEnabled: false,
   whatsappFloatSide: "right",
@@ -171,6 +175,7 @@ export function VitrineEditor() {
           description: config.description,
           primaryColor: config.primaryColor,
           secondaryColor: config.secondaryColor,
+          theme: config.theme,
           whatsapp: config.whatsapp,
           whatsappFloatEnabled: config.whatsappFloatEnabled,
           whatsappFloatSide: config.whatsappFloatSide,

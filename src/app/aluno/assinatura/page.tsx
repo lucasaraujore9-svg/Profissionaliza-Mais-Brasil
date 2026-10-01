@@ -88,7 +88,7 @@ export default async function AssinaturaPage({
             já está. A contratação autenticada acontece em /aluno/assinar. */}
         <Link
           href="/aluno/assinar"
-          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--color-pmb-green)] px-5 py-3 text-sm font-semibold text-white"
+          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--brand-btn)] px-5 py-3 text-sm font-semibold text-[var(--brand-btn-on)]"
         >
           Ver planos
         </Link>

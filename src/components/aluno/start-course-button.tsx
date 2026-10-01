@@ -99,7 +99,7 @@ export function StartCourseButton({
         type="button"
         onClick={() => start()}
         disabled={loading}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--brand-btn)] px-3 py-2 text-xs font-semibold text-[var(--brand-btn-on)] transition-colors hover:bg-[var(--brand-btn-hover)] disabled:opacity-60"
       >
         {loading && !slots ? (
           <>
@@ -200,7 +200,7 @@ export function StartCourseButton({
                 type="button"
                 onClick={() => replaceId && start(replaceId)}
                 disabled={loading || !replaceId}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--brand-btn)] px-3 py-2 text-xs font-semibold text-[var(--brand-btn-on)] disabled:opacity-60"
               >
                 {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Trocar e abrir o curso

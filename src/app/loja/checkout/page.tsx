@@ -124,7 +124,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           </p>
           <Link
             href="/assinaturas"
-            className="mt-6 inline-block rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-pmb-green-700)]"
+            className="mt-6 inline-block rounded-lg bg-[var(--brand-btn)] px-4 py-2 text-sm font-medium text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
           >
             Ver os planos
           </Link>
@@ -171,7 +171,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           </p>
           <Link
             href="/contato"
-            className="mt-6 inline-block rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-pmb-green-700)]"
+            className="mt-6 inline-block rounded-lg bg-[var(--brand-btn)] px-4 py-2 text-sm font-medium text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
           >
             Falar com a equipe
           </Link>
@@ -335,7 +335,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         </p>
         <Link
           href="/"
-          className="mt-6 inline-block rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-pmb-green-700)]"
+          className="mt-6 inline-block rounded-lg bg-[var(--brand-btn)] px-4 py-2 text-sm font-medium text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
         >
           Voltar para a loja
         </Link>

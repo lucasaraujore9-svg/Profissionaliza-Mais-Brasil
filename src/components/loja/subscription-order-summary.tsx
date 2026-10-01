@@ -51,7 +51,7 @@ export function SubscriptionOrderSummary({
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
-      <h2 className="text-base font-semibold text-[var(--brand-primary,var(--color-pmb-green-900))]">
+      <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
         Resumo do pedido
       </h2>
 
@@ -75,7 +75,7 @@ export function SubscriptionOrderSummary({
           <div className="text-xs font-medium text-gray-500">
             Assinatura {INTERVAL_LABEL[interval].toLowerCase()}
           </div>
-          <h3 className="mt-0.5 text-sm font-semibold leading-snug text-[var(--brand-primary,var(--color-pmb-green-900))]">
+          <h3 className="mt-0.5 text-sm font-semibold leading-snug text-[var(--color-pmb-green-900)]">
             {planName}
           </h3>
           {courseCount !== null && (
@@ -87,10 +87,10 @@ export function SubscriptionOrderSummary({
       </div>
 
       <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-5">
-        <span className="text-sm font-medium text-[var(--brand-primary,var(--color-pmb-green-900))]">
+        <span className="text-sm font-medium text-[var(--color-pmb-green-900)]">
           {recurring ? "Valor por ciclo" : "Total"}
         </span>
-        <span className="font-mono text-2xl font-bold text-[var(--brand-primary,var(--color-pmb-green-900))]">
+        <span className="font-mono text-2xl font-bold text-[var(--color-pmb-green-900)]">
           {formatBRL(price)}
           <span className="ml-1 font-sans text-sm font-medium text-gray-500">
             {INTERVAL_PRICE_SUFFIX[interval]}

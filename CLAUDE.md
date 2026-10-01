@@ -2362,6 +2362,52 @@ no ramo da legada (`DELETE usuarios/remover_curso_combo`) responde HTTP 403.
   remocao seguem vinculadas la. Remover apaga o progresso — so depois de o dono
   decidir.
 
+### Personalizacao da identidade por papel de cor (2026-10-01)
+
+A unidade so tinha DUAS cores e UMA logo, e a cor principal fazia tres papeis ao
+mesmo tempo: botao, fundo de faixa escura (rodape, banners) e titulo em fundo
+claro. O texto sobre a faixa era branco fixo. E a area do aluno (`/aluno`) so
+pintava o MENU — o conteudo das paginas seguia o verde da plataforma.
+
+- **Fonte unica:** `src/lib/tenant/theme.ts` (PURO — a previa do painel importa
+  dali, entao nunca mostra cor que a loja nao pinta). `Tenant.theme` (Json) +
+  `Tenant.logoDarkUrl`; migration `20261001_tenant_theme` (aditiva, idempotente,
+  sem backfill).
+- **Automatico e o padrao.** Todo campo nulo = o sistema decide: botao comum e
+  area escura herdam a cor principal, botao de destaque herda a de destaque, e
+  todo TEXTO sobre cor sai do contraste (`readableOn`). Quem nao mexe em nada
+  nao fica com texto ilegivel; quem ajusta na mao e avisado
+  (`themeWarnings` + "Corrigir para mim"), sem bloquear o salvamento.
+- **Papeis (variaveis em `:root`, defaults no globals.css):** `--brand-btn*`
+  (Entrar, Pagar, Continuar), `--brand-cta*` (Comprar, Quero estudar),
+  `--brand-dark*` (faixas escuras) e a TINTA — `--color-pmb-green*` continua
+  sendo titulo/link/borda em fundo claro, entao os ~600 usos de texto nao
+  precisaram mudar. So os FUNDOS foram reapontados.
+- **`<style>` em `:root`, nao `<div style>`** (`TenantThemeStyle`): dialogo e menu
+  suspenso renderizam em portal, fora de qualquer wrapper, e ficavam com o verde
+  da plataforma dentro da loja da unidade. O valor vai dentro de `<style>`:
+  `safeHex` DESCARTA o que nao e hex (mesma regra do LMS).
+- **Claro ou escuro:** topo da loja, rodape e menu do aluno
+  (`headerTone`/`footerTone`/`studentMenuTone`). `.tone-dark` remapeia a tinta
+  para o texto da area escura; `.tone-ink` devolve a tinta nas ilhas claras
+  (busca, menu de categorias). So o topo usa o remapeamento — em heroi com
+  cartao branco dentro ele quebraria o cartao, entao la a troca e explicita.
+- **Logo por fundo:** `logoForTone` — a area escura usa `logoDarkUrl` e cai na
+  logo principal COM placa branca (o comportamento historico do rodape).
+- **Limiar 2,5 e nao 3:1**, calibrado nas 119 unidades de producao: com 3,
+  laranja e azul-claro de marca trocariam o texto branco por tinta escura e a
+  unidade leria "mudaram meu site". Com 2,5 so os amarelos viram (2 unidades).
+- **O que muda para quem nao mexeu em nada:** o texto de "Comprar"/"Quero
+  estudar" deixa de ser a cor principal sobre a de destaque (81 das 119 unidades
+  estavam abaixo de 3:1 — as 53 no azul padrao tinham azul sobre azul-escuro);
+  o hover do botao escurece; e `/aluno` inteiro passa a seguir a marca.
+- **Layout novo que sirva unidade** entra na lista do teste de cobertura em
+  `theme.test.ts` (exige `TenantThemeStyle`, proibe montar cor a mao).
+- **Fora, de proposito:** o LMS (segue com as duas cores e a logo principal —
+  ja tem contraste automatico e tema proprio), e-mails, certificado e artes.
+  Tom claro/escuro por secao da home e os tons `lime` fixos de fundo claro
+  (`--color-pmb-lime-50`) tambem ficaram de fora.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

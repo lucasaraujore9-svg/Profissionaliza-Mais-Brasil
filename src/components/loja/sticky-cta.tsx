@@ -19,7 +19,7 @@ export function StickyCTA({ href, preco, parcelas }: StickyCTAProps) {
           {parcelas && <div className="text-xs text-gray-500">ou {parcelas}</div>}
         </div>
         <Link href={href} className="shrink-0">
-          <Button className="bg-[var(--color-pmb-gold)] text-[var(--color-pmb-green-900)] font-bold hover:bg-[var(--color-pmb-gold-600)]">
+          <Button className="bg-[var(--brand-cta)] text-[var(--brand-cta-on)] font-bold hover:bg-[var(--brand-cta-hover)]">
             Matricular-se
           </Button>
         </Link>

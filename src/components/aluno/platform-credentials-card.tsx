@@ -142,7 +142,7 @@ export function PlatformCredentialsCard({
           href={loginUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
+          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--brand-btn)] px-4 py-2.5 text-sm font-semibold text-[var(--brand-btn-on)] shadow-sm transition-colors hover:bg-[var(--brand-btn-hover)] sm:w-auto"
         >
           Acessar aulas
           <ExternalLink className="h-4 w-4" />

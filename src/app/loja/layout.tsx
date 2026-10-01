@@ -15,14 +15,8 @@ import { storeJsonLd, webSiteJsonLd } from "@/lib/seo/jsonld"
 import { tenantVitrineMetadata, tenantVitrineViewport } from "@/lib/seo/tenant-metadata"
 import { VisitorTracker } from "@/components/loja/visitor-tracker"
 import { WhatsappFloat } from "@/components/loja/whatsapp-float"
-
-const PMB_GREEN_DEFAULT = "#025918"
-const PMB_GOLD_DEFAULT = "#F2B705"
-
-function isCustomColor(value: string | null | undefined, fallback: string): boolean {
-  if (!value) return false
-  return value.toLowerCase() !== fallback.toLowerCase()
-}
+import { TenantThemeStyle } from "@/components/shared/tenant-theme-style"
+import { logoForTone, resolveTheme } from "@/lib/tenant/theme"
 
 // Metadata por revenda: título, descrição, favicon (logo do tenant), canonical,
 // Open Graph, autoria e sinais geográficos — todos da unidade, sobrescrevendo
@@ -68,25 +62,15 @@ export default async function LojaLayout({
     ? await resolveVitrinePixels(tenant.id)
     : await resolvePmbSelfPixels()
 
-  const primary = tenant?.primaryColor ?? PMB_GREEN_DEFAULT
-  const secondary = tenant?.secondaryColor ?? PMB_GOLD_DEFAULT
-
-  // Só sobrescreve quando o tenant configurou cor custom
-  // (evita injetar style desnecessário quando usa o default PMB)
-  const customStyle: React.CSSProperties = {}
-  if (isCustomColor(tenant?.primaryColor, PMB_GREEN_DEFAULT)) {
-    Object.assign(customStyle, {
-      "--color-pmb-green": primary,
-      "--color-pmb-green-700": primary,
-      "--color-pmb-green-900": primary,
-    })
-  }
-  if (isCustomColor(tenant?.secondaryColor, PMB_GOLD_DEFAULT)) {
-    Object.assign(customStyle, {
-      "--color-pmb-gold": secondary,
-      "--color-pmb-gold-600": secondary,
-    })
-  }
+  // Identidade da unidade: cores em :root (TenantThemeStyle) e, aqui, o que é
+  // estrutura — tom do topo e do rodapé e a logo certa para cada fundo.
+  const theme = resolveTheme({
+    primaryColor: tenant?.primaryColor,
+    secondaryColor: tenant?.secondaryColor,
+    theme: tenant?.theme,
+  })
+  const headerLogo = logoForTone(theme.headerTone, tenant ?? {})
+  const footerLogo = logoForTone(theme.footerTone, tenant ?? {})
 
   // Redes sociais do revendedor, normalizadas (handle/@/URL → URL absoluta).
   const instagramUrl = normalizeSocialUrl(tenant?.instagram, "instagram")
@@ -108,7 +92,8 @@ export default async function LojaLayout({
     : undefined
 
   return (
-    <div style={customStyle} className="contents">
+    <div className="contents">
+      <TenantThemeStyle tenant={tenant} />
       <TrackingPixels pixels={pixels} />
       {tenant?.automationEnabled ? <VisitorTracker /> : null}
       {tenant && origin ? (
@@ -131,8 +116,9 @@ export default async function LojaLayout({
       ) : null}
       <NavbarMain
         categorias={categorias}
-        tenantLogoUrl={tenant?.logoUrl ?? null}
+        tenantLogoUrl={headerLogo.url}
         tenantName={tenant?.name ?? null}
+        tone={theme.headerTone}
         tecnica={(() => {
           const t = tecnicaFromTenant(tenant)
           return { enabled: t.enabled, label: t.label, url: t.url }
@@ -152,11 +138,13 @@ export default async function LojaLayout({
         }}
         sejaRevendedorHref={sejaRevendedorHref}
         hideSejaRevendedor={isCustomDomain}
+        tone={theme.footerTone}
         brand={
           tenant
             ? {
                 name: tenant.name,
-                logoUrl: tenant.logoUrl,
+                logoUrl: footerLogo.url,
+                logoPlate: footerLogo.plate,
                 description: tenant.description ?? tenant.tagline,
               }
             : undefined

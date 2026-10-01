@@ -192,7 +192,7 @@ function Toggle({
         onClick={() => onChange(!checked)}
         disabled={saving}
         className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-          checked ? "bg-[var(--color-pmb-green)]" : "bg-gray-300"
+          checked ? "bg-[var(--brand-btn)]" : "bg-gray-300"
         } disabled:opacity-50`}
       >
         <span

@@ -6,14 +6,14 @@ interface PageHeroProps {
 
 export function PageHero({ eyebrow, titulo, subtitulo }: PageHeroProps) {
   return (
-    <section className="bg-[var(--color-pmb-green)] text-white">
+    <section className="bg-[var(--brand-dark)] text-[var(--brand-dark-on)]">
       <div className="mx-auto max-w-[1080px] px-4 py-12 md:px-6 md:py-16">
-        <p className="text-[11px] font-black uppercase tracking-widest text-[var(--color-pmb-lime)]">
+        <p className="text-[11px] font-black uppercase tracking-widest text-[var(--brand-dark-accent)]">
           {eyebrow}
         </p>
         <h1 className="mt-1 text-[30px] font-black leading-tight md:text-[42px]">{titulo}</h1>
         {subtitulo && (
-          <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-white/80">{subtitulo}</p>
+          <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[var(--brand-dark-on)]/80">{subtitulo}</p>
         )}
       </div>
     </section>

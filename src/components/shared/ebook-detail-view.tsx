@@ -154,7 +154,7 @@ export function EbookDetailView({
   return (
     <div className="bg-[var(--color-pmb-mist)] pb-24 lg:pb-0">
       {/* HERO ---------------------------------------------------- */}
-      <section className="relative overflow-hidden bg-[var(--color-pmb-green)] text-white">
+      <section className="relative overflow-hidden bg-[var(--brand-dark)] text-[var(--brand-dark-on)]">
         {ebook.imageUrl ? (
           <>
             <Image
@@ -167,7 +167,7 @@ export function EbookDetailView({
             />
             <div
               aria-hidden
-              className="absolute inset-0 bg-gradient-to-br from-[var(--color-pmb-green)]/95 via-[var(--color-pmb-green)]/85 to-black/70"
+              className="absolute inset-0 bg-gradient-to-br from-[var(--brand-dark)]/95 via-[var(--brand-dark)]/85 to-black/70"
             />
           </>
         ) : (
@@ -184,7 +184,7 @@ export function EbookDetailView({
         <div className="relative mx-auto max-w-[1280px] px-4 py-8 md:px-6 md:py-12">
           <Link
             href={backHref}
-            className="inline-flex items-center gap-1.5 text-[13px] text-white/80 hover:text-white"
+            className="inline-flex items-center gap-1.5 text-[13px] text-[var(--brand-dark-on)]/80 hover:text-[var(--brand-dark-on)]"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             {backLabel}
@@ -196,7 +196,7 @@ export function EbookDetailView({
                   formato. Quem chega de uma prateleira mista precisa saber, antes
                   de ler o preço, que isto não é um curso. */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--brand-dark-on)]/15 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-[var(--brand-dark-on)]">
                   <BookOpen className="h-3.5 w-3.5" aria-hidden />
                   E-book
                 </span>
@@ -209,32 +209,32 @@ export function EbookDetailView({
                 {ebook.nome}
               </h1>
               {paragrafos[0] && (
-                <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-white/85 md:text-[16px]">
+                <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-[var(--brand-dark-on)]/85 md:text-[16px]">
                   {paragrafos[0]}
                 </p>
               )}
 
-              <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-[13.5px] text-white/85">
+              <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-[13.5px] text-[var(--brand-dark-on)]/85">
                 <span className="flex items-center gap-1.5">
-                  <FileText className="h-4 w-4 text-[var(--color-pmb-gold)]" aria-hidden />
+                  <FileText className="h-4 w-4 text-[var(--brand-dark-highlight)]" aria-hidden />
                   {paginas ? `${paginas} páginas` : "Material em PDF"}
                 </span>
                 {ebook.tempoLeitura ? (
                   <span className="flex items-center gap-1.5">
-                    <BookOpen className="h-4 w-4 text-[var(--color-pmb-gold)]" aria-hidden />
+                    <BookOpen className="h-4 w-4 text-[var(--brand-dark-highlight)]" aria-hidden />
                     {ebook.tempoLeitura} de leitura
                   </span>
                 ) : null}
                 <span className="flex items-center gap-1.5">
-                  <Zap className="h-4 w-4 text-[var(--color-pmb-gold)]" aria-hidden />
+                  <Zap className="h-4 w-4 text-[var(--brand-dark-highlight)]" aria-hidden />
                   Acesso imediato
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <Smartphone className="h-4 w-4 text-[var(--color-pmb-gold)]" aria-hidden />
+                  <Smartphone className="h-4 w-4 text-[var(--brand-dark-highlight)]" aria-hidden />
                   Celular, tablet ou computador
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-[var(--color-pmb-gold)]" aria-hidden />
+                  <ShieldCheck className="h-4 w-4 text-[var(--brand-dark-highlight)]" aria-hidden />
                   7 dias de garantia
                 </span>
               </div>
@@ -243,7 +243,7 @@ export function EbookDetailView({
             {ebook.imageUrl && (
               /* Retrato, e não 4:3: a capa de um livro é vertical, e é assim que
                  a pessoa reconhece o formato antes de ler qualquer palavra. */
-              <div className="relative mx-auto hidden w-full max-w-[280px] overflow-hidden rounded-2xl border border-white/15 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.5)] lg:block lg:aspect-[3/4]">
+              <div className="relative mx-auto hidden w-full max-w-[280px] overflow-hidden rounded-2xl border border-[var(--brand-dark-on)]/15 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.5)] lg:block lg:aspect-[3/4]">
                 <Image
                   src={ebook.imageUrl}
                   alt={ebook.nome}
@@ -334,32 +334,32 @@ export function EbookDetailView({
                 ele NÃO É: quem compra numa vitrine cheia de curso chega supondo
                 aulas e certificado, e descobrir isso depois de pagar é o motivo
                 nº 1 de pedido de reembolso em produto digital. */}
-            <div className="overflow-hidden rounded-2xl border border-[rgba(2,89,24,0.1)] bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-900)] p-6 text-white md:p-8">
+            <div className="overflow-hidden rounded-2xl border border-[rgba(2,89,24,0.1)] bg-gradient-to-br from-[var(--brand-dark)] to-[var(--brand-dark-deep)] p-6 text-[var(--brand-dark-on)] md:p-8">
               <div className="flex items-start gap-4">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/20">
-                  <BookOpen className="h-6 w-6 text-[var(--color-pmb-gold)]" aria-hidden />
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[var(--brand-dark-on)]/20">
+                  <BookOpen className="h-6 w-6 text-[var(--brand-dark-highlight)]" aria-hidden />
                 </span>
                 <div>
                   <h3 className="text-[18px] font-black md:text-[22px]">
                     O que você recebe
                   </h3>
-                  <ul className="mt-3 space-y-2 text-[14px] leading-relaxed text-white/85">
+                  <ul className="mt-3 space-y-2 text-[14px] leading-relaxed text-[var(--brand-dark-on)]/85">
                     <li className="flex items-start gap-2.5">
-                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-gold)]" aria-hidden />
+                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand-dark-highlight)]" aria-hidden />
                       <span>
                         O e-book completo{paginas ? `, com ${paginas} páginas` : ""}, liberado
                         na sua área do aluno assim que o pagamento é confirmado.
                       </span>
                     </li>
                     <li className="flex items-start gap-2.5">
-                      <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-gold)]" aria-hidden />
+                      <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand-dark-highlight)]" aria-hidden />
                       <span>
                         Leitura direto no navegador — celular, tablet ou
                         computador, sem instalar nada.
                       </span>
                     </li>
                     <li className="flex items-start gap-2.5">
-                      <Download className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-gold)]" aria-hidden />
+                      <Download className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand-dark-highlight)]" aria-hidden />
                       <span>
                         {baixavel
                           ? "Download do arquivo em PDF, para ler também sem internet."

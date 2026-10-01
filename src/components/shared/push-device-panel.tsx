@@ -204,7 +204,7 @@ export function PushDevicePanel() {
                     type="button"
                     onClick={activate}
                     disabled={busy}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-btn)] px-3 py-2 text-xs font-semibold text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)] disabled:opacity-50"
                   >
                     {busy ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />

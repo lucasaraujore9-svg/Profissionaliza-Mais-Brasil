@@ -92,6 +92,54 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ── Identidade da unidade ────────────────────────────────────────────────
+   Papéis que a unidade personaliza em /painel/vitrine. Os valores abaixo são o
+   padrão da plataforma; `tenantThemeCss` (lib/tenant/theme.ts) os sobrescreve
+   em :root nas páginas de uma unidade. `--color-pmb-green*` continua sendo a
+   TINTA da marca (títulos, links e bordas sobre fundo claro). */
+:root {
+  --brand-ink: #025918;
+  --brand-ink-700: #014712;
+  --brand-ink-900: #012e0b;
+  /* Botões comuns (Entrar, Pagar, Continuar). */
+  --brand-btn: #025918;
+  --brand-btn-hover: #014712;
+  --brand-btn-on: #FFFFFF;
+  /* Botões de destaque (Comprar, Quero estudar). */
+  --brand-cta: #F2B705;
+  --brand-cta-hover: #D9A304;
+  --brand-cta-on: #025918;
+  /* Faixas escuras: rodapé, banners, topo das páginas. */
+  --brand-dark: #025918;
+  --brand-dark-deep: #012e0b;
+  --brand-dark-on: #FFFFFF;
+  /* Detalhes coloridos SOBRE a área escura (rótulos, ícones). */
+  --brand-dark-accent: #C0D904;
+  --brand-dark-highlight: #F2B705;
+}
+
+/* Área escura da marca. Dentro dela a tinta (--color-pmb-green*) passa a ser o
+   texto da área escura, então o conteúdo escrito para fundo claro continua
+   legível sem trocar classe por classe. */
+.tone-dark {
+  background-color: var(--brand-dark);
+  color: var(--brand-dark-on);
+  --color-pmb-green: var(--brand-dark-on);
+  --color-pmb-green-700: var(--brand-dark-on);
+  --color-pmb-green-900: var(--brand-dark-on);
+  --color-pmb-mist: color-mix(in srgb, var(--brand-dark-on) 12%, transparent);
+}
+
+/* Ilha clara dentro de uma área escura (menu suspenso, campo de busca): devolve
+   a tinta. Não pinta fundo — quem usa já tem o seu. */
+.tone-ink {
+  color: var(--brand-ink-900);
+  --color-pmb-green: var(--brand-ink);
+  --color-pmb-green-700: var(--brand-ink-700);
+  --color-pmb-green-900: var(--brand-ink-900);
+  --color-pmb-mist: #F4F4EE;
+}
+
 :root {
   --background: #FFFFFF;
   --foreground: #012e0b;

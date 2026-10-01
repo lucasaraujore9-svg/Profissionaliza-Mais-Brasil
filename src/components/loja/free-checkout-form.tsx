@@ -245,7 +245,7 @@ export function FreeCheckoutForm({
           disabled={submitting}
           error={termsError}
         />
-        <Button type="submit" size="lg" disabled={submitting} className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
+        <Button type="submit" size="lg" disabled={submitting} className="w-full bg-[var(--brand-btn)] text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]">
           {submitting ? "Concluindo..." : "Concluir matrícula"}
         </Button>
         <p className="text-center text-xs text-gray-500">

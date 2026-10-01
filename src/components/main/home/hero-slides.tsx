@@ -102,7 +102,7 @@ export function HeroSlides({
     <section
       aria-label="Banner principal"
       aria-roledescription="carousel"
-      className="relative w-full overflow-hidden bg-[var(--color-pmb-green)]"
+      className="relative w-full overflow-hidden bg-[var(--brand-dark)]"
     >
       {/* Slides empilhados na mesma célula: o container assume a altura natural
           da imagem (full width, sem corte). Mobile (<768px) usa a imagem 1:1. */}

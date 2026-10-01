@@ -224,7 +224,7 @@ export function StudentSubscribeClient({ plans }: { plans: Plan[] }) {
       <button
         type="submit"
         disabled={loading || !planId}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-pmb-green)] px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-btn)] px-5 py-3.5 text-sm font-semibold text-[var(--brand-btn-on)] disabled:opacity-60"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
         {recurring ? "Assinar" : "Comprar acesso vitalício"}

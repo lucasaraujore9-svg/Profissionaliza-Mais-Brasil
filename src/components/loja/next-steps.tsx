@@ -70,7 +70,7 @@ export function NextSteps({ autoRedirect = false, contentType }: NextStepsProps)
             key={step.title}
             className="flex gap-4 rounded-xl border border-gray-100 bg-gray-50/50 p-4"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-pmb-green)] text-white">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-btn)] text-[var(--brand-btn-on)]">
               <step.icon className="h-5 w-5" />
             </div>
             <div className="flex-1">

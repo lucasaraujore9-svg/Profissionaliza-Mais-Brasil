@@ -88,7 +88,7 @@ export function CookieConsent() {
           <button
             type="button"
             onClick={writeDismissed}
-            className="rounded-lg bg-[var(--color-pmb-green)] px-5 py-2 text-sm font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
+            className="rounded-lg bg-[var(--brand-btn)] px-5 py-2 text-sm font-bold text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
           >
             Entendi
           </button>

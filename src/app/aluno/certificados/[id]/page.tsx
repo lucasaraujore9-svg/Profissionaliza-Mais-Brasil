@@ -149,7 +149,7 @@ export default async function StudentCertificateDetailPage({ params }: Props) {
           <div className="mt-6 flex flex-wrap gap-3">
             <a
               href={downloadUrl}
-              className="inline-flex items-center justify-center rounded-md bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--color-pmb-green-700)]"
+              className="inline-flex items-center justify-center rounded-md bg-[var(--brand-btn)] px-4 py-2 text-sm font-semibold text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
             >
               Baixar PDF
             </a>

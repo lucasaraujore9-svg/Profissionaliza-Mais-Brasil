@@ -244,7 +244,7 @@ function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
       <div className="mx-auto grid max-w-[1280px] gap-10 px-4 py-14 md:grid-cols-2 md:px-6 md:py-18 lg:gap-16">
         {/* Mockup decorativo do celular */}
         <div className="relative">
-          <div className="relative mx-auto aspect-[3/4] w-full max-w-[380px] overflow-hidden rounded-[28px] bg-[var(--color-pmb-green)] shadow-[0_30px_60px_-24px_rgba(2,89,24,0.45)]">
+          <div className="relative mx-auto aspect-[3/4] w-full max-w-[380px] overflow-hidden rounded-[28px] bg-[var(--brand-dark)] shadow-[0_30px_60px_-24px_rgba(2,89,24,0.45)]">
             <div
               aria-hidden
               className="absolute -right-10 -top-10 h-56 w-56 rounded-full"
@@ -257,10 +257,10 @@ function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
             />
 
             <div className="relative flex h-full flex-col justify-between gap-6 p-8">
-              <div className="flex items-center gap-2 text-white/85">
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/20">
+              <div className="flex items-center gap-2 text-[var(--brand-dark-on)]/85">
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--brand-dark-on)]/20">
                   <Smartphone
-                    className="h-4 w-4 text-white"
+                    className="h-4 w-4 text-[var(--brand-dark-on)]"
                     strokeWidth={2.5}
                     aria-hidden
                   />
@@ -271,26 +271,26 @@ function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
               </div>
 
               <div>
-                <h3 className="text-[32px] font-black leading-[1.05] text-white md:text-[36px]">
+                <h3 className="text-[32px] font-black leading-[1.05] text-[var(--brand-dark-on)] md:text-[36px]">
                   Sua escola
                   <br />
                   no bolso.
                 </h3>
-                <p className="mt-3 max-w-[260px] text-[14px] leading-relaxed text-white/80">
+                <p className="mt-3 max-w-[260px] text-[14px] leading-relaxed text-[var(--brand-dark-on)]/80">
                   Estude pelo celular, nos seus horários livres, e avance na sua carreira sem complicação.
                 </p>
               </div>
 
-              <div className="flex items-center gap-3 rounded-2xl bg-white/15 p-3">
-                <div className="h-12 w-12 shrink-0 rounded-xl bg-[var(--color-pmb-gold)]" />
+              <div className="flex items-center gap-3 rounded-2xl bg-[var(--brand-dark-on)]/15 p-3">
+                <div className="h-12 w-12 shrink-0 rounded-xl bg-[var(--brand-cta)]" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-bold text-white">
+                  <p className="truncate text-[13px] font-bold text-[var(--brand-dark-on)]">
                     Confeitaria Lucrativa
                   </p>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/20">
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--brand-dark-on)]/20">
                     <div className="h-full w-3/5 rounded-full bg-[var(--color-pmb-lime)]" />
                   </div>
-                  <p className="mt-1 text-[11px] text-white/70">
+                  <p className="mt-1 text-[11px] text-[var(--brand-dark-on)]/70">
                     Aula 14 de 30 · 60% concluído
                   </p>
                 </div>
@@ -349,7 +349,7 @@ function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
           {config.buttonText && config.buttonHref && (
             <Link
               href={config.buttonHref}
-              className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--color-pmb-green)] px-5 py-3 text-[14px] font-black text-white transition hover:bg-[var(--color-pmb-green-700)]"
+              className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--brand-btn)] px-5 py-3 text-[14px] font-black text-[var(--brand-btn-on)] transition hover:bg-[var(--brand-btn-hover)]"
             >
               {config.buttonText}
               <ArrowRight className="h-4 w-4" aria-hidden />
@@ -421,7 +421,7 @@ function TestimonialsVariant({ config }: { config: InstitutionalConfig }) {
 
 function FinalCtaVariant({ config }: { config: InstitutionalConfig }) {
   return (
-    <section className="relative overflow-hidden bg-[var(--color-pmb-green)]">
+    <section className="relative overflow-hidden bg-[var(--brand-dark)]">
       <div className="relative mx-auto max-w-[1280px] px-4 py-16 md:px-6 md:py-20">
         <div className="mx-auto max-w-2xl text-center">
           {config.subtitle && (
@@ -429,12 +429,12 @@ function FinalCtaVariant({ config }: { config: InstitutionalConfig }) {
               {config.subtitle}
             </span>
           )}
-          <h2 className="mt-4 text-[30px] font-black leading-[1.05] text-white md:text-[44px]">
+          <h2 className="mt-4 text-[30px] font-black leading-[1.05] text-[var(--brand-dark-on)] md:text-[44px]">
             {config.title}
           </h2>
           {config.body && (
             // Suporta corpo multi-parágrafo: quebras de linha viram <p> separados.
-            <div className="mt-4 space-y-3 text-[15px] leading-relaxed text-white/80 md:text-[17px]">
+            <div className="mt-4 space-y-3 text-[15px] leading-relaxed text-[var(--brand-dark-on)]/80 md:text-[17px]">
               {config.body
                 .split("\n")
                 .map((p) => p.trim())
@@ -448,7 +448,7 @@ function FinalCtaVariant({ config }: { config: InstitutionalConfig }) {
             {config.buttonText && config.buttonHref && (
               <Link
                 href={config.buttonHref}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--color-pmb-gold)] px-7 py-3.5 text-[15px] font-black text-[var(--color-pmb-green)] shadow-[0_10px_30px_-10px_rgba(242,183,5,0.6)] transition-transform hover:-translate-y-0.5"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--brand-cta)] px-7 py-3.5 text-[15px] font-black text-[var(--brand-cta-on)] shadow-[0_10px_30px_-10px_rgba(242,183,5,0.6)] transition-transform hover:-translate-y-0.5"
               >
                 {config.buttonText}
                 <ArrowRight className="h-4 w-4" aria-hidden />
@@ -457,7 +457,7 @@ function FinalCtaVariant({ config }: { config: InstitutionalConfig }) {
             {config.secondaryButtonText && config.secondaryButtonHref && (
               <Link
                 href={config.secondaryButtonHref}
-                className="inline-flex items-center justify-center rounded-full border border-white/30 px-6 py-3.5 text-[14px] font-bold text-white transition-colors hover:bg-white/10"
+                className="inline-flex items-center justify-center rounded-full border border-[var(--brand-dark-on)]/30 px-6 py-3.5 text-[14px] font-bold text-[var(--brand-dark-on)] transition-colors hover:bg-[var(--brand-dark-on)]/10"
               >
                 {config.secondaryButtonText}
               </Link>
@@ -540,7 +540,7 @@ function CustomVariant({ config }: { config: InstitutionalConfig }) {
         {config.buttonText && config.buttonHref && (
           <Link
             href={config.buttonHref}
-            className="mt-5 inline-flex items-center gap-2 rounded-full bg-[var(--color-pmb-green)] px-5 py-3 text-[14px] font-black text-white"
+            className="mt-5 inline-flex items-center gap-2 rounded-full bg-[var(--brand-btn)] px-5 py-3 text-[14px] font-black text-[var(--brand-btn-on)]"
           >
             {config.buttonText}
             <ArrowRight className="h-4 w-4" aria-hidden />

@@ -106,15 +106,15 @@ export default async function LojaCursosPage({
 
   return (
     <div className="bg-[var(--color-pmb-mist)]">
-      <section className="bg-[var(--color-pmb-green)] text-white">
+      <section className="bg-[var(--brand-dark)] text-[var(--brand-dark-on)]">
         <div className="mx-auto max-w-[1280px] px-4 py-10 md:px-6 md:py-14">
-          <p className="text-[11px] font-black uppercase tracking-widest text-[var(--color-pmb-lime)]">
+          <p className="text-[11px] font-black uppercase tracking-widest text-[var(--brand-dark-accent)]">
             Catálogo completo
           </p>
           <h1 className="mt-1 text-[28px] font-black leading-tight md:text-[40px]">
             {tituloAtivo}
           </h1>
-          <p className="mt-2 max-w-xl text-[14.5px] text-white/80">
+          <p className="mt-2 max-w-xl text-[14.5px] text-[var(--brand-dark-on)]/80">
             Cursos profissionalizantes com certificado. Compre uma vez, assista
             quando quiser.
           </p>
@@ -141,7 +141,7 @@ export default async function LojaCursosPage({
             )}
             <button
               type="submit"
-              className="rounded-lg bg-[var(--color-pmb-gold)] px-4 py-2 text-[13px] font-bold text-[var(--color-pmb-green)] transition-colors hover:brightness-105"
+              className="rounded-lg bg-[var(--brand-cta)] px-4 py-2 text-[13px] font-bold text-[var(--brand-cta-on)] transition-colors hover:brightness-105"
             >
               Buscar
             </button>
@@ -156,7 +156,7 @@ export default async function LojaCursosPage({
               href="/cursos"
               className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
                 !categoriaSlug
-                  ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)] text-white"
+                  ? "border-[var(--brand-btn)] bg-[var(--brand-btn)] text-[var(--brand-btn-on)]"
                   : "border-[rgba(2,89,24,0.15)] text-[var(--color-pmb-green)] hover:border-[var(--color-pmb-green)]"
               }`}
             >
@@ -170,7 +170,7 @@ export default async function LojaCursosPage({
                   href={`/cursos?categoria=${cat.slug}`}
                   className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
                     isActive
-                      ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)] text-white"
+                      ? "border-[var(--brand-btn)] bg-[var(--brand-btn)] text-[var(--brand-btn-on)]"
                       : "border-[rgba(2,89,24,0.15)] text-[var(--color-pmb-green)] hover:border-[var(--color-pmb-green)]"
                   }`}
                 >

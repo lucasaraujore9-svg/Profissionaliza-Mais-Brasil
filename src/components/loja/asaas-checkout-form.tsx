@@ -581,7 +581,7 @@ export function AsaasCheckoutForm({
               )
               window.location.href = `${status.loginUrl}?callbackUrl=${callback}`
             }}
-            className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+            className="w-full bg-[var(--brand-btn)] text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
           >
             <Lock className="mr-2 h-4 w-4" />
             Fazer login para continuar
@@ -599,7 +599,7 @@ export function AsaasCheckoutForm({
           disabled={submitting}
           error={termsError}
         />
-        <Button type="submit" size="lg" disabled={submitting} className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
+        <Button type="submit" size="lg" disabled={submitting} className="w-full bg-[var(--brand-btn)] text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]">
           <Lock className="mr-2 h-4 w-4" />
           {submitting
             ? "Processando..."
@@ -644,7 +644,7 @@ function MethodButton({
     >
       <div
         className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-          active ? "bg-[var(--color-pmb-green)] text-white" : "bg-gray-100 text-gray-600"
+          active ? "bg-[var(--brand-btn)] text-[var(--brand-btn-on)]" : "bg-gray-100 text-gray-600"
         }`}
       >
         <Icon className="h-5 w-5" />
@@ -655,11 +655,11 @@ function MethodButton({
       </div>
       <div
         className={`h-5 w-5 shrink-0 rounded-full border-2 ${
-          active ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)]" : "border-gray-300 bg-white"
+          active ? "border-[var(--brand-btn)] bg-[var(--brand-btn)]" : "border-gray-300 bg-white"
         }`}
       >
         {active && (
-          <div className="h-full w-full rounded-full border-2 border-white bg-[var(--color-pmb-green)]" />
+          <div className="h-full w-full rounded-full border-2 border-white bg-[var(--brand-btn)]" />
         )}
       </div>
     </button>
@@ -725,7 +725,7 @@ function PixResult({
         </div>
       </div>
       <div className="mt-6 flex items-start gap-2 rounded-xl bg-[var(--color-pmb-lime-50)]/40 p-4 text-sm text-[var(--color-pmb-green-700)]">
-        <span className="mt-0.5 inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--color-pmb-green)]" />
+        <span className="mt-0.5 inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--brand-btn)]" />
         <span>Aguardando confirmação do pagamento… Você será redirecionado automaticamente assim que recebermos a confirmação.</span>
       </div>
       <ChangeMethodButton onClick={onChangeMethod} />
@@ -774,11 +774,11 @@ function BoletoResult({
           </div>
         </div>
       )}
-      <a href={url} target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex w-full items-center justify-center rounded-lg bg-[var(--color-pmb-green)] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[var(--color-pmb-green-700)]">
+      <a href={url} target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex w-full items-center justify-center rounded-lg bg-[var(--brand-btn)] px-4 py-3 text-sm font-bold text-[var(--brand-btn-on)] transition-colors hover:bg-[var(--brand-btn-hover)]">
         Abrir boleto
       </a>
       <div className="mt-6 flex items-start gap-2 rounded-xl bg-[var(--color-pmb-lime-50)]/40 p-4 text-sm text-[var(--color-pmb-green-700)]">
-        <span className="mt-0.5 inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--color-pmb-green)]" />
+        <span className="mt-0.5 inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--brand-btn)]" />
         <span>Aguardando o pagamento. A compensação leva até 3 dias úteis. Você receberá um email quando a matrícula for ativada.</span>
       </div>
       <ChangeMethodButton onClick={onChangeMethod} />

@@ -52,7 +52,7 @@ export default async function ConfirmacaoPage({
             Não conseguimos localizar sua matrícula. Verifique o link recebido.
           </p>
           <Link href="/" className="mt-6 inline-block">
-            <Button size="lg" className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
+            <Button size="lg" className="bg-[var(--brand-btn)] text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]">
               <Home className="mr-2 h-4 w-4" />
               Voltar à loja
             </Button>
@@ -143,7 +143,7 @@ export default async function ConfirmacaoPage({
             <Link href="/aluno">
               <Button
                 size="lg"
-                className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
+                className="w-full bg-[var(--brand-btn)] text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)] sm:w-auto"
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
                 {ebook ? "Ir para a área do aluno" : "Ir para área de aulas"}

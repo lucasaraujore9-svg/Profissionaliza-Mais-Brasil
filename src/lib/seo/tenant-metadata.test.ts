@@ -15,6 +15,8 @@ function tenantWith(
     logoUrl: null,
     faviconUrl: null,
     appIconUrl: null,
+    logoDarkUrl: null,
+    theme: null,
     bannerUrl: null,
     primaryColor: "#025918",
     secondaryColor: "#014712",

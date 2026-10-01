@@ -78,7 +78,7 @@ export function CourseCard({ course, hrefBase = "/cursos" }: CourseCardProps) {
                 ? "bg-[var(--color-pmb-cyan)] text-white"
                 : selo === "mais-vendido"
                   ? "bg-[var(--color-pmb-lime)] text-[var(--color-pmb-green)]"
-                  : "bg-[var(--color-pmb-gold)] text-[var(--color-pmb-green)]"
+                  : "bg-[var(--brand-cta)] text-[var(--brand-cta-on)]"
             }`}
           >
             {selo === "novo"

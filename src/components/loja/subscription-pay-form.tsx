@@ -218,7 +218,7 @@ export function SubscriptionPayForm({
         </p>
         <a
           href="/aluno/assinatura"
-          className="mt-5 inline-flex rounded-xl bg-[var(--color-pmb-green)] px-5 py-3 text-sm font-semibold text-white"
+          className="mt-5 inline-flex rounded-xl bg-[var(--brand-btn)] px-5 py-3 text-sm font-semibold text-[var(--brand-btn-on)]"
         >
           Ver minha assinatura
         </a>
@@ -314,7 +314,7 @@ export function SubscriptionPayForm({
       <button
         type="submit"
         disabled={loading}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-pmb-green)] px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-btn)] px-5 py-3.5 text-sm font-semibold text-[var(--brand-btn-on)] disabled:opacity-60"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
         {renewal ? "Pagar" : recurring ? "Assinar" : "Comprar acesso vitalício"} {planName} ·{" "}

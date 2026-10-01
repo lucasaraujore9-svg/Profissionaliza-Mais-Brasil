@@ -9,6 +9,8 @@ import {
 interface BrandPanelProps {
   tenantName?: string | null
   tenantLogoUrl?: string | null
+  /** Logo de fundo claro sobre o painel escuro: precisa da placa branca. */
+  logoPlate?: boolean
 }
 
 const HIGHLIGHTS = [
@@ -29,24 +31,34 @@ const HIGHLIGHTS = [
   },
 ] as const
 
-export function BrandPanel({ tenantName, tenantLogoUrl }: BrandPanelProps = {}) {
+export function BrandPanel({
+  tenantName,
+  tenantLogoUrl,
+  logoPlate = true,
+}: BrandPanelProps = {}) {
   const isTenant = Boolean(tenantName)
   const displayName = tenantName ?? "Profissionaliza Mais Brasil"
 
   return (
-    <div className="relative hidden overflow-hidden bg-[var(--color-pmb-green)] lg:flex lg:w-1/2">
+    <div className="relative hidden overflow-hidden bg-[var(--brand-dark)] lg:flex lg:w-1/2">
       <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_20%_15%,rgba(242,183,5,0.32),transparent_45%),radial-gradient(circle_at_85%_85%,rgba(192,217,4,0.24),transparent_50%)]" />
 
-      <div className="relative z-10 flex w-full flex-col justify-between px-12 py-14 text-white">
+      <div className="relative z-10 flex w-full flex-col justify-between px-12 py-14 text-[var(--brand-dark-on)]">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold backdrop-blur">
+          <div className="inline-flex items-center gap-2 rounded-full bg-[var(--brand-dark-on)]/10 px-3 py-1 text-xs font-semibold backdrop-blur">
             <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-pmb-lime)]" />
             {isTenant ? "Sua escola online" : "Plataforma ativa"}
           </div>
 
           <div className="mt-6 flex items-center justify-start">
             {tenantLogoUrl ? (
-              <div className="flex h-28 items-center justify-center rounded-2xl bg-white px-8 py-6 shadow-[0_12px_30px_-12px_rgba(0,0,0,0.35)]">
+              <div
+                className={
+                  logoPlate
+                    ? "flex h-28 items-center justify-center rounded-2xl bg-white px-8 py-6 shadow-[0_12px_30px_-12px_rgba(0,0,0,0.35)]"
+                    : "flex h-28 items-center justify-center"
+                }
+              >
                 <Image
                   src={tenantLogoUrl}
                   alt={displayName}
@@ -76,7 +88,7 @@ export function BrandPanel({ tenantName, tenantLogoUrl }: BrandPanelProps = {}) 
               <>Profissionaliza<br />Mais Brasil</>
             )}
           </h1>
-          <p className="mt-3 max-w-md text-base text-white/85">
+          <p className="mt-3 max-w-md text-base text-[var(--brand-dark-on)]/85">
             {isTenant
               ? "Acesse sua área para acompanhar seus cursos, gerenciar sua loja ou continuar sua aprendizagem."
               : "Plataforma completa de cursos profissionalizantes online. Aprenda uma profissão e construa sua carreira."}
@@ -88,14 +100,14 @@ export function BrandPanel({ tenantName, tenantLogoUrl }: BrandPanelProps = {}) 
             const Icon = item.icon
             return (
               <li key={item.title} className="flex gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-pmb-gold)]/95 text-[var(--color-pmb-green-900)]">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-cta)] text-[var(--brand-cta-on)]">
                   <Icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-white">
+                  <div className="text-sm font-semibold text-[var(--brand-dark-on)]">
                     {item.title}
                   </div>
-                  <p className="mt-0.5 text-sm text-white/80">
+                  <p className="mt-0.5 text-sm text-[var(--brand-dark-on)]/80">
                     {item.description}
                   </p>
                 </div>
@@ -104,9 +116,9 @@ export function BrandPanel({ tenantName, tenantLogoUrl }: BrandPanelProps = {}) 
           })}
         </ul>
 
-        <div className="mt-12 flex items-center gap-3 text-xs text-white/80">
+        <div className="mt-12 flex items-center gap-3 text-xs text-[var(--brand-dark-on)]/80">
           <Sparkles
-            className="h-4 w-4 text-[var(--color-pmb-gold)]"
+            className="h-4 w-4 text-[var(--brand-dark-highlight)]"
             aria-hidden
           />
           <span>

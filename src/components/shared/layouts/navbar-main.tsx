@@ -26,6 +26,12 @@ interface NavbarMainProps {
    * plano visível ele levaria a uma listagem vazia.
    */
   hasPlans?: boolean
+  /**
+   * Topo claro (padrão) ou escuro — escolha da unidade em /painel/vitrine.
+   * No escuro o cabeçalho vira `.tone-dark` e as ilhas claras (busca, menu de
+   * categorias) recebem `.tone-ink` para manter a tinta da marca.
+   */
+  tone?: "light" | "dark"
 }
 
 export function NavbarMain({
@@ -35,7 +41,9 @@ export function NavbarMain({
   tecnica,
   courseHrefBase = "/cursos",
   hasPlans = false,
+  tone = "light",
 }: NavbarMainProps = {}) {
+  const surface = tone === "dark" ? "tone-dark" : "bg-white"
   // Sem fallback hardcoded: se nao houver categorias com cursos ativos, o
   // botao "Categorias" e a lista no mobile menu simplesmente nao aparecem.
   const lista = categorias && categorias.length > 0 ? categorias : []
@@ -69,7 +77,7 @@ export function NavbarMain({
   }, [categoriasOpen])
 
   return (
-    <header className="sticky top-0 z-40 bg-white shadow-[0_1px_0_0_rgba(2,89,24,0.08)]">
+    <header className={`sticky top-0 z-40 ${surface} shadow-[0_1px_0_0_rgba(2,89,24,0.08)]`}>
       <div className="mx-auto flex h-[80px] max-w-[1280px] items-center gap-3 px-4 md:h-[92px] md:gap-5 md:px-6">
         <Link
           href="/"
@@ -126,7 +134,7 @@ export function NavbarMain({
           {categoriasOpen && (
             <div
               role="menu"
-              className="absolute left-0 top-full z-50 mt-1 w-72 rounded-xl border border-[rgba(2,89,24,0.1)] bg-white p-2 shadow-[0_18px_40px_-18px_rgba(2,89,24,0.35)]"
+              className="tone-ink absolute left-0 top-full z-50 mt-1 w-72 rounded-xl border border-[rgba(2,89,24,0.1)] bg-white p-2 shadow-[0_18px_40px_-18px_rgba(2,89,24,0.35)]"
             >
               <ul className="flex flex-col">
                 {lista.map((cat) => (
@@ -181,7 +189,7 @@ export function NavbarMain({
         <form
           role="search"
           action="/cursos"
-          className="flex-1 max-w-[560px] relative"
+          className="tone-ink flex-1 max-w-[560px] relative"
         >
           <label htmlFor="navbar-search" className="sr-only">
             Buscar cursos
@@ -223,7 +231,7 @@ export function NavbarMain({
 
         <Link
           href="/cursos"
-          className="hidden md:inline-flex items-center h-10 px-4 rounded-lg bg-[var(--color-pmb-gold)] text-[var(--color-pmb-green)] text-[14px] font-bold hover:bg-[var(--color-pmb-gold-600)] transition-colors whitespace-nowrap"
+          className="hidden md:inline-flex items-center h-10 px-4 rounded-lg bg-[var(--brand-cta)] text-[var(--brand-cta-on)] text-[14px] font-bold hover:bg-[var(--brand-cta-hover)] transition-colors whitespace-nowrap"
         >
           Quero estudar
         </Link>
@@ -240,12 +248,12 @@ export function NavbarMain({
       </div>
 
       {mobileOpen && (
-        <div className="lg:hidden border-t border-[rgba(2,89,24,0.08)] bg-white">
+        <div className={`lg:hidden border-t border-[rgba(2,89,24,0.08)] ${surface}`}>
           <div className="mx-auto max-w-[1280px] px-4 py-3 flex flex-col gap-1">
             <Link
               href="/cursos"
               onClick={() => setMobileOpen(false)}
-              className="inline-flex items-center h-11 px-4 rounded-lg bg-[var(--color-pmb-gold)] text-[var(--color-pmb-green)] text-[14px] font-bold justify-center mb-2"
+              className="inline-flex items-center h-11 px-4 rounded-lg bg-[var(--brand-cta)] text-[var(--brand-cta-on)] text-[14px] font-bold justify-center mb-2"
             >
               Quero estudar
             </Link>

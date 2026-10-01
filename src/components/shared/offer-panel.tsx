@@ -143,7 +143,7 @@ export function OfferPanel({
 
           <Link
             href={ctaHref}
-            className="block w-full rounded-lg bg-[var(--color-pmb-gold)] px-4 py-3.5 text-center text-[14px] font-black text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-gold-600)]"
+            className="block w-full rounded-lg bg-[var(--brand-cta)] px-4 py-3.5 text-center text-[14px] font-black text-[var(--brand-cta-on)] transition-colors hover:bg-[var(--brand-cta-hover)]"
           >
             {ctaLabel}
           </Link>
@@ -220,7 +220,7 @@ export function OfferStickyBar({
         </div>
         <Link
           href={ctaHref}
-          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-[var(--color-pmb-gold)] px-5 py-3 text-[14px] font-black text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-gold-600)]"
+          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-[var(--brand-cta)] px-5 py-3 text-[14px] font-black text-[var(--brand-cta-on)] transition-colors hover:bg-[var(--brand-cta-hover)]"
         >
           {ctaLabel}
         </Link>

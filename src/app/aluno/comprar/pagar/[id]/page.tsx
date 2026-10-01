@@ -24,7 +24,7 @@ function Aviso({ titulo, texto }: { titulo: string; texto: string }) {
       <p className="mt-3 text-sm text-gray-600">{texto}</p>
       <Link
         href="/aluno/comprar"
-        className="mt-6 inline-block rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-pmb-green-700)]"
+        className="mt-6 inline-block rounded-lg bg-[var(--brand-btn)] px-4 py-2 text-sm font-medium text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
       >
         Voltar ao catálogo
       </Link>

@@ -5,6 +5,7 @@ import { requirePainel } from "@/lib/auth/painel-guard"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { syncTenantBrandingToLms } from "@/lib/lms"
+import { parseTheme, type TenantTheme } from "@/lib/tenant/theme"
 
 interface VitrineDto {
   name: string
@@ -13,9 +14,11 @@ interface VitrineDto {
   logoUrl: string | null
   faviconUrl: string | null
   appIconUrl: string | null
+  logoDarkUrl: string | null
   bannerUrl: string | null
   primaryColor: string
   secondaryColor: string
+  theme: TenantTheme
   whatsapp: string | null
   whatsappFloatEnabled: boolean
   whatsappFloatSide: string
@@ -38,9 +41,11 @@ async function readTenant(tenantId: string): Promise<VitrineDto | null> {
       logoUrl: true,
       faviconUrl: true,
       appIconUrl: true,
+      logoDarkUrl: true,
       bannerUrl: true,
       primaryColor: true,
       secondaryColor: true,
+      theme: true,
       whatsapp: true,
       whatsappFloatEnabled: true,
       whatsappFloatSide: true,
@@ -54,7 +59,8 @@ async function readTenant(tenantId: string): Promise<VitrineDto | null> {
     },
   })
   if (!tenant) return null
-  return tenant
+  // A tela sempre recebe o tema completo: coluna nula vira o automático.
+  return { ...tenant, theme: parseTheme(tenant.theme) }
 }
 
 export const GET = withRequestContext(
@@ -76,7 +82,28 @@ const hexColor = z
   .trim()
   .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "Cor inválida (use formato hex)")
 
+// Cor nula = automático. `strict` para um campo desconhecido não ser gravado
+// calado no JSON — a leitura (`parseTheme`) o descartaria, e a tela mostraria
+// "salvo" para algo que a loja nunca vai aplicar.
+const themeColor = hexColor.nullable()
+const themeTone = z.enum(["light", "dark"])
+const themeSchema = z
+  .object({
+    buttonBg: themeColor,
+    buttonText: themeColor,
+    ctaBg: themeColor,
+    ctaText: themeColor,
+    lightTitle: themeColor,
+    darkBg: themeColor,
+    darkText: themeColor,
+    headerTone: themeTone,
+    footerTone: themeTone,
+    studentMenuTone: themeTone,
+  })
+  .strict()
+
 const updateSchema = z.object({
+  theme: themeSchema.optional(),
   name: z.string().trim().min(2).max(120).optional(),
   tagline: z.string().trim().max(160).nullable().optional(),
   description: z.string().trim().max(1000).nullable().optional(),
@@ -128,9 +155,11 @@ export const PUT = withRequestContext(
       return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
     }
 
+    const { theme, ...fields } = parsed.data
     await prisma.tenant.update({
       where: { id: tenant.id },
-      data: parsed.data,
+      // `parseTheme` normaliza os hex (forma curta, caixa) antes de gravar.
+      data: theme ? { ...fields, theme: { ...parseTheme(theme) } } : fields,
     })
 
     await invalidateTenant({

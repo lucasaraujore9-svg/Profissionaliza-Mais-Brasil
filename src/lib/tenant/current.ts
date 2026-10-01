@@ -17,6 +17,10 @@ export interface CurrentTenant {
   // Idem: entrada antiga do cache pode vir sem o campo. Todo consumidor usa
   // `appIconUrl ?? faviconUrl ?? logoUrl`.
   appIconUrl: string | null
+  // Logo para fundo escuro e ajuste fino das cores. Entrada antiga do cache
+  // pode vir sem os dois: `undefined` cai no automático (lib/tenant/theme).
+  logoDarkUrl: string | null
+  theme: unknown
   bannerUrl: string | null
   primaryColor: string
   secondaryColor: string
@@ -73,6 +77,8 @@ export const getCurrentTenant = cache(
           logoUrl: true,
           faviconUrl: true,
           appIconUrl: true,
+          logoDarkUrl: true,
+          theme: true,
           bannerUrl: true,
           primaryColor: true,
           secondaryColor: true,

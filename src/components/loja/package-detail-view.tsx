@@ -127,7 +127,7 @@ export function PackageDetailView({
               </p>
               <Link
                 href={ctaHref}
-                className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-[var(--color-pmb-green)] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[var(--color-pmb-green-700)]"
+                className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-[var(--brand-btn)] px-4 py-3 text-sm font-bold text-[var(--brand-btn-on)] transition-colors hover:bg-[var(--brand-btn-hover)]"
               >
                 {ctaLabel}
               </Link>
