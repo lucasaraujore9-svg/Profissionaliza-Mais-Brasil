@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 const db = vi.hoisted(() => ({
   tenant: { findMany: vi.fn(), update: vi.fn() },
   tenantPayment: { findFirst: vi.fn(), update: vi.fn() },
-  tenantPaymentReminder: { createMany: vi.fn() },
+  tenantPaymentReminder: { createMany: vi.fn(), updateMany: vi.fn() },
 }))
 vi.mock("@/lib/prisma", () => ({ prisma: db }))
 
@@ -49,7 +49,8 @@ const sendEmail = vi.hoisted(() => vi.fn(async () => ({ id: "e1" })))
 vi.mock("@/lib/email/resend", () => ({ sendEmail }))
 
 const createNotification = vi.hoisted(() => vi.fn(async () => null))
-vi.mock("@/lib/notifications", () => ({ createNotification }))
+const sendTenantNotificationEmails = vi.hoisted(() => vi.fn(async () => true))
+vi.mock("@/lib/notifications", () => ({ createNotification, sendTenantNotificationEmails }))
 
 const logAudit = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock("@/lib/audit", () => ({ logAudit }))
@@ -110,6 +111,8 @@ beforeEach(() => {
   db.tenantPayment.findFirst.mockResolvedValue(null)
   db.tenantPayment.update.mockResolvedValue({})
   db.tenantPaymentReminder.createMany.mockResolvedValue({ count: 1 })
+  db.tenantPaymentReminder.updateMany.mockResolvedValue({ count: 1 })
+  sendTenantNotificationEmails.mockResolvedValue(true)
   asaas.getPayment.mockResolvedValue({
     id: "pay_1",
     status: "OVERDUE",
@@ -392,6 +395,59 @@ describe("suspensão e aviso", () => {
 
     expect(result.warned).toBe(0)
     expect(createNotification).not.toHaveBeenCalled()
+  })
+
+  it("o email do último aviso sai conferido, fora da ponte em background", async () => {
+    db.tenant.findMany.mockResolvedValue([unidade(5)])
+
+    await runOverdueSweep({ now: NOW })
+
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ audience: "TENANT", suppressEmail: true }),
+    )
+    expect(arg<{ title: string }>(sendTenantNotificationEmails, 0).title).toContain("Último aviso")
+    // Reivindicou o email e não devolveu.
+    expect(db.tenantPaymentReminder.updateMany).toHaveBeenCalledTimes(1)
+  })
+
+  it("email do último aviso que falhou em D+5 é tentado de novo em D+6, sem repetir o aviso in-app", async () => {
+    db.tenant.findMany.mockResolvedValue([unidade(6)])
+    // A janela já foi reivindicada ontem; o email ficou pendente.
+    db.tenantPaymentReminder.createMany.mockResolvedValue({ count: 0 })
+
+    const result = await runOverdueSweep({ now: NOW })
+
+    expect(result.warned).toBe(0)
+    expect(createNotification).not.toHaveBeenCalled()
+    expect(sendTenantNotificationEmails).toHaveBeenCalledTimes(1)
+    expect(arg<{ where: unknown }>(db.tenantPaymentReminder.updateMany, 0).where).toEqual({
+      tenantPaymentId: "tp1",
+      offsetDays: -5,
+      emailedAt: null,
+    })
+  })
+
+  it("email do último aviso recusado: devolve a janela e segue a varredura", async () => {
+    db.tenant.findMany.mockResolvedValue([unidade(5)])
+    sendTenantNotificationEmails.mockResolvedValue(false)
+
+    const result = await runOverdueSweep({ now: NOW })
+
+    expect(result.warned).toBe(1)
+    expect(result.errors).toEqual([])
+    expect(
+      arg<{ data: unknown }>(db.tenantPaymentReminder.updateMany, 0, 1).data,
+    ).toEqual({ emailedAt: null })
+  })
+
+  it("email já entregue não é reenviado na execução seguinte", async () => {
+    db.tenant.findMany.mockResolvedValue([unidade(6)])
+    db.tenantPaymentReminder.createMany.mockResolvedValue({ count: 0 })
+    db.tenantPaymentReminder.updateMany.mockResolvedValue({ count: 0 })
+
+    await runOverdueSweep({ now: NOW })
+
+    expect(sendTenantNotificationEmails).not.toHaveBeenCalled()
   })
 })
 

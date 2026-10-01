@@ -33,6 +33,7 @@ import { prisma } from "@/lib/prisma"
 import { blockTenantStudents } from "@/lib/auto-block"
 import { sendEmail } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
+import { deliverReminderEmail } from "@/lib/tenant-billing/reminders"
 import { logAudit } from "@/lib/audit"
 import { invalidateTenantCache } from "@/lib/tenant/cache-invalidation"
 import { contextLogger } from "@/lib/logger"
@@ -465,31 +466,54 @@ async function suspendTenant(
   })
 }
 
-/** D+5 (2 dias antes do corte): último aviso, idempotente por cobrança. */
+/**
+ * D+5 (2 dias antes do corte): último aviso, idempotente por cobrança.
+ *
+ * O aviso in-app sai uma vez. O EMAIL é tentado em toda execução da janela
+ * (D+5 e D+6) até um provedor aceitar: é o último aviso antes de um
+ * cancelamento que não se desfaz, e nos apagões de SMTP de setembro/2026 ele
+ * falhou para unidades que foram canceladas dois dias depois.
+ */
 async function warnBeforeCancel(
   tenant: Candidate,
   charge: OverdueCharge & { id: string },
   ageDays: number,
   ruler: OverdueRuler,
 ): Promise<boolean> {
+  const row = { tenantPaymentId: charge.id, offsetDays: cancelWarningOffset(ruler) }
   // Reivindica a janela ANTES de avisar — mesma mecânica dos lembretes D-5/D-2.
   const claim = await prisma.tenantPaymentReminder.createMany({
-    data: [{ tenantPaymentId: charge.id, offsetDays: cancelWarningOffset(ruler) }],
+    data: [row],
     skipDuplicates: true,
   })
-  if (claim.count === 0) return false
+  const firstWarning = claim.count > 0
 
   const valor = money(Number(charge.amount))
-  await createNotification({
-    audience: "TENANT",
+  const aviso = {
     tenantId: tenant.id,
-    level: "ERROR",
     title: `Último aviso: sua unidade será cancelada em ${formatBrDate(cancelDateFor(charge.dueDate, ruler))}`,
     body: `A mensalidade de ${valor}, vencida em ${formatBrDate(charge.dueDate)}, está ${ageDays} dias em atraso. ${cancellationNoticeLine(charge.dueDate, ruler)} O cancelamento encerra a assinatura, tira a vitrine do ar e não é revertido pelo pagamento posterior.`,
     category: "tenant-billing",
     href: "/painel/cobrancas",
+  }
+  if (firstWarning) {
+    await createNotification({
+      audience: "TENANT",
+      level: "ERROR",
+      ...aviso,
+      // O email sai logo abaixo, com resultado conferido e retentativa.
+      suppressEmail: true,
+    })
+  }
+  // Falha aqui não pode derrubar o resto da unidade: a linha fica pendente e a
+  // execução de amanhã tenta de novo.
+  await deliverReminderEmail(row, aviso).catch((err) => {
+    contextLogger().error(
+      { err, event: "sweep_tenants.warning_email_failed", tenantId: tenant.id },
+      "sweep-tenants: envio do último aviso falhou",
+    )
   })
-  return true
+  return firstWarning
 }
 
 /** D+7: cancela de verdade — Asaas, banco, alunos, cache e trilha. */

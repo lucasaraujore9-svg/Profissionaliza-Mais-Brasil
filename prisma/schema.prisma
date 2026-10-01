@@ -2023,6 +2023,13 @@ model TenantPaymentReminder {
    */
   offsetDays      Int           @map("offset_days")
   sentAt          DateTime      @default(now()) @map("sent_at")
+  /**
+   * Quando o EMAIL deste aviso saiu. NULL = ainda nao saiu: o cron tenta de
+   * novo na proxima execucao enquanto a cobranca seguir em aberto. E gravado
+   * ANTES do envio e devolvido a NULL se nenhum provedor aceitar. A linha em
+   * si (sentAt) so prova o aviso in-app.
+   */
+  emailedAt       DateTime?     @map("emailed_at")
 
   @@id([tenantPaymentId, offsetDays])
   @@index([sentAt])

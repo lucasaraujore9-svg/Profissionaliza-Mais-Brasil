@@ -2232,6 +2232,46 @@ nativa do Asaas, as cobrancas abertas locais ficavam PENDING para sempre (o
 Asaas as exclui, mas `PAYMENT_DELETED` so e tratado no carne) — `cancel.ts`
 passou a marca-las CANCELLED.
 
+### Email de cobranca da unidade com retentativa (2026-10-01)
+
+Unidades reclamaram de nao receber email de cobranca. `email_logs` mostrou 87
+emails de cobranca de unidade falhados de 17 a 28/09 (apagoes da Hostinger), em
+56 unidades, e NENHUM foi tentado de novo: a janela e reivindicada em
+`TenantPaymentReminder` antes do disparo, o email saia em background pela ponte
+notificacao→email, e ninguem conferia o resultado. Cinco unidades foram
+canceladas com o email do ultimo aviso (D+5) falhado.
+
+- **`TenantPaymentReminder.emailedAt`** (migration
+  `20261001_tenant_payment_reminder_emailed_at`, idempotente, COM backfill
+  `emailed_at = sent_at` — sem ele todo aviso antigo de cobranca em aberto seria
+  reenviado no primeiro cron). NULL = email ainda nao saiu. A linha em si so
+  prova o aviso in-app.
+- **`deliverReminderEmail`** (`lib/tenant-billing/reminders.ts`): reivindica
+  `emailedAt` ANTES de enviar e DEVOLVE a nulo se nenhum provedor aceitar. Usado
+  pelos lembretes D-5/D-2/D0 e pelo ultimo aviso do `overdue-sweep`.
+- **`sendTenantNotificationEmails`** (`lib/notifications.ts`): mesmo destinatario,
+  preferencia e kill-switch da ponte, mas sincrono e devolvendo se saiu. Quem
+  precisa de retentativa chama `createNotification` com `suppressEmail: true` e
+  entrega o email por aqui.
+- **Lembrete:** fase 2 do cron entrega todo aviso pendente de cobranca ainda em
+  aberto e nao vencida, com o texto do DIA ("vence em 4 dias", "vence amanha"),
+  nao o da janela que falhou. D0 que falha nao e retentado no dia seguinte: a
+  cobranca ja venceu e quem fala e a regua de inadimplencia.
+- **Ultimo aviso:** o email e tentado em toda execucao da janela (D+5 e D+6); o
+  aviso in-app continua saindo uma vez so.
+- **Fora do alcance:** os emails de suspensao (D+3), cancelamento (D+7), "Sua
+  mensalidade venceu" (webhook) e pagamento confirmado seguem sem retentativa —
+  sao `sendEmail` direto, sem linha de estado para marcar.
+- **Nao explicado:** em 22/09 seis lembretes foram reivindicados as 11:00 UTC
+  sem notificacao in-app nem linha em `email_logs`. A fase 2 cobre o email desse
+  caso (linha pendente), nao o aviso in-app.
+- **Deploy:** nao subir perto das 11:00 UTC nem das 03:01 UTC. Linha criada pelo
+  codigo antigo entre a migration e a troca de versao nasce com `emailed_at`
+  nulo e ganha um email repetido no cron seguinte.
+- Testes verificados POR MUTACAO (7, todas mortas): nao devolver a janela,
+  voltar a usar a ponte, retentar email ja entregue, enviar sem reivindicar,
+  usar o texto da janela em vez do dia.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

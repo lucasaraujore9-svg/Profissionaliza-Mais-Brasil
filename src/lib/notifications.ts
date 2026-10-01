@@ -48,13 +48,17 @@ type EmailRecipient =
  * preferência de email está ligada. Best-effort e em background (`afterResponse`):
  * nunca bloqueia nem derruba a criação da notificação. Usa o template genérico
  * `notification` com a marca da unidade (revenda nunca exibe marca PMB).
+ *
+ * Devolve quantos emails saíram e quantos falharam — quem precisa tentar de novo
+ * (`sendTenantNotificationEmails`) decide por esse número; a ponte o ignora.
  */
 async function dispatchNotificationEmails(
   meta: { title: string; body?: string | null; href?: string | null; category?: string },
   recipients: EmailRecipient[],
-): Promise<void> {
-  if (!meta.category || !EMAIL_BRIDGE_CATEGORIES.has(meta.category)) return
-  if (recipients.length === 0) return
+): Promise<{ sent: number; failed: number }> {
+  const outcome = { sent: 0, failed: 0 }
+  if (!meta.category || !EMAIL_BRIDGE_CATEGORIES.has(meta.category)) return outcome
+  if (recipients.length === 0) return outcome
 
   for (const r of recipients) {
     try {
@@ -102,13 +106,16 @@ async function dispatchNotificationEmails(
           props: { title: meta.title, body: meta.body ?? null, ctaUrl, brand },
         },
       })
+      outcome.sent++
     } catch (err) {
+      outcome.failed++
       contextLogger().error(
         { err, event: "notifications.email_bridge_failed", category: meta.category },
         "ponte notificação→email falhou",
       )
     }
   }
+  return outcome
 }
 
 export type NotificationConfigTarget = "TENANT" | "STUDENT" | "ADMIN"
@@ -289,6 +296,77 @@ export async function filterUserIdsByInAppPreference(
 }
 
 /**
+ * Quem da unidade recebe uma notificacao daquela categoria: o dono e os membros
+ * ativos. Categorias sensiveis (cobranca da unidade, comissoes) so vao para quem
+ * tem a permissao correspondente — o dono sempre tem; um membro so se o dono
+ * concedeu em /painel/equipe.
+ */
+async function tenantRecipientUserIds(
+  tenantId: string,
+  category: string | undefined,
+): Promise<string[]> {
+  const requiredPerm = category ? CATEGORY_PERMISSION[category] : undefined
+  const [owner, members] = await Promise.all([
+    prisma.user.findFirst({
+      where: { tenantId },
+      select: { id: true },
+    }),
+    prisma.tenantMember.findMany({
+      where: { tenantId, status: "ATIVO" },
+      select: {
+        userId: true,
+        role: true,
+        extraPermissions: true,
+        revokedPermissions: true,
+      },
+    }),
+  ])
+  const userIds = new Set<string>()
+  if (owner) userIds.add(owner.id)
+  for (const m of members) {
+    if (requiredPerm) {
+      const perms = resolvePermissions(
+        normalizeMemberRole(m.role),
+        m.extraPermissions,
+        m.revokedPermissions,
+      )
+      if (!perms.has(requiredPerm)) continue
+    }
+    userIds.add(m.userId)
+  }
+  return [...userIds]
+}
+
+/**
+ * Email de um aviso da unidade, enviado AGORA e com o resultado na mao.
+ *
+ * `createNotification` manda o email em background e nunca diz se saiu — serve
+ * para aviso comum, nao para cobranca: nos apagoes de SMTP de setembro/2026 os
+ * lembretes de mensalidade ficaram marcados como avisados sem email nenhum.
+ * Quem precisa tentar de novo chama `createNotification` com `suppressEmail` e
+ * entrega o email por aqui.
+ *
+ * `true` = nada pendente (saiu para todos, ou ninguem quer email). `false` = ao
+ * menos um envio falhou e o chamador deve tentar de novo depois. Mesmos
+ * destinatarios, preferencias e kill-switch da ponte.
+ */
+export async function sendTenantNotificationEmails(input: {
+  tenantId: string
+  title: string
+  body?: string
+  href?: string
+  category: string
+}): Promise<boolean> {
+  if (!(await isCategoryEnabled("TENANT", input.category))) return true
+  const userIds = await tenantRecipientUserIds(input.tenantId, input.category)
+  const { failed } = await dispatchNotificationEmails(
+    { title: input.title, body: input.body, href: input.href, category: input.category },
+    userIds.map((userId) => ({ kind: "user", userId })),
+  )
+  return failed === 0
+}
+
+/**
  * Cria a(s) notificacao(oes) e dispara push (best-effort). Para audiencias de
  * alvo unico (USER/STUDENT) retorna `{ id }` da linha criada; para fan-out
  * (TENANT/ROLE) ou quando nada e criado (categoria desligada/preferencia off)
@@ -311,39 +389,8 @@ export async function createNotification(
       // sensiveis (cobranca da unidade, comissoes) so vao para quem tem a
       // permissao correspondente — o dono sempre tem; um membro so se o dono
       // concedeu em /painel/equipe.
-      const requiredPerm = input.category
-        ? CATEGORY_PERMISSION[input.category]
-        : undefined
-      const [owner, members] = await Promise.all([
-        prisma.user.findFirst({
-          where: { tenantId: input.tenantId },
-          select: { id: true },
-        }),
-        prisma.tenantMember.findMany({
-          where: { tenantId: input.tenantId, status: "ATIVO" },
-          select: {
-            userId: true,
-            role: true,
-            extraPermissions: true,
-            revokedPermissions: true,
-          },
-        }),
-      ])
-      const userIds = new Set<string>()
-      if (owner) userIds.add(owner.id)
-      for (const m of members) {
-        if (requiredPerm) {
-          const perms = resolvePermissions(
-            normalizeMemberRole(m.role),
-            m.extraPermissions,
-            m.revokedPermissions,
-          )
-          if (!perms.has(requiredPerm)) continue
-        }
-        userIds.add(m.userId)
-      }
-
-      if (userIds.size === 0) return null
+      const userIds = await tenantRecipientUserIds(input.tenantId, input.category)
+      if (userIds.length === 0) return null
 
       // Ponte email sobre o conjunto candidato COMPLETO, ANTES do filtro in-app
       // e do early-return abaixo: o canal email é independente do in-app (um
@@ -354,14 +401,14 @@ export async function createNotification(
         afterResponse(() =>
           dispatchNotificationEmails(
             { title: input.title, body: input.body, href: input.href, category: input.category },
-            [...userIds].map((userId) => ({ kind: "user", userId })),
+            userIds.map((userId) => ({ kind: "user", userId })),
           ),
         )
       }
 
       // Filtra pelas preferencias in-app dos usuarios numa UNICA query (PERF-007).
       const filteredUserIds = await filterUserIdsByInAppPreference(
-        [...userIds],
+        userIds,
         input.category,
       )
       if (filteredUserIds.length === 0) return null
