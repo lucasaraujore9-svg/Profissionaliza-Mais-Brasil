@@ -66,8 +66,15 @@ async function requestWithRetry<T>(
       })
 
       if (!res.ok) {
+        // O corpo diz QUEM recusou (firewall do servidor ou a aplicação) — sem
+        // ele um 403 é só "Forbidden" e não há como diagnosticar.
+        const body = (await res.text().catch(() => ""))
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 200)
         throw new EAApiError(
-          `HTTP ${res.status}: ${res.statusText}`,
+          `HTTP ${res.status}: ${res.statusText}${body ? ` — ${body}` : ""}`,
           endpoint,
           res.status,
         )
