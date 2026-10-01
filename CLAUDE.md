@@ -2336,6 +2336,32 @@ em volta de "Excluir minha conta":
   assinatura" de `/aluno/pagamentos`: nao ha boleto, e a linha em aberto ficava
   em "Gerando boleto…" para sempre.
 
+### Remocao de curso na plataforma legada NUNCA funcionou (2026-10-01, em aberto)
+
+Achado ao cancelar as assinaturas das contas removidas: `unlinkCourseFromStudent`
+no ramo da legada (`DELETE usuarios/remover_curso_combo`) responde HTTP 403.
+
+- **Tamanho:** `audit_logs` (`enrollment.cancel` com `removeAccess: true`) —
+  **59 de 59** remocoes de curso da legada falharam, de 22/07 a 30/09. No LMS,
+  36 de 36 funcionaram. O aluno cancelado segue com o curso la; quem cancela ve
+  `platformError` na resposta, mas a matricula local vira CANCELLED mesmo assim.
+  Vale tambem para assinatura (cancelamento, "tirar da lista", troca de curso).
+- **Causa conhecida ate aqui:** a APLICACAO da fornecedora recusa, nao um
+  firewall. Corpo da resposta: `{"erro":"Token informado e invalido, tente
+  novamente.","resultado":[]}`. O MESMO token funciona em todo POST (campo
+  `token` do form-data). No DELETE ele vai no cabecalho `token`, como a
+  documentacao deles manda, e nao e reconhecido.
+- **Nao resolvido.** Falta saber como o token tem de ir no DELETE (nome/caixa do
+  cabecalho, corpo, ou outro metodo) — pergunta para a fornecedora, ou teste
+  feito por quem tem o token em maos.
+- **Instrumentacao que ficou:** o erro HTTP do cliente da legada leva o corpo da
+  resposta; `/api/cron/refazer-revogacao?enrollment=<id>&apply=1` repete a
+  remocao de UMA matricula ja cancelada (ou de assinatura encerrada) e devolve o
+  erro inteiro. Serve para conferir o conserto e para a remediacao.
+- **Remediacao pendente de decisao:** as 59 matriculas canceladas com pedido de
+  remocao seguem vinculadas la. Remover apaga o progresso — so depois de o dono
+  decidir.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
