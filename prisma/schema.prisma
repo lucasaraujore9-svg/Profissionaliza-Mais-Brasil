@@ -1255,6 +1255,10 @@ model StudentSubscription {
   /// sem ela (recusada, cancelada no banco, conta inelegivel) elas saem como
   /// PIX comum. O 1o ciclo e pago no QR da propria autorizacao.
   pixAutomaticAuthorizationId String? @unique @map("pix_automatic_authorization_id")
+  /// Id do QR da autorizacao (`immediateQrCode.conciliationIdentifier`). O
+  /// pagamento do 1o ciclo chega sem referencia e no cliente do PAGADOR; e por
+  /// este id (`payment.pixQrCodeId`) que o webhook o liga a assinatura.
+  pixAutomaticQrId            String? @map("pix_automatic_qr_id")
 
   // Ids da recorrencia no gateway
   mpPreapprovalId     String? @unique @map("mp_preapproval_id") // preapproval_xxxx
@@ -1286,6 +1290,7 @@ model StudentSubscription {
   @@index([status, currentPeriodEnd])
   // Listagem de vendas diretas, com e sem recorte de carteira.
   @@index([tenantId, soldByUserId])
+  @@index([pixAutomaticQrId])
   @@map("student_subscriptions")
 }
 

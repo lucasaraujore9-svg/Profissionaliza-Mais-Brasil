@@ -411,7 +411,11 @@ async function startPixAutomatic(
 
   await prisma.studentSubscription.update({
     where: { id: ctx.sub.id },
-    data: { pixAutomaticAuthorizationId: auth.id },
+    data: {
+      pixAutomaticAuthorizationId: auth.id,
+      // Única ligação com o pagamento do QR — ver linkPixAutomaticFirstPayment.
+      pixAutomaticQrId: auth.immediateQrCode?.conciliationIdentifier ?? null,
+    },
   })
   ctx.sub.pixAutomaticAuthorizationId = auth.id
   // PENDING (e não SCHEDULED): a varredura só emite SCHEDULED/OVERDUE, então a
@@ -1013,33 +1017,44 @@ export async function openCarnePix(subscriptionId: string): Promise<PixInstrumen
  * autorização de Pix Automático, do mesmo cliente Asaas, cuja 1ª linha ainda
  * não foi paga e tem o mesmo valor.
  *
+ * O cliente NÃO basta: o Asaas cria esse pagamento no cliente do PAGADOR (a
+ * conta bancária de quem pagou), que só coincide com o da autorização quando o
+ * aluno paga com o próprio CPF. Quem liga de fato é o id do QR
+ * (`payment.pixQrCodeId` = `immediateQrCode.conciliationIdentifier`, gravado
+ * na criação da autorização); o cliente fica como segunda tentativa.
+ *
  * Liga a linha ao pagamento (o PIX comum que a varredura tenha emitido por
  * cima, depois de o QR expirar, é removido — senão o aluno pagaria o ciclo em
  * dobro) e devolve a assinatura para o tratamento normal do evento.
  */
 export async function linkPixAutomaticFirstPayment(input: {
   tenantId: string | null
-  payment: Pick<AsaasPayment, "id" | "customer" | "value" | "billingType">
+  payment: Pick<AsaasPayment, "id" | "customer" | "value" | "billingType" | "pixQrCodeId">
 }): Promise<{ id: string; boletoCarne: boolean } | null> {
-  if (input.payment.billingType !== "PIX" || !input.payment.customer) return null
-  const sub = await prisma.studentSubscription.findFirst({
-    where: {
-      tenantId: input.tenantId,
-      asaasCustomerId: input.payment.customer,
-      pixAutomaticAuthorizationId: { not: null },
-      boletoCarne: true,
-      payments: { some: { number: 1, paidAt: null } },
-    },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      boletoCarne: true,
-      payments: {
-        where: { number: 1 },
-        select: { id: true, amount: true, asaasPaymentId: true },
+  if (input.payment.billingType !== "PIX") return null
+  const { pixQrCodeId, customer } = input.payment
+  const findBy = (by: { pixAutomaticQrId: string } | { asaasCustomerId: string }) =>
+    prisma.studentSubscription.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        pixAutomaticAuthorizationId: { not: null },
+        boletoCarne: true,
+        payments: { some: { number: 1, paidAt: null } },
+        ...by,
       },
-    },
-  })
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        boletoCarne: true,
+        payments: {
+          where: { number: 1 },
+          select: { id: true, amount: true, asaasPaymentId: true },
+        },
+      },
+    })
+  const sub =
+    (pixQrCodeId ? await findBy({ pixAutomaticQrId: pixQrCodeId }) : null) ??
+    (customer ? await findBy({ asaasCustomerId: customer }) : null)
   const row = sub?.payments[0]
   if (!sub || !row) return null
   if (Math.abs(Number(row.amount) - input.payment.value) > 0.01) return null

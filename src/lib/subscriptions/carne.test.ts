@@ -502,6 +502,7 @@ describe("carnê no PIX", () => {
       status: "CREATED",
       payload: "qr-auto",
       encodedImage: "img-auto",
+      immediateQrCode: { conciliationIdentifier: "QR_AUTH_1" },
     })
     const first = noonUtc("2099-10-10")
 
@@ -530,7 +531,8 @@ describe("carnê no PIX", () => {
     expect(store.rows[0]).toMatchObject({ status: "PENDING", asaasPaymentId: null })
     expect(db.studentSubscription.update).toHaveBeenCalledWith({
       where: { id: "sub_1" },
-      data: { pixAutomaticAuthorizationId: "auth_1" },
+      // O id do QR é a única ligação com o pagamento, que chega sem referência.
+      data: { pixAutomaticAuthorizationId: "auth_1", pixAutomaticQrId: "QR_AUTH_1" },
     })
   })
 
@@ -703,6 +705,49 @@ describe("carnê no PIX", () => {
       })
       expect(find(row.id)!.asaasPaymentId).toBe("pay_qr")
       expect(asaas.deletePayment).not.toHaveBeenCalled()
+    })
+
+    // Caso real (Capacita Pró Brasil, 30/09/2026): o Asaas cria o pagamento do
+    // QR no cliente do PAGADOR ("Cobrança gerada automaticamente a partir de Pix
+    // recebido"), não no cliente da autorização. Casar só pelo cliente deixava a
+    // assinatura PENDING e o aluno pagava de novo pela área do aluno.
+    it("pagamento chega em OUTRO cliente Asaas (o do pagador): liga pelo id do QR", async () => {
+      const row = await pixRow({ number: 1, status: "PENDING" })
+      candidate(find(row.id)!)
+
+      const sub = await linkPixAutomaticFirstPayment({
+        tenantId: "ten_1",
+        payment: {
+          id: "pay_qr",
+          customer: "cus_pagador",
+          value: 59.9,
+          billingType: "PIX",
+          pixQrCodeId: "QR_AUTH_1",
+        },
+      })
+
+      expect(sub?.id).toBe("sub_1")
+      const where = db.studentSubscription.findFirst.mock.calls[0][0].where
+      expect(where).toMatchObject({ tenantId: "ten_1", pixAutomaticQrId: "QR_AUTH_1" })
+      expect(where.asaasCustomerId).toBeUndefined()
+      expect(find(row.id)!.asaasPaymentId).toBe("pay_qr")
+    })
+
+    it("QR de outra origem (PIX direto na chave da loja) não casa por QR; resta o cliente", async () => {
+      const row = await pixRow({ number: 1, status: "PENDING" })
+
+      expect(
+        await linkPixAutomaticFirstPayment({
+          tenantId: "ten_1",
+          payment: { id: "pay_z", customer: "cus_x", value: 59.9, billingType: "PIX", pixQrCodeId: "QR_OUTRO" },
+        }),
+      ).toBeNull()
+
+      const wheres = db.studentSubscription.findFirst.mock.calls.map((c) => c[0].where)
+      expect(wheres).toHaveLength(2)
+      expect(wheres[0]).toMatchObject({ pixAutomaticQrId: "QR_OUTRO" })
+      expect(wheres[1]).toMatchObject({ asaasCustomerId: "cus_x" })
+      expect(find(row.id)!.asaasPaymentId).toBeNull()
     })
 
     it("QR pago depois de a linha virar PIX comum: o PIX comum é removido (sem cobrança em dobro)", async () => {

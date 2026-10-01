@@ -142,6 +142,8 @@ export interface AsaasPixAutomaticAuthorization {
   /** QR (copia e cola) do 1o pagamento + autorizacao. */
   payload?: string | null
   encodedImage?: string | null
+  /** `conciliationIdentifier` volta como `pixQrCodeId` no pagamento do QR. */
+  immediateQrCode?: { conciliationIdentifier?: string | null } | null
 }
 
 // ── Subscription ──
@@ -279,6 +281,8 @@ export interface AsaasPayment {
   bankSlipUrl: string | null
   transactionReceiptUrl: string | null
   externalReference: string | null
+  /** Id do QR pelo qual o PIX entrou (dinâmico, estático ou de autorização). */
+  pixQrCodeId?: string | null
   description: string
   dateCreated: string
 }

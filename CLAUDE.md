@@ -2272,6 +2272,33 @@ canceladas com o email do ultimo aviso (D+5) falhado.
   voltar a usar a ponte, retentar email ja entregue, enviar sem reivindicar,
   usar o texto da janela em vez do dia.
 
+### Pix Automatico: 1o pagamento nao computava (2026-10-01)
+
+Chamado Capacita Pro Brasil (audio): o aluno paga a assinatura no PIX pela
+pagina publica, a compra "nao computa", e so computa quando paga DE NOVO pelo
+link da area do aluno. Confirmado em producao na primeira assinatura real de
+Pix Automatico (`cmuoojmm2000g04jxjdjrjydt`): duas cobrancas de R$ 34,90 pagas.
+
+- **Causa:** `linkPixAutomaticFirstPayment` casava o pagamento do QR pelo
+  CLIENTE Asaas. O Asaas cria esse pagamento no cliente do PAGADOR (descricao
+  "Cobranca gerada automaticamente a partir de Pix recebido"), que so coincide
+  com o da autorizacao quando o aluno paga com o proprio CPF. Caia em
+  "matricula nao encontrada"; depois a area do aluno via a autorizacao fora de
+  `CREATED` e emitia um PIX comum por cima.
+- **Conserto:** `StudentSubscription.pixAutomaticQrId` guarda
+  `immediateQrCode.conciliationIdentifier` na criacao da autorizacao; o webhook
+  casa primeiro por `payment.pixQrCodeId`, e so depois pelo cliente. Migration
+  `20261001_subscription_pix_automatic_qr_id` (aditiva, idempotente, sem
+  backfill — assinatura criada antes do deploy segue casando so pelo cliente).
+- **NAO validado contra o Asaas real:** que `pixQrCodeId` do pagamento e igual
+  ao `conciliationIdentifier` da autorizacao sai do formato (35 caracteres,
+  mesmo prefixo da conta) e da documentacao, nao de uma chamada conferida.
+  Depois do deploy, uma assinatura nova no PIX paga pela pagina publica tem que
+  ativar sozinha; se nao ativar, compare `pix_automatic_qr_id` da assinatura com
+  `payload->'payment'->>'pixQrCodeId'` do `webhook_logs`.
+- Sobrou no Asaas da unidade a cobranca orfa `pay_5plbsjtsjbvimpvr` (R$ 34,90,
+  teste da propria unidade).
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
