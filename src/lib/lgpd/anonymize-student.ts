@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { propagateStudentErasure, type ErasurePropagationResult } from "@/lib/lgpd/erasure-propagation"
 import { extractCertificatePath, deleteCertificatePdf } from "@/lib/certificates/storage"
+import { cancelSubscriptionAccess } from "@/lib/subscriptions/cancel"
 import { logAudit } from "@/lib/audit"
 import { swallow } from "@/lib/errors"
 
@@ -23,6 +24,21 @@ export async function anonymizeStudentAccount(
     select: { id: true, tenantId: true, status: true },
   })
   if (!student) return null
+
+  // Assinatura viva é cancelada ANTES de apagar os dados: sem isto a conta
+  // sumia e a cobrança seguia — com Pix Automático, o ciclo seguinte seria
+  // debitado sozinho de uma conta que não existe mais. Não bloqueia a exclusão
+  // (direito do titular): se o gateway falhar, o próprio cancelamento alerta o
+  // SUPER_ADMIN com o id da assinatura.
+  const liveSubs = await prisma.studentSubscription.findMany({
+    where: { studentId: student.id, status: { notIn: ["CANCELLED", "EXPIRED"] } },
+    select: { id: true },
+  })
+  for (const sub of liveSubs) {
+    await cancelSubscriptionAccess(sub.id, "REQUESTED", true).catch(
+      swallow("lgpd.anonymize_student.cancel_subscription"),
+    )
+  }
 
   await blockStudentInEA(student.id).catch(swallow("lgpd.anonymize_student.block_ea"))
 
@@ -110,6 +126,7 @@ export async function anonymizeStudentAccount(
     payloadAfter: {
       anonymizedAs: anon,
       previousStatus: student.status,
+      subscriptionsCancelled: liveSubs.length,
       propagation,
       ...(actor.origem ? { origem: actor.origem } : {}),
     },

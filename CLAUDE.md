@@ -2290,14 +2290,41 @@ Pix Automatico (`cmuoojmm2000g04jxjdjrjydt`): duas cobrancas de R$ 34,90 pagas.
   casa primeiro por `payment.pixQrCodeId`, e so depois pelo cliente. Migration
   `20261001_subscription_pix_automatic_qr_id` (aditiva, idempotente, sem
   backfill — assinatura criada antes do deploy segue casando so pelo cliente).
-- **NAO validado contra o Asaas real:** que `pixQrCodeId` do pagamento e igual
-  ao `conciliationIdentifier` da autorizacao sai do formato (35 caracteres,
-  mesmo prefixo da conta) e da documentacao, nao de uma chamada conferida.
-  Depois do deploy, uma assinatura nova no PIX paga pela pagina publica tem que
-  ativar sozinha; se nao ativar, compare `pix_automatic_qr_id` da assinatura com
-  `payload->'payment'->>'pixQrCodeId'` do `webhook_logs`.
+- **Validado em producao (01/10):** duas assinaturas novas pagas pela pagina
+  publica ativaram sozinhas, e `pix_automatic_qr_id` bateu com o `pixQrCodeId`
+  do pagamento nas duas.
 - Sobrou no Asaas da unidade a cobranca orfa `pay_5plbsjtsjbvimpvr` (R$ 34,90,
   teste da propria unidade).
+
+### Conta removida: assinatura viva e e-mail preso no LMS (2026-10-01)
+
+No reteste do parceiro o pagamento computou, mas o aluno lia "A plataforma de
+aulas nao respondeu. Tente novamente" ao abrir um curso. Tres defeitos, todos
+em volta de "Excluir minha conta":
+
+- **Excluir a conta nao cancelava a assinatura.** `anonymizeStudentAccount`
+  apagava os dados e a assinatura seguia ACTIVE — com a autorizacao de Pix
+  Automatico viva, o ciclo seguinte seria debitado de uma conta que nao existe
+  mais. So a limpeza de cadastros de teste cancelava antes. Agora o cancelamento
+  mora no NUCLEO (as duas portas herdam) e roda ANTES de apagar os dados. Nao
+  bloqueia a exclusao: se o gateway falhar, `cancelSubscriptionAccess` ja alerta
+  o SUPER_ADMIN com o id da assinatura.
+- **O e-mail ficava preso no LMS.** La o e-mail e unico por unidade
+  (`@@unique([tenantExternalId, email])`), e a conta removida continuava com
+  ele: o cadastro novo com o mesmo e-mail tomava 409 em `POST /enrollments`. O
+  LMS SEMPRE teve `DELETE /api/v1/students/:id` (anonimiza e libera o e-mail) —
+  o PMB e que nunca chamava, e registrava "LMS sem API de exclusao" como
+  pendencia manual. `eraseLmsStudent` + `propagateStudentErasure` passaram a
+  chamar, DEPOIS de revogar as matriculas. Pendencia manual do LMS so quando a
+  chamada falha; a EA segue manual (essa nao tem API mesmo).
+- **Recusa nao e queda.** `releaseSubscriptionCourse` devolvia `PROVIDER_FAILED`
+  para qualquer erro, e a tela mandava "tente novamente" numa recusa 4xx que
+  repetir nunca resolve. Entrou `PROVIDER_REFUSED` (LmsApiError 4xx) com
+  mensagem propria; 5xx e rede seguem como falha transitoria.
+- **Remediacao:** `/api/cron/limpar-cadastros-teste` passou a aceitar conta que
+  o titular JA removeu, mesmo com pagamento ou matricula — e o jeito de encerrar
+  a assinatura que ficou viva (6 em producao, todas da Capacita) e de apagar a
+  PII que restou no LMS.
 
 ### Bugs conhecidos (pendentes)
 

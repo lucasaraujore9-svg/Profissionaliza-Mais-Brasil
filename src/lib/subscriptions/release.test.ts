@@ -63,6 +63,7 @@ import { advisoryLockKeyFrom, provisionCourseForStudent } from "@/lib/enrollment
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 import { checkEaCourseStarted } from "@/lib/students/progress"
 import { planIncludesCourse } from "./plans"
+import { LmsApiError } from "@/lib/lms/errors"
 import {
   adoptIntoLiveSubscription,
   releaseSubscriptionCourse,
@@ -141,6 +142,32 @@ describe("releaseSubscriptionCourse", () => {
     const r = await releaseSubscriptionCourse("sub_1", "c1")
     expect(r).toEqual({ ok: true, enrollmentId: "e_new", created: true })
     expect(provision).toHaveBeenCalledTimes(1)
+  })
+
+  // Chamado Capacita Pró Brasil (01/10/2026): o LMS recusava a matrícula com 409
+  // (e-mail preso a uma conta removida) e o aluno lia "a plataforma de aulas não
+  // respondeu, tente novamente" — conselho que nunca funcionaria.
+  it("plataforma RECUSA (4xx): motivo proprio, porque repetir nao resolve", async () => {
+    provision.mockRejectedValueOnce(
+      new LmsApiError("HTTP 409: e-mail ja pertence a outro aluno", "/enrollments", 409),
+    )
+    expect(await releaseSubscriptionCourse("sub_1", "c1")).toEqual({
+      ok: false,
+      reason: "PROVIDER_REFUSED",
+    })
+  })
+
+  it("plataforma FORA DO AR (5xx ou rede) segue como falha transitoria", async () => {
+    provision.mockRejectedValueOnce(new LmsApiError("HTTP 503", "/enrollments", 503))
+    expect(await releaseSubscriptionCourse("sub_1", "c1")).toEqual({
+      ok: false,
+      reason: "PROVIDER_FAILED",
+    })
+    provision.mockRejectedValueOnce(new Error("timeout"))
+    expect(await releaseSubscriptionCourse("sub_1", "c1")).toEqual({
+      ok: false,
+      reason: "PROVIDER_FAILED",
+    })
   })
 
   it("matricula ja ATIVA e reusada sem tocar na fornecedora", async () => {

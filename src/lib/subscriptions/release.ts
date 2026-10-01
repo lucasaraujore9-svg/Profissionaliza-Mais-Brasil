@@ -10,6 +10,7 @@ import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 import { checkEaCourseStarted } from "@/lib/students/progress"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { contextLogger } from "@/lib/logger"
+import { LmsApiError } from "@/lib/lms/errors"
 import { subscriptionGrantsAccess } from "./access"
 import { planIncludesCourse } from "./plans"
 import {
@@ -47,8 +48,13 @@ export type ReleaseFailure =
   | "SLOTS_FULL"
   /** O curso a tirar nao esta na lista desta assinatura, ou nao pode sair. */
   | "SLOT_NOT_RELEASABLE"
-  /** A plataforma de aulas recusou/falhou ao revogar ou matricular. */
+  /** A plataforma de aulas caiu ao revogar ou matricular: vale tentar de novo. */
   | "PROVIDER_FAILED"
+  /**
+   * A plataforma de aulas RESPONDEU e recusou a matricula (4xx): repetir nao
+   * muda nada, entao o aluno nao pode ler "tente novamente".
+   */
+  | "PROVIDER_REFUSED"
 
 export type ReleaseResult =
   | { ok: true; enrollmentId: string; created: boolean }
@@ -438,7 +444,12 @@ export async function releaseSubscriptionCourse(
       // plataforma própria o progresso está salvo, e da legada só sai curso
       // que ele nem tinha começado.
       if (released) await restoreReleased(sub, released.courseId)
-      result = { ok: false, reason: "PROVIDER_FAILED" }
+      const refused =
+        err instanceof LmsApiError &&
+        err.statusCode !== undefined &&
+        err.statusCode >= 400 &&
+        err.statusCode < 500
+      result = { ok: false, reason: refused ? "PROVIDER_REFUSED" : "PROVIDER_FAILED" }
     }
   })
 

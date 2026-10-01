@@ -35,7 +35,7 @@ interface LmsRequestOptions {
  * erro de negocio sao lancados de imediato.
  */
 export async function lmsRequest<T>(
-  method: "GET" | "POST" | "PATCH" | "PUT",
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   opts: LmsRequestOptions = {},
 ): Promise<T> {
@@ -239,6 +239,25 @@ export async function setLmsStudentSession(
     `/students/${encodeURIComponent(studentRef)}/session`,
     { body: { sessionId } },
   )
+}
+
+/**
+ * Exclusao do titular (LGPD): o LMS anonimiza nome/e-mail/credenciais e marca o
+ * aluno como removido. E o que LIBERA o e-mail — la ele e unico por unidade, e
+ * uma conta removida que o segurasse faria todo cadastro novo com o mesmo e-mail
+ * tomar 409 ao abrir um curso. `false` = o aluno nunca existiu la. Idempotente.
+ */
+export async function eraseLmsStudent(studentRef: string): Promise<boolean> {
+  try {
+    await lmsRequest<{ data: unknown }>(
+      "DELETE",
+      `/students/${encodeURIComponent(studentRef)}`,
+    )
+    return true
+  } catch (err) {
+    if (err instanceof LmsApiError && err.statusCode === 404) return false
+    throw err
+  }
 }
 
 export async function getLmsStudent(studentRef: string): Promise<LmsStudentProfile> {

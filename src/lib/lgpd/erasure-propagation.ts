@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { isLmsConfigured, revokeLmsEnrollment } from "@/lib/lms"
+import { eraseLmsStudent, isLmsConfigured, revokeLmsEnrollment } from "@/lib/lms"
 import { createNotification } from "@/lib/notifications"
 import { contextLogger } from "@/lib/logger"
 
@@ -7,15 +7,17 @@ import { contextLogger } from "@/lib/logger"
  * LGPD-013: propaga a exclusão/anonimização do titular aos subprocessadores.
  *
  * O que É feito por API (o client já existe):
- *  - LMS: revoga cada matrícula do aluno (`revokeLmsEnrollment`), encerrando o
- *    acesso pago ao curso. O bloqueio do student no LMS/EA já é feito por
- *    `blockStudentInEA` no fluxo de erasure — aqui reforçamos a revogação
- *    por-matrícula (mais forte que o bloqueio).
+ *  - LMS: revoga cada matrícula do aluno (`revokeLmsEnrollment`) e depois apaga
+ *    a PII dele (`eraseLmsStudent` → `DELETE /students/:id`). Apagar também
+ *    LIBERA o e-mail: no LMS ele é único por unidade, e a conta removida que o
+ *    segurava fazia o cadastro novo com o mesmo e-mail tomar 409 ao abrir um
+ *    curso (Capacita Pró Brasil, 01/10/2026).
  *
  * O que NÃO tem API de exclusão de PII (fica como pendência manual documentada):
- *  - EA / LMS não expõem endpoint para APAGAR nome/CPF/e-mail do aluno. Geramos
- *    uma pendência (notificação ao SUPER_ADMIN + retorno estruturado) para que a
- *    exclusão residual seja tratada conforme o DPA do subprocessador.
+ *  - EA não expõe endpoint para APAGAR nome/CPF/e-mail do aluno. Geramos uma
+ *    pendência (notificação ao SUPER_ADMIN + retorno estruturado) para que a
+ *    exclusão residual seja tratada conforme o DPA do subprocessador. O LMS só
+ *    entra aqui quando a chamada de exclusão falha.
  *
  * O que NÃO se apaga por obrigação legal (conformidade, não omissão):
  *  - Asaas / Mercado Pago: dados fiscais/de pagamento têm base de retenção legal
@@ -28,6 +30,8 @@ import { contextLogger } from "@/lib/logger"
 export interface ErasurePropagationResult {
   lmsEnrollmentsRevoked: number
   lmsEnrollmentsFailed: number
+  /** PII apagada no LMS. false = falhou (vira pendência) ou o aluno nunca foi lá. */
+  lmsPiiErased: boolean
   hasEaAccount: boolean
   /** Subprocessadores sem API de exclusão de PII — requerem ação manual (DPA). */
   manualPending: string[]
@@ -42,6 +46,7 @@ export async function propagateStudentErasure(
   const result: ErasurePropagationResult = {
     lmsEnrollmentsRevoked: 0,
     lmsEnrollmentsFailed: 0,
+    lmsPiiErased: false,
     hasEaAccount: false,
     manualPending: [],
     legalRetention: [],
@@ -83,9 +88,24 @@ export async function propagateStudentErasure(
     }
   }
 
-  // ── Pendências manuais: EA/LMS não têm API para APAGAR a PII do aluno ──
+  // ── LMS: apaga a PII, DEPOIS de revogar (o aluno removido não é mais achado
+  // pelas matrículas). Sempre que o LMS está configurado: 404 = nunca foi lá.
+  let lmsErasureFailed = false
+  if (isLmsConfigured()) {
+    try {
+      result.lmsPiiErased = await eraseLmsStudent(studentId)
+    } catch (err) {
+      lmsErasureFailed = true
+      log.error(
+        { err, event: "lgpd.erasure.lms_erase_failed", studentId },
+        "exclusão da PII no LMS falhou",
+      )
+    }
+  }
+
+  // ── Pendências manuais: a EA não tem API para APAGAR a PII do aluno ──
   if (hasEa) result.manualPending.push("Plataforma EA — excluir/anonimizar PII do aluno (sem API; bloqueio já aplicado)")
-  if (student.enrollments.length > 0) result.manualPending.push("LMS bmbr — excluir PII residual do aluno (sem API; matrículas revogadas)")
+  if (lmsErasureFailed) result.manualPending.push("LMS bmbr — excluir PII do aluno (a exclusão por API falhou; matrículas revogadas)")
 
   // ── Retenção legal: pagamento/fiscal não se apaga ──
   result.legalRetention.push("Asaas/Mercado Pago — dados fiscais/de pagamento retidos por obrigação legal (art. 16, I LGPD)")
@@ -116,6 +136,7 @@ export async function propagateStudentErasure(
       studentId,
       lmsEnrollmentsRevoked: result.lmsEnrollmentsRevoked,
       lmsEnrollmentsFailed: result.lmsEnrollmentsFailed,
+      lmsPiiErased: result.lmsPiiErased,
       hasEaAccount: result.hasEaAccount,
       manualPending: result.manualPending.length,
     },

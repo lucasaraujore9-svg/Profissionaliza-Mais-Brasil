@@ -24,6 +24,11 @@ export const dynamic = "force-dynamic"
  *   2. anonimiza o cadastro pelo mesmo fluxo LGPD da exclusão pelo titular, o
  *      que também libera CPF e e-mail para um cadastro de verdade.
  *
+ * Conta que o próprio titular JÁ removeu ("Excluir minha conta") passa mesmo com
+ * pagamento ou matrícula: não há mais cadastro a preservar, e é o jeito de
+ * encerrar a assinatura que ficou viva nas contas removidas antes de a exclusão
+ * passar a cancelá-la (01/10/2026) — e de apagar a PII que restou no LMS.
+ *
  * Dry-run por padrão; `apply=1` executa. `ids` são Student.id, sempre escopados
  * ao `tenant` informado.
  */
@@ -46,6 +51,8 @@ export async function POST(request: Request) {
     select: {
       id: true,
       nome: true,
+      email: true,
+      cpf: true,
       _count: { select: { enrollments: true, certificates: true } },
       subscriptions: {
         select: {
@@ -65,8 +72,10 @@ export async function POST(request: Request) {
       continue
     }
     const paidCycles = s.subscriptions.reduce((n, sub) => n + sub._count.payments, 0)
+    const jaRemovida = s.nome === "Conta removida" && !s.email && !s.cpf
     const motivo =
-      s._count.enrollments > 0 ? "tem matrícula"
+      jaRemovida ? null
+      : s._count.enrollments > 0 ? "tem matrícula"
       : s._count.certificates > 0 ? "tem certificado"
       : paidCycles > 0 ? "tem pagamento de assinatura"
       : null

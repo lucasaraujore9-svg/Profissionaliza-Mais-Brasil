@@ -147,6 +147,17 @@ export const POST = withRequestContextParams<{ courseId: string }>(
             },
             { status: 502 },
           )
+        case "PROVIDER_REFUSED":
+          // A plataforma respondeu e recusou: "tente novamente" seria um
+          // conselho que nunca funciona. Quem resolve é a escola.
+          return NextResponse.json(
+            {
+              error:
+                "Não foi possível liberar este curso para o seu cadastro. Fale com o suporte da sua escola.",
+              code: result.reason,
+            },
+            { status: 422 },
+          )
         case "SLOT_NOT_RELEASABLE":
           // A lista vai junto: o seletor de troca precisa se atualizar, porque a
           // recusa costuma vir da conferência ao vivo de um curso já começado.
