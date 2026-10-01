@@ -9,6 +9,7 @@ import {
 } from "@/components/aluno/installments-section"
 import { isWithinRevealWindow, INSTALLMENT_REVEAL_WINDOW_DAYS } from "@/lib/installments/schedule"
 import { subscriptionCarneView } from "@/lib/subscriptions/carne-view"
+import { loadStudentPaymentHistory } from "@/lib/students/payment-history"
 
 function brl(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -82,13 +83,8 @@ export default async function StudentPaymentsPage() {
       },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.payment.findMany({
-      where: { enrollment: { studentId: session.studentId } },
-      include: {
-        enrollment: { include: { course: { select: { nome: true } } } },
-      },
-      orderBy: { paidAt: "desc" },
-    }),
+    // Curso E ciclo de assinatura: o assinante também vê o que pagou.
+    loadStudentPaymentHistory(session.studentId),
     prisma.boletoInstallment.findMany({
       where: {
         enrollment: { studentId: session.studentId },
@@ -107,6 +103,7 @@ export default async function StudentPaymentsPage() {
       },
       select: {
         id: true,
+        billingType: true,
         plan: { select: { name: true } },
         payments: {
           where: { number: { not: null } },
@@ -125,7 +122,7 @@ export default async function StudentPaymentsPage() {
     }),
   ])
 
-  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0)
   // Carnê tem sua própria seção (boletos por parcela) — fora da lista genérica.
   const pending = enrollments.filter(
     (e) => e.status === "PENDING" && e.paymentType !== "BOLETO_INSTALLMENT",
@@ -166,7 +163,10 @@ export default async function StudentPaymentsPage() {
     })
   }
   const carnes = [...carnesMap.values()]
+  // Só o carnê de BOLETO: no PIX não há boleto a listar (o QR é gerado na hora,
+  // em /aluno/assinatura) e a linha ficaria em "Gerando boleto…" para sempre.
   const subscriptionCarnes = carneSubscriptions
+    .filter((sub) => sub.billingType !== "PIX")
     .map((sub) =>
       subscriptionCarneView({ id: sub.id, planName: sub.plan.name }, sub.payments, now),
     )
@@ -289,7 +289,7 @@ export default async function StudentPaymentsPage() {
             {/* Cards no mobile */}
             <ul className="mt-4 space-y-3 md:hidden">
               {payments.map((p) => {
-                const s = statusOf(p.mpStatus)
+                const s = statusOf(p.status)
                 const Icon = s.icon
                 return (
                   <li
@@ -299,7 +299,7 @@ export default async function StudentPaymentsPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-[var(--color-pmb-green-900)]">
-                          {p.enrollment.course.nome}
+                          {p.label}
                         </p>
                         <p className="mt-0.5 text-xs text-gray-500">
                           {p.paidAt
@@ -308,7 +308,7 @@ export default async function StudentPaymentsPage() {
                         </p>
                       </div>
                       <span className="font-mono text-sm font-semibold text-[var(--color-pmb-green)]">
-                        {brl(Number(p.amount))}
+                        {brl(p.amount)}
                       </span>
                     </div>
                     <span
@@ -343,7 +343,7 @@ export default async function StudentPaymentsPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {payments.map((p) => {
-                    const s = statusOf(p.mpStatus)
+                    const s = statusOf(p.status)
                     const Icon = s.icon
                     return (
                       <tr key={p.id}>
@@ -353,7 +353,7 @@ export default async function StudentPaymentsPage() {
                             : "—"}
                         </td>
                         <td className="px-3 py-3 text-sm font-medium text-[var(--color-pmb-green-900)]">
-                          {p.enrollment.course.nome}
+                          {p.label}
                         </td>
                         <td className="px-3 py-3">
                           <span
@@ -364,7 +364,7 @@ export default async function StudentPaymentsPage() {
                           </span>
                         </td>
                         <td className="px-3 py-3 text-right font-mono text-sm font-semibold text-[var(--color-pmb-green)]">
-                          {brl(Number(p.amount))}
+                          {brl(p.amount)}
                         </td>
                       </tr>
                     )

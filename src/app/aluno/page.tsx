@@ -4,6 +4,7 @@ import { requireStudentSession } from "@/lib/auth/student-session"
 import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
 import { getCourseAccessCards } from "@/lib/students/course-access"
 import { PlatformCredentialsCard } from "@/components/aluno/platform-credentials-card"
+import { loadStudentPaymentHistory } from "@/lib/students/payment-history"
 import { PaymentCheckButton } from "@/components/aluno/payment-check-button"
 import { PayPendingButton } from "@/components/aluno/pay-pending-button"
 import {
@@ -51,12 +52,8 @@ export default async function StudentDashboardPage() {
         },
         orderBy: { createdAt: "desc" },
       }),
-      prisma.payment.findMany({
-        where: { enrollment: { studentId: session.studentId } },
-        orderBy: { paidAt: "desc" },
-        take: 5,
-        include: { enrollment: { include: { course: { select: { nome: true } } } } },
-      }),
+      // Curso E ciclo de assinatura: o assinante também vê o que pagou.
+      loadStudentPaymentHistory(session.studentId, 5),
       // Um cartao de acesso por curso, ja achatado e sem nada que denuncie de
       // onde o curso vem. Filtra por matricula paga la dentro.
       getCourseAccessCards(session.studentId),
@@ -78,7 +75,7 @@ export default async function StudentDashboardPage() {
   )
   const activeCourses = activeEnrollments.length
   const pendingEnrollments = enrollments.filter((e) => e.status === "PENDING")
-  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0)
   const hasNoEnrollments = enrollments.length === 0
   const hasPlatformAccess = courseAccess.length > 0
   const continueEnrollment = activeEnrollments[0] ?? null
@@ -348,7 +345,7 @@ export default async function StudentDashboardPage() {
               <li key={p.id} className="flex items-center justify-between py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-[var(--color-pmb-green-900)]">
-                    {p.enrollment.course.nome}
+                    {p.label}
                   </p>
                   <p className="text-xs text-gray-500">
                     {p.paidAt
@@ -357,7 +354,7 @@ export default async function StudentDashboardPage() {
                   </p>
                 </div>
                 <span className="font-mono text-sm font-semibold text-[var(--color-pmb-green)]">
-                  {brl(Number(p.amount))}
+                  {brl(p.amount)}
                 </span>
               </li>
             ))}

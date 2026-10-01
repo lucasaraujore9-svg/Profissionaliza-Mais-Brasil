@@ -2326,6 +2326,16 @@ em volta de "Excluir minha conta":
   a assinatura que ficou viva (6 em producao, todas da Capacita) e de apagar a
   PII que restou no LMS.
 
+- **O assinante nao via o proprio pagamento.** `/aluno` e `/aluno/pagamentos`
+  so liam `payments`; o ciclo de assinatura mora em `subscription_payments`.
+  Assinatura paga e ativa aparecia como "Total pago R$ 0,00 — nenhum pagamento
+  confirmado" (o painel da unidade ja tinha sido corrigido em 24/09, o do aluno
+  nao). Fonte unica: `loadStudentPaymentHistory`
+  (`lib/students/payment-history.ts`), mesmo recorte da receita da unidade
+  (`SUBSCRIPTION_REVENUE_WHERE`). O carne de PIX saiu da secao "Boletos da
+  assinatura" de `/aluno/pagamentos`: nao ha boleto, e a linha em aberto ficava
+  em "Gerando boleto…" para sempre.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
