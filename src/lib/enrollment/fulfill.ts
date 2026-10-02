@@ -805,6 +805,16 @@ async function provisionEnrollmentAccess(
   const created = provisioned.created
   const school = provisioned.school
 
+  // A venda direta do painel cria o aluno como INTERESSADO ("ainda não pagou").
+  // Com o acesso liberado ele vira ATIVO. O filtro por status é a trava: só o
+  // INTERESSADO é promovido — pagamento não desfaz BLOQUEADO/DEVEDOR/INATIVO.
+  await prisma.student
+    .updateMany({
+      where: { id: enrollment.student.id, status: "INTERESSADO" },
+      data: { status: "ATIVO" },
+    })
+    .catch(swallow("fulfill.promote_interessado"))
+
   // Gera credenciais do painel /aluno quando o aluno ainda não tem senha.
   // Vale tanto na 1ª compra (created=true) quanto em alunos antigos que nunca
   // logaram (passwordHash=null) — assim qualquer matricula garante acesso ao painel.

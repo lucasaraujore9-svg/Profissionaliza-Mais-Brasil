@@ -26,7 +26,7 @@ vi.mock("@/lib/prisma", () => {
     },
     payment: { findFirst: vi.fn(), create: vi.fn() },
     courseSaleSplit: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
-    student: { update: vi.fn() },
+    student: { update: vi.fn(), updateMany: vi.fn() },
     coursePackageItem: { findMany: vi.fn() },
     course: { findMany: vi.fn() },
     // Venda multi-curso de unidade: a satélite resolve aqui o TenantCourse do
@@ -95,7 +95,7 @@ const p = prisma as unknown as {
     create: ReturnType<typeof vi.fn>
   }
   payment: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }
-  student: { update: ReturnType<typeof vi.fn> }
+  student: { update: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> }
   coursePackageItem: { findMany: ReturnType<typeof vi.fn> }
   course: { findMany: ReturnType<typeof vi.fn> }
   tenantCourse: {
@@ -178,6 +178,7 @@ beforeEach(() => {
   p.enrollment.findMany.mockResolvedValue([])
   p.enrollment.create.mockResolvedValue({ id: "sat1" })
   p.student.update.mockResolvedValue({})
+  p.student.updateMany.mockResolvedValue({ count: 0 })
   p.coursePackageItem.findMany.mockResolvedValue([])
   p.course.findMany.mockResolvedValue([])
   p.tenantCourse.findMany.mockResolvedValue([])
@@ -216,6 +217,21 @@ describe("fulfillEnrollment — dinheiro pós-webhook (QA-013)", () => {
     expect(ensureMock).toHaveBeenCalledWith("s1")
     expect(linkMock).toHaveBeenCalledWith("s1", "c1")
     expect(lmsMock).not.toHaveBeenCalled()
+  })
+
+  it("(a1) acesso liberado promove o aluno INTERESSADO a ATIVO — e só ele", async () => {
+    // A venda direta do painel cria o aluno como INTERESSADO ("ainda não
+    // pagou"). Sem esta promoção ele fica "Interessado" para sempre, com o
+    // curso pago e liberado. O `where` por status é o que impede o pagamento
+    // de desfazer um BLOQUEADO/DEVEDOR.
+    p.enrollment.findUnique.mockResolvedValue(enrollment())
+
+    await fulfillEnrollment(eaTenant, "e1", event)
+
+    expect(p.student.updateMany).toHaveBeenCalledWith({
+      where: { id: "s1", status: "INTERESSADO" },
+      data: { status: "ATIVO" },
+    })
   })
 
   it("(a2) venda parcelada avalia a cota da PRÓPRIA matrícula na 1ª parcela", async () => {
