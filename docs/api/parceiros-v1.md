@@ -10,7 +10,10 @@ telefone, ou o domínio pelo qual a pessoa chegou), consulta esta API e passa a
 responder com a marca, os links e os canais **daquela unidade** em vez dos da
 PMB.
 
-- **Base URL:** `https://profissionalizamaisbrasil.com.br/api/v1`
+- **Base URL:** `https://www.profissionalizamaisbrasil.com.br/api/v1`
+  — **com `www`**. Sem ele o domínio responde `307` para o `www`, e a maioria
+  dos clientes HTTP (curl, `fetch`, n8n) descarta o `Authorization` ao seguir o
+  redirecionamento: a chamada chega sem chave e volta `401`.
 - **Formato:** JSON (`application/json`), UTF-8
 - **Versionamento:** o caminho carrega a versão. Campo novo na resposta é
   retrocompatível e pode entrar sem aviso; remoção ou mudança de significado
@@ -109,16 +112,16 @@ GET /api/v1/unidades/cursos-do-joao
 ```bash
 # Por e-mail do titular
 curl -H "Authorization: Bearer $PMB_API_KEY" \
-  "https://profissionalizamaisbrasil.com.br/api/v1/unidades/lookup?email=joao@exemplo.com.br"
+  "https://www.profissionalizamaisbrasil.com.br/api/v1/unidades/lookup?email=joao@exemplo.com.br"
 
 # Por CPF (com ou sem máscara)
 curl -H "X-API-Key: $PMB_API_KEY" \
-  "https://profissionalizamaisbrasil.com.br/api/v1/unidades/lookup?cpf=529.982.247-25"
+  "https://www.profissionalizamaisbrasil.com.br/api/v1/unidades/lookup?cpf=529.982.247-25"
 
 # Por domínio próprio (aceita a URL inteira)
 curl -H "X-API-Key: $PMB_API_KEY" \
   --get --data-urlencode "dominio=https://www.cursosdojoao.com.br/curso/x" \
-  "https://profissionalizamaisbrasil.com.br/api/v1/unidades/lookup"
+  "https://www.profissionalizamaisbrasil.com.br/api/v1/unidades/lookup"
 ```
 
 ---
@@ -256,7 +259,7 @@ resposta** por alguns minutos. Os dados de uma unidade mudam raramente.
 Exemplo em Node (o mesmo desenho vale para qualquer linguagem):
 
 ```js
-const BASE = "https://profissionalizamaisbrasil.com.br/api/v1"
+const BASE = "https://www.profissionalizamaisbrasil.com.br/api/v1"
 
 async function buscarUnidade(campo, valor) {
   const url = `${BASE}/unidades/lookup?${campo}=${encodeURIComponent(valor)}`

@@ -16,7 +16,7 @@ import { ApiKeysManager } from "./api-keys-manager"
 import { Can } from "@/components/shared/permissions/permission-context"
 
 const WEBHOOK_URL = "https://profissionalizamaisbrasil.com.br/api/webhooks/lms"
-const PARCEIROS_BASE = "https://profissionalizamaisbrasil.com.br/api/v1"
+const PARCEIROS_BASE = "https://www.profissionalizamaisbrasil.com.br/api/v1"
 
 interface EventRow {
   type: string
@@ -136,6 +136,8 @@ const PARCEIRO_AGENT_MD = [
   "",
   "## Base URL",
   PARCEIROS_BASE,
+  "Use exatamente esta URL, COM www. Sem www o dominio redireciona (307) e o",
+  "cliente HTTP descarta o header de autenticacao no redirect: volta 401.",
   "",
   "## Autenticacao",
   "Envie a chave em UM destes headers (as duas formas funcionam):",
