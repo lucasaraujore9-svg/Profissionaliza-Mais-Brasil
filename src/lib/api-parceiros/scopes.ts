@@ -17,6 +17,12 @@ export const API_SCOPES = [
    * gateway nem CPF completo do titular — ver `unidade-payload.ts`.
    */
   "unidades.read",
+  /**
+   * Criar unidade (revenda) e receber o link da 1ª mensalidade. Só nos planos
+   * de tabela (Profissionaliza / PRO) — sem cortesia, promoção ou valor livre:
+   * isso continua sendo decisão humana no /admin.
+   */
+  "unidades.create",
 ] as const
 
 export type ApiScope = (typeof API_SCOPES)[number]
@@ -35,4 +41,5 @@ export function sanitizeScopes(values: readonly string[]): ApiScope[] {
 /** Rótulos para a tela de criação de chave em /admin/configuracoes. */
 export const API_SCOPE_LABELS: Record<ApiScope, string> = {
   "unidades.read": "Consultar dados de unidades (revendas)",
+  "unidades.create": "Criar unidades (revendas) e gerar o link de pagamento",
 }

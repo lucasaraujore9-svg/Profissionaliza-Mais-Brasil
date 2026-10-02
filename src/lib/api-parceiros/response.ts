@@ -25,6 +25,12 @@ export type ApiErrorCode =
   | "NOT_FOUND"
   /** O identificador casou com mais de uma unidade (só ocorre em telefone). */
   | "MULTIPLE_MATCHES"
+  /** Corpo da requisição inválido (JSON torto, campo faltando/fora do formato). */
+  | "VALIDATION_ERROR"
+  /** Já existe: slug indisponível ou e-mail do titular já cadastrado. */
+  | "CONFLICT"
+  /** A regra de negócio recusou a criação (ex.: titular com unidade travada). */
+  | "FORBIDDEN"
   /** Excedeu o limite de requisições da chave. */
   | "RATE_LIMITED"
   | "INTERNAL_ERROR"

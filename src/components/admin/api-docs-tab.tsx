@@ -128,11 +128,11 @@ const LMS_AGENT_MD = [
 // resumo é o que se entrega junto com a chave. Mesma restrição do MD acima: sem
 // backticks e sem ${...} dentro do template literal.
 const PARCEIRO_AGENT_MD = [
-  "# PMB — API de consulta de unidades (revendas) v1",
+  "# PMB — API de unidades (revendas) v1",
   "",
-  "Dado um identificador unico de uma pessoa ou de uma unidade, a API devolve os",
-  "dados completos da unidade: id, slug, subdominio, dominio proprio, contato,",
-  "redes sociais, identidade visual e titular.",
+  "Duas operacoes: CONSULTAR uma unidade a partir de um identificador unico",
+  "(escopo unidades.read) e CRIAR uma unidade recebendo o link de pagamento da",
+  "1a mensalidade (escopo unidades.create).",
   "",
   "## Base URL",
   PARCEIROS_BASE,
@@ -186,13 +186,58 @@ const PARCEIRO_AGENT_MD = [
   "O CPF do titular sai MASCARADO. Credenciais de gateway, mensalidade, comissao,",
   "PIX e dados de alunos nunca sao devolvidos.",
   "",
+  "## Criar unidade (escopo unidades.create)",
+  "    POST /api/v1/unidades",
+  "    Content-Type: application/json",
+  "",
+  "    {",
+  "      \"nome\": \"Cursos do Joao\",",
+  "      \"slug\": \"cursos-do-joao\",",
+  "      \"plano\": \"pro\",",
+  "      \"parcelasPrimeiraMensalidade\": 1,",
+  "      \"titular\": {",
+  "        \"nome\": \"Joao da Silva\",",
+  "        \"email\": \"joao@exemplo.com.br\",",
+  "        \"cpfCnpj\": \"52998224725\",",
+  "        \"telefone\": \"31999998888\"",
+  "      }",
+  "    }",
+  "",
+  "  slug       opcional (3-32, minusculas, numeros e hifen); ausente = derivado do nome",
+  "  plano      profissionaliza (R$ 209) ou pro (R$ 239, ja liga Automacao). Nao ha outro.",
+  "  parcelasPrimeiraMensalidade  opcional, 1-12 (teto do cartao na 1a mensalidade)",
+  "  titular.email vira o login do titular e nao pode ja existir",
+  "",
+  "Resposta 201:",
+  "    { \"ok\": true, \"data\": {",
+  "      \"unidade\": { \"id\", \"slug\", \"nome\", \"status\": \"PENDING\", \"vitrineUrl\" },",
+  "      \"titular\": { \"id\", \"email\" },",
+  "      \"pagamento\": { \"url\", \"cobrancaId\", \"valor\", \"plano\", \"erro\" },",
+  "      \"emailOnboardingEnviado\": true } }",
+  "",
+  "pagamento.url e o checkout transparente do PMB (PIX, boleto e cartao na",
+  "propria pagina). Envie ao titular. A unidade vira ACTIVE quando a 1a",
+  "mensalidade e paga: consulte GET /api/v1/unidades/{slug} e olhe status.",
+  "",
+  "O titular recebe login e senha temporaria por e-mail; a API nao devolve senha.",
+  "",
+  "pagamento.url null com a unidade criada = cobranca nao saiu (pagamento.erro).",
+  "NAO repita o POST (daria 409): avise a equipe PMB.",
+  "",
+  "Sem idempotencia: em timeout, consulte /unidades/lookup?email=<titular> antes",
+  "de tentar de novo. 409 CONFLICT no retry quase sempre = a 1a tentativa criou.",
+  "Limite: 30 criacoes por minuto por chave.",
+  "",
   "## Erros — ramifique no code, nao na mensagem",
   "  400 MISSING_IDENTIFIER   nenhum identificador, ou mais de um",
   "  400 INVALID_IDENTIFIER   forma invalida (CPF com DV errado, e-mail torto...)",
+  "  400 VALIDATION_ERROR     POST /unidades: corpo invalido (details traz os campos)",
   "  401 INVALID_API_KEY      chave ausente/errada/revogada/expirada (nao distingue)",
-  "  403 INSUFFICIENT_SCOPE   chave sem o escopo unidades.read",
+  "  403 INSUFFICIENT_SCOPE   chave sem o escopo da rota",
+  "  403 FORBIDDEN            POST /unidades: regra de negocio recusou",
   "  404 NOT_FOUND            nenhuma unidade casou com o identificador",
   "  409 MULTIPLE_MATCHES     so em telefone: repita por e-mail, CPF ou slug",
+  "  409 CONFLICT             POST /unidades: slug ou e-mail do titular ja usado",
   "  429 RATE_LIMITED         details.retryAfterSec diz quanto esperar",
   "  500 INTERNAL_ERROR       falha no PMB; pode repetir",
   "",
@@ -200,7 +245,7 @@ const PARCEIRO_AGENT_MD = [
   "    { \"ok\": false, \"error\": { \"message\": \"...\", \"code\": \"NOT_FOUND\" } }",
   "",
   "## Limite",
-  "120 requisicoes por minuto POR CHAVE. Cacheie a resposta alguns minutos — os",
+  "Consulta: 120 requisicoes por minuto POR CHAVE. Cacheie a resposta alguns minutos — os",
   "dados de uma unidade mudam raramente — e implemente backoff no 429.",
   "",
   "## Checklist antes de subir",
@@ -320,14 +365,15 @@ export function ApiDocsTab({
         <div className="flex items-center gap-2">
           <PlugZap className="h-4 w-4 text-[var(--color-pmb-green)]" />
           <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-            API de parceiros — consulta de unidades (PMB → terceiros)
+            API de parceiros — unidades (PMB → terceiros)
           </h3>
         </div>
         <p className="mt-1 text-xs text-gray-600">
           O sistema parceiro envia um dado único (e-mail, CPF, telefone, slug,
           domínio…) e recebe de volta os dados completos da unidade: id, slug,
           subdomínio, domínio próprio, contato, redes sociais, identidade visual
-          e titular.
+          e titular. Com o escopo de criação, o sistema também abre uma unidade
+          nova e recebe o link do checkout da 1ª mensalidade.
         </p>
 
         <div className="mt-4 space-y-2 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-200">
@@ -339,6 +385,9 @@ export function ApiDocsTab({
           </p>
           <p className="break-all font-mono text-xs font-semibold text-gray-800">
             GET {PARCEIROS_BASE}/unidades/{"{identificador}"}
+          </p>
+          <p className="break-all font-mono text-xs font-semibold text-gray-800">
+            POST {PARCEIROS_BASE}/unidades — cria a unidade e devolve o link de pagamento
           </p>
           <p className="break-all font-mono text-xs text-gray-500">
             GET {PARCEIROS_BASE}/ping — verificação da chave
@@ -355,8 +404,15 @@ export function ApiDocsTab({
           <li>
             <strong>Autenticação:</strong>{" "}
             <code>Authorization: Bearer &lt;chave&gt;</code> ou{" "}
-            <code>X-API-Key</code>, com escopo <code>unidades.read</code>. Limite
-            de 120 req/min por chave.
+            <code>X-API-Key</code>. Escopo <code>unidades.read</code> para
+            consultar (120 req/min por chave) e <code>unidades.create</code> para
+            criar (30/min). Dê à chave só o escopo que a integração usa.
+          </li>
+          <li>
+            <strong>Criação:</strong> só os planos de tabela (Profissionaliza ou
+            PRO). Cortesia, promoção e valor livre continuam só aqui no /admin. O
+            link devolvido é o checkout transparente do PMB, não a fatura do
+            Asaas.
           </li>
           <li>
             <strong>Nunca sai daqui:</strong> credenciais de gateway, segredos de

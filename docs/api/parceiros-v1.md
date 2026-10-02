@@ -34,7 +34,9 @@ A chave é emitida pela equipe PMB em **/admin/configuracoes → aba API**, uma 
 sistema integrado. Ela aparece **uma única vez**, no momento em que é criada — o
 PMB guarda apenas o hash. Perdeu, peça uma nova e revogue a antiga.
 
-Cada chave carrega **escopos**. Os endpoints de unidade exigem `unidades.read`.
+Cada chave carrega **escopos**. Consulta de unidade exige `unidades.read`;
+criação de unidade (seção 6) exige `unidades.create`. Dê a cada chave só o
+escopo que a integração usa.
 
 > **Guarde a chave como senha de produção.** Ela nunca deve ir para código
 > versionado, front-end, app mobile ou log. Chame esta API sempre a partir do
@@ -232,6 +234,9 @@ texto pode mudar.
 | 403 | `INSUFFICIENT_SCOPE` | Chave válida, mas sem o escopo que a rota exige. |
 | 404 | `NOT_FOUND` | Nenhuma unidade casou com o identificador. |
 | 409 | `MULTIPLE_MATCHES` | Só em `telefone`: mais de um titular tem o número. Repita a consulta por e-mail, CPF ou slug. |
+| 400 | `VALIDATION_ERROR` | Só no `POST /unidades`: JSON inválido ou campo faltando/fora do formato. `details` traz os campos. |
+| 403 | `FORBIDDEN` | Só no `POST /unidades`: a regra de negócio recusou a criação. |
+| 409 | `CONFLICT` | Só no `POST /unidades`: slug indisponível ou e-mail do titular já cadastrado. |
 | 429 | `RATE_LIMITED` | Limite de requisições da chave estourado. `details.retryAfterSec` diz quanto esperar. |
 | 500 | `INTERNAL_ERROR` | Falha no PMB. Pode repetir. |
 
@@ -286,7 +291,79 @@ Checklist antes de subir:
 
 ---
 
-## 6. Operação (lado PMB)
+## 6. Criar unidade (escopo `unidades.create`)
+
+```http
+POST /api/v1/unidades
+Content-Type: application/json
+Authorization: Bearer pmb_live_xxx
+```
+
+```json
+{
+  "nome": "Cursos do João",
+  "slug": "cursos-do-joao",
+  "plano": "pro",
+  "parcelasPrimeiraMensalidade": 1,
+  "titular": {
+    "nome": "João da Silva",
+    "email": "joao@exemplo.com.br",
+    "cpfCnpj": "529.982.247-25",
+    "telefone": "31999998888"
+  }
+}
+```
+
+| Campo | Obrigatório | Regra |
+|-------|-------------|-------|
+| `nome` | sim | 2–80 caracteres. |
+| `slug` | não | 3–32, letras minúsculas, números e hífen. Ausente = derivado do `nome`. Vira o subdomínio da vitrine. |
+| `plano` | sim | `profissionaliza` (R$ 209) ou `pro` (R$ 239, já liga o módulo de Automação). Não há outro valor: cortesia, promoção e preço livre são só pelo /admin. |
+| `parcelasPrimeiraMensalidade` | não | 1–12, teto do cartão na 1ª mensalidade. Padrão 1. |
+| `titular.nome` / `email` / `cpfCnpj` | sim | O e-mail vira o login do titular e não pode já existir. |
+| `titular.telefone` | não | 8–20 caracteres. |
+
+Resposta `201`:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "unidade": {
+      "id": "clx…", "slug": "cursos-do-joao", "nome": "Cursos do João",
+      "status": "PENDING", "vitrineUrl": "https://cursos-do-joao.livrecursos.com.br"
+    },
+    "titular": { "id": "clx…", "email": "joao@exemplo.com.br" },
+    "pagamento": {
+      "url": "https://profissionalizamaisbrasil.com.br/cobranca/pay_abc123",
+      "cobrancaId": "pay_abc123",
+      "valor": 239,
+      "plano": "pro",
+      "erro": null
+    },
+    "emailOnboardingEnviado": true
+  }
+}
+```
+
+- **`pagamento.url` é o checkout transparente do PMB**: PIX (QR e copia e cola),
+  boleto e cartão parcelado na própria página. Envie esse link ao titular.
+- A unidade nasce `PENDING` e vira `ACTIVE` quando a 1ª mensalidade é paga.
+  Para saber se pagou, consulte `GET /api/v1/unidades/{slug}` e olhe `status`.
+- O titular recebe por e-mail o login e a senha temporária. A API **não**
+  devolve senha. Com `emailOnboardingEnviado: false`, ele entra pelo
+  "Esqueci minha senha" com o mesmo e-mail.
+- **`pagamento.url: null` com a unidade criada** = a cobrança não saiu no
+  gateway (`pagamento.erro` diz por quê). **Não repita o POST**: ele responderia
+  `409`. Avise a equipe PMB, que reemite a cobrança pelo /admin.
+- **Sem idempotência por chave.** Timeout ou erro de rede no meio: consulte
+  `GET /api/v1/unidades/lookup?email=<titular>` antes de tentar de novo. Um
+  `409 CONFLICT` no retry quase sempre significa "a primeira tentativa criou".
+- Limite: **30 criações por minuto por chave**.
+
+---
+
+## 7. Operação (lado PMB)
 
 - **Emitir chave:** /admin/configuracoes → aba **API** → *Chaves de acesso dos
   parceiros* → *Gerar chave*. Exige a permissão `integracoes.manage`. Copie o
@@ -311,6 +388,8 @@ Checklist antes de subir:
 | `src/lib/api-parceiros/lookup.ts` | Consulta ao banco |
 | `src/lib/api-parceiros/unidade-payload.ts` | **Fronteira de dados** — allowlist do que sai |
 | `src/app/api/v1/**` | Rotas públicas |
+| `src/lib/api-parceiros/gate.ts` | Portaria das rotas: teto por IP, chave + escopo, teto por chave |
+| `src/lib/resellers/create.ts` | Núcleo da criação de unidade (o mesmo do /admin e do painel) |
 | `src/app/api/admin/api-keys/**` | Gestão das chaves |
 
 Para expor um recurso novo (alunos, matrículas, catálogo…), crie **escopo

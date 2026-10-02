@@ -66,8 +66,11 @@ export interface CreateResellerInput {
    * (sub-revenda) não passa nada: lá ninguém tem essa permissão.
    */
   cortesiaOverride?: { allowed: boolean; reason?: string | null }
-  /** Ator que disparou a criação (para a trilha de auditoria). */
-  actor: { userId: string; role: string; email?: string | null }
+  /**
+   * Ator que disparou a criação (para a trilha de auditoria). `userId` null =
+   * chave da API de parceiros (sem usuário humano); a chave vai em `email`.
+   */
+  actor: { userId: string | null; role: string; email?: string | null }
 }
 
 export interface CreateResellerSuccess {

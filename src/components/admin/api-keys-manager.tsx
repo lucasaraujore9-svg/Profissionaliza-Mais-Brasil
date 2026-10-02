@@ -58,7 +58,7 @@ export function ApiKeysManager() {
 
   const [criando, setCriando] = useState(false)
   const [nome, setNome] = useState("")
-  const [escopos, setEscopos] = useState<ApiScope[]>([...API_SCOPES])
+  const [escopos, setEscopos] = useState<ApiScope[]>(["unidades.read"])
   const [segredoNovo, setSegredoNovo] = useState<string | null>(null)
   const [copiado, setCopiado] = useState(false)
 

@@ -2408,6 +2408,32 @@ pintava o MENU — o conteudo das paginas seguia o verde da plataforma.
   Tom claro/escuro por secao da home e os tons `lime` fixos de fundo claro
   (`--color-pmb-lime-50`) tambem ficaram de fora.
 
+### API de parceiros — criar unidade (2026-10-02)
+
+`POST /api/v1/unidades` (escopo novo `unidades.create`) cria a unidade e devolve
+o link da 1a mensalidade. Para o sistema de automacao interno. Contrato em
+`docs/api/parceiros-v1.md` §6 e na doc copiavel da aba API de /admin/configuracoes.
+
+- **Mesmo nucleo do /admin e do painel** (`createReseller`): cobranca no Asaas da
+  PMB, e-mail de onboarding com a senha temporaria, vitrine semeada. O `actor`
+  aceita `userId: null`; a auditoria grava `actorRole: "API_KEY"` e
+  `actorEmail: "api:<prefixo da chave>"`.
+- **So os planos de tabela** (`profissionaliza` 209 / `pro` 239, mapeados de
+  `RESELLER_PLANS`). Cortesia, promocao e valor livre seguem so no /admin: uma
+  chave vazada nao abre unidade de graca. Com isso a trava de cortesia por
+  titular nunca dispara por aqui.
+- **O link e `/cobranca/<paymentId>`** (checkout transparente do PMB), nunca o
+  `invoiceUrl` do Asaas; ha teste travando. A API nunca devolve senha.
+- **Asaas falhou = unidade criada com `pagamento.url: null`** e o motivo em
+  `pagamento.erro` (mesmo comportamento do /admin). Repetir o POST da 409.
+- **Sem idempotencia por chave:** em timeout o integrador consulta
+  `/unidades/lookup?email=` antes de repetir.
+- **Portaria unica** em `lib/api-parceiros/gate.ts` (`autenticarParceiro`): teto
+  por IP, chave + escopo, teto por chave com bucket por escopo (consulta 120/min,
+  criacao 30/min). O lookup passou a usa-la — rota nova de /api/v1 tambem deve.
+- A chave nova nasce so com `unidades.read` marcado no formulario: antes o
+  default era "todos os escopos", e criar viria junto sem ninguem pedir.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
