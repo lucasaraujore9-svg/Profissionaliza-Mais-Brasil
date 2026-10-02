@@ -40,6 +40,9 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/enrollment/fulfill", () => ({
   fulfillScholarshipEnrollment: vi.fn().mockResolvedValue(undefined),
 }))
+vi.mock("@/lib/enrollment/cancel", () => ({
+  cancelPendingSupersededByScholarship: vi.fn(async () => undefined),
+}))
 // Rotas de /painel resolvem papel + permissoes via painelContext (consulta
 // prisma.user/tenantMember). Mockamos o guard e usamos um contexto coerente
 // derivado dos presets reais — ver src/test/painel-ctx.ts.
@@ -56,6 +59,7 @@ import { auth } from "@/lib/auth"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
 import { createDirectSubscriptionSale } from "@/lib/subscriptions/direct-sale"
 import { saveBoletoAddress } from "@/lib/subscriptions/carne"
+import { cancelPendingSupersededByScholarship } from "@/lib/enrollment/cancel"
 import { POST } from "./route"
 
 const p = prisma as unknown as {
@@ -287,6 +291,47 @@ describe("venda direta herda o gateway da unidade", () => {
       data: { gateway: string }
     }
     expect(created.data.gateway).toBe("ASAAS")
+  })
+
+  // Chamado otymus (02/10): o aluno abriu a compra como pagante, desistiu, e a
+  // unidade não conseguia mais conceder a bolsa — a pendente abandonada batia no
+  // gate de duplicidade com 409 e a tela de venda não tinha saída.
+  it("bolsa passa por cima de compra PENDENTE e cancela a pendente antes de matricular", async () => {
+    mockSellableCourse()
+    mockStudent()
+    p.student.update.mockResolvedValue({ id: "s1" })
+    const supersede = cancelPendingSupersededByScholarship as unknown as ReturnType<typeof vi.fn>
+
+    const res = await POST(bodyExistingStudent({ bolsista: true }))
+    expect(res.status).toBe(200)
+
+    const gate = p.enrollment.findFirst.mock.calls[0][0].where as {
+      status: { in: string[] }
+    }
+    expect(gate.status.in).toEqual(["ACTIVE", "COMPLETED"])
+
+    expect(supersede).toHaveBeenCalledTimes(1)
+    expect(supersede.mock.calls[0][0]).toMatchObject({
+      studentId: "s1",
+      tenantId: "t1",
+      courseId: { in: ["c1"] },
+    })
+    expect(supersede.mock.calls[0][1]).toBe("t1")
+    expect(supersede.mock.invocationCallOrder[0]).toBeLessThan(
+      p.enrollment.create.mock.invocationCallOrder[0],
+    )
+  })
+
+  it("venda COBRADA continua barrada por compra pendente, e não cancela nada", async () => {
+    mockSellableCourse()
+    mockStudent()
+
+    await POST(bodyExistingStudent())
+    const gate = p.enrollment.findFirst.mock.calls[0][0].where as {
+      status: { in: string[] }
+    }
+    expect(gate.status.in).toContain("PENDING")
+    expect(cancelPendingSupersededByScholarship).not.toHaveBeenCalled()
   })
 
   it("aluno existente sem CPF numa unidade ASAAS → 400 antes de criar matrícula", async () => {

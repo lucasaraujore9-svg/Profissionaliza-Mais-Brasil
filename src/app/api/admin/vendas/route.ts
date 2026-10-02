@@ -10,6 +10,7 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { contextLogger } from "@/lib/logger"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
+import { cancelPendingSupersededByScholarship } from "@/lib/enrollment/cancel"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import {
   AUTHORED_COURSE_SELECT,
@@ -439,13 +440,21 @@ export const POST = withRequestContext(
   // Duplicidade: pacote compara pela matrícula primária; curso(s), pelo Course —
   // TODOS os cursos da venda, senão o aluno pagaria de novo por um curso que já
   // tem só porque ele não era o primeiro da lista.
+  const duplicateWhere = {
+    studentId: student.id,
+    ...(isPackage
+      ? { coursePackageId: enrollmentCoursePackageId!, packagePrimary: true }
+      : { courseId: { in: saleCourseIds } }),
+  }
   const existingEnrollment = await prisma.enrollment.findFirst({
     where: {
-      studentId: student.id,
-      ...(isPackage
-        ? { coursePackageId: enrollmentCoursePackageId!, packagePrimary: true }
-        : { courseId: { in: saleCourseIds } }),
-      status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
+      ...duplicateWhere,
+      // Compra PENDENTE só barra venda COBRADA. A bolsa passa por cima: a
+      // pendente é cancelada no ramo da bolsa, logo abaixo (mesma regra de
+      // /api/painel/vendas).
+      status: {
+        in: isBolsista ? ["ACTIVE", "COMPLETED"] : ["PENDING", "ACTIVE", "COMPLETED"],
+      },
     },
     select: { id: true, status: true, course: { select: { nome: true } } },
   })
@@ -503,6 +512,11 @@ export const POST = withRequestContext(
   // ignorado (nao ha valor a descontar). Valor cheio vai como desconto pra
   // refletir nos relatorios o quanto foi concedido.
   if (isBolsista) {
+    await cancelPendingSupersededByScholarship(duplicateWhere, undefined, {
+      userId: guard.ctx.userId,
+      role: guard.ctx.role,
+    })
+
     await prisma.student.update({
       where: { id: student.id },
       data: { bolsista: true },

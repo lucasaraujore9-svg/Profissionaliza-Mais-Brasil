@@ -18,7 +18,7 @@ import {
 import { clearPaceFlags, releaseStudentPaceIfClear } from "@/lib/enrollment/pace"
 import { contextLogger } from "@/lib/logger"
 import { logAudit } from "@/lib/audit"
-import type { EnrollmentStatus, PaymentGateway } from "@prisma/client"
+import type { EnrollmentStatus, PaymentGateway, Prisma } from "@prisma/client"
 
 /**
  * Cancelamento de matrícula — o inverso de `fulfillEnrollment`.
@@ -212,6 +212,38 @@ export async function cancelEnrollment(
     cancelledIds,
     ...(gatewayError ? { gatewayError } : {}),
     ...(platformError ? { platformError } : {}),
+  }
+}
+
+/**
+ * Bolsa concedida por cima de uma compra PENDENTE do mesmo curso/pacote.
+ *
+ * A pendente deixa de fazer sentido — o aluno pagaria por um curso que acabou de
+ * ganhar — e, enquanto existir, bate no gate de duplicidade da venda direta com
+ * 409 "cobrança pendente", sem saída na própria tela: quem abriu a compra como
+ * pagante e desistiu não conseguia mais ser matriculado como bolsista.
+ *
+ * Passa pelo MESMO motor do cancelamento manual, então a cobrança em aberto é
+ * encerrada no gateway certo e o cancelamento entra em `audit_logs`. `where` é
+ * o filtro do gate de duplicidade de quem chama (sem o `status`).
+ */
+export async function cancelPendingSupersededByScholarship(
+  where: Prisma.EnrollmentWhereInput,
+  expectedTenantId: string | null | undefined,
+  actor: CancelEnrollmentParams["actor"],
+): Promise<void> {
+  const pending = await prisma.enrollment.findMany({
+    where: { ...where, status: "PENDING" },
+    select: { id: true },
+  })
+  for (const { id } of pending) {
+    await cancelEnrollment({
+      enrollmentId: id,
+      expectedTenantId,
+      removeAccess: false,
+      actor,
+      reason: "Substituída por bolsa de estudo",
+    })
   }
 }
 

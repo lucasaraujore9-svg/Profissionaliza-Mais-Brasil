@@ -68,7 +68,11 @@ import {
 import { cancelPreapproval, cancelPayment } from "@/lib/mercadopago/client"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 import { clearPaceFlags, releaseStudentPaceIfClear } from "@/lib/enrollment/pace"
-import { cancelEnrollment, isCancellableEnrollmentStatus } from "./cancel"
+import {
+  cancelEnrollment,
+  cancelPendingSupersededByScholarship,
+  isCancellableEnrollmentStatus,
+} from "./cancel"
 
 const p = prisma as unknown as {
   enrollment: {
@@ -413,5 +417,43 @@ describe("cancelEnrollment — cota de aulas", () => {
     await cancelEnrollment({ enrollmentId: "e1", removeAccess: false, actor })
 
     expect(clearPaceFlagsMock).toHaveBeenCalledWith(["e1", "e2"])
+  })
+})
+
+describe("cancelPendingSupersededByScholarship", () => {
+  // Bolsa por cima de compra abandonada: só a PENDENTE sai, e sai pelo motor de
+  // cancelamento (cobrança em aberto encerrada no gateway da unidade).
+  it("cancela só as pendentes do filtro, encerrando a cobrança em aberto", async () => {
+    p.enrollment.findMany.mockResolvedValueOnce([{ id: "e1" }])
+    p.enrollment.findFirst.mockResolvedValue(
+      enrollment({ status: "PENDING", gateway: "MP", mpPaymentId: "mp_1" }),
+    )
+
+    await cancelPendingSupersededByScholarship(
+      { studentId: "s1", tenantId: "t1", courseId: { in: ["c1"] } },
+      "t1",
+      actor,
+    )
+
+    expect(p.enrollment.findMany.mock.calls[0][0].where).toMatchObject({
+      studentId: "s1",
+      tenantId: "t1",
+      status: "PENDING",
+    })
+    expect(p.enrollment.findFirst.mock.calls[0][0].where).toMatchObject({
+      id: "e1",
+      tenantId: "t1",
+    })
+    expect(cancelPaymentMock).toHaveBeenCalledWith("dec(enc_tenant_mp)", "mp_1")
+    expect(p.enrollment.update).toHaveBeenCalledWith({
+      where: { id: "e1" },
+      data: { status: "CANCELLED", cancelledAt: expect.any(Date) },
+    })
+  })
+
+  it("sem pendente, não cancela nada", async () => {
+    await cancelPendingSupersededByScholarship({ studentId: "s1" }, "t1", actor)
+    expect(p.enrollment.findFirst).not.toHaveBeenCalled()
+    expect(p.enrollment.update).not.toHaveBeenCalled()
   })
 })

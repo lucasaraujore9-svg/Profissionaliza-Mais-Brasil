@@ -32,6 +32,7 @@ import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
+import { cancelPendingSupersededByScholarship } from "@/lib/enrollment/cancel"
 import {
   isFreeAmount,
   releaseFreeEnrollment,
@@ -873,14 +874,22 @@ export const POST = withRequestContext(
     // pelo Course — TODOS os cursos da venda, senão o aluno pagaria de novo por
     // um curso que já tem só porque ele não era o primeiro da lista. Espelha o
     // gate do checkout de pacote (checkout/package/route.ts).
+    const duplicateWhere = {
+      studentId: student.id,
+      ...(isPackage
+        ? { coursePackageId: enrollmentCoursePackageId!, packagePrimary: true }
+        : { courseId: { in: saleCourseIds } }),
+      tenantId: tenant.id,
+    }
     const existingEnrollment = await prisma.enrollment.findFirst({
       where: {
-        studentId: student.id,
-        ...(isPackage
-          ? { coursePackageId: enrollmentCoursePackageId!, packagePrimary: true }
-          : { courseId: { in: saleCourseIds } }),
-        tenantId: tenant.id,
-        status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
+        ...duplicateWhere,
+        // Compra PENDENTE só barra venda COBRADA. A bolsa passa por cima: a
+        // pendente é cancelada no ramo da bolsa, logo abaixo — senão quem abriu
+        // a compra como pagante e desistiu nunca mais vira bolsista.
+        status: {
+          in: isBolsista ? ["ACTIVE", "COMPLETED"] : ["PENDING", "ACTIVE", "COMPLETED"],
+        },
       },
       select: { id: true, status: true, course: { select: { nome: true } } },
     })
@@ -907,6 +916,11 @@ export const POST = withRequestContext(
     // ACTIVE e provisiona o acesso na plataforma de aulas de forma sincrona.
     // Valor cheio entra como desconto pra refletir nos relatorios.
     if (isBolsista) {
+      await cancelPendingSupersededByScholarship(duplicateWhere, tenant.id, {
+        userId,
+        role: "RESELLER",
+      })
+
       await prisma.student.update({
         where: { id: student.id },
         data: { bolsista: true },
