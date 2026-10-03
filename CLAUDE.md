@@ -2483,6 +2483,15 @@ acontece com uma unidade. Cadastro em /admin/configuracoes -> aba API ->
 - **Deploy:** migration `20261002_outbound_webhooks` (aditiva, idempotente, RLS
   ligada, sem backfill) e **agendar `pmb-webhooks-entregas`** no pg_cron
   (`prisma/sql/pg_cron_jobs.sql`) — job novo nao se agenda sozinho.
+- **Log dos disparos** na mesma aba (`GET /api/admin/webhooks/log`): enviados
+  (`webhook_deliveries`) e recebidos (`webhook_logs`: LMS, Asaas, MP), com
+  filtro de sucesso/erro. Nos recebidos o erro e `processed = false` — o campo
+  `error` tambem guarda observacao de evento que deu CERTO no Asaas.
+- **Achado no caminho: o PMB recusava TODO `lesson.completed` do LMS** (1776 de
+  01/07 a 02/10): o schema exigia `completedAt` string e o LMS manda `null` em
+  aula de curso nao concluido — exatamente o exemplo do contrato. Agora
+  `nullish()`. O progresso nao se perdeu (o delta horario `day-update` cobre),
+  so a latencia era de ate 1h e a cota de aulas reagia atrasada.
 
 ### Bugs conhecidos (pendentes)
 

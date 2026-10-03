@@ -493,6 +493,8 @@ function assinaturaValida(rawBody, headers, segredo) {
   processou.
 - A tela mostra as últimas 30 entregas de cada webhook, com o payload, o código
   HTTP e o erro.
+- O painel **Log de webhooks** (mesma aba) lista todos os disparos, enviados e
+  recebidos, filtrando por sucesso ou erro.
 
 ---
 

@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { ApiKeysManager } from "./api-keys-manager"
 import { WebhooksManager } from "./webhooks-manager"
+import { WebhookLogPanel } from "./webhook-log-panel"
 import { Can } from "@/components/shared/permissions/permission-context"
 
 const WEBHOOK_URL = "https://profissionalizamaisbrasil.com.br/api/webhooks/lms"
@@ -511,6 +512,9 @@ export function ApiDocsTab({
 
       {/* Webhooks de saída: URL + eventos escolhidos */}
       <WebhooksManager />
+
+      {/* Log dos disparos, enviados e recebidos */}
+      <WebhookLogPanel />
 
       {/* MD copiável para o dev do parceiro */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">

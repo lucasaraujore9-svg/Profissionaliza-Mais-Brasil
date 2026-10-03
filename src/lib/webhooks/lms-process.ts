@@ -54,18 +54,22 @@ export interface LmsWebhookResult {
 
 // ── Schemas por evento ──────────────────────────────────────────────────────
 
+// Datas `nullish`, não só `optional`: o LMS manda `completedAt: null` em toda
+// aula de curso ainda não concluído (é o exemplo do próprio contrato). Com
+// `optional()` o Zod recusava 100% dos lesson.completed — de 01/07 a 02/10/2026
+// foram 1776 eventos perdidos, e o progresso só chegava pelo delta horário.
 const courseCompletedSchema = z.object({
   studentExternalId: z.string().min(1),
   courseId: z.string().min(1), // = Course.lmsCourseId
-  completedAt: z.string().optional(),
+  completedAt: z.string().nullish(),
 })
 
 const lessonCompletedSchema = z.object({
   studentExternalId: z.string().min(1),
   courseId: z.string().min(1),
-  percent: z.number().optional(),
-  completedAt: z.string().optional(),
-  lastActivityAt: z.string().optional(),
+  percent: z.number().nullish(),
+  completedAt: z.string().nullish(),
+  lastActivityAt: z.string().nullish(),
 })
 
 // course.published / course.updated: o payload traz `{ courseId, slug }` (contrato

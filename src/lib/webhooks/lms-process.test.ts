@@ -126,6 +126,19 @@ describe("lesson.completed — clampPercent e estado (QA-010)", () => {
     expect(data.progressPercent).toBe(expected)
   })
 
+  it("completedAt null (formato real do LMS) é aceito como EM_ANDAMENTO", async () => {
+    await processLmsWebhookEvent("lesson.completed", {
+      studentExternalId: "s1",
+      courseId: "lms-c1",
+      percent: 80,
+      completedAt: null,
+      lastActivityAt: "2026-07-03T00:00:00.000Z",
+    })
+    const data = p.enrollment.update.mock.calls.at(-1)![0].data
+    expect(data.progressPercent).toBe(80)
+    expect(data.progressStatus).toBe("EM_ANDAMENTO")
+  })
+
   it("sem completedAt → progressStatus EM_ANDAMENTO", async () => {
     await processLmsWebhookEvent("lesson.completed", {
       studentExternalId: "s1",
