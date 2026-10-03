@@ -14,6 +14,7 @@ import {
   MIN_REASON_LENGTH,
   MAX_REASON_LENGTH,
 } from "@/lib/tenants/lifecycle"
+import { emitUnidadeStatus } from "@/lib/webhooks-saida/unidade"
 
 const schema = z.object({
   status: z.enum(["ACTIVE", "SUSPENDED", "PENDING", "CANCELLED"]),
@@ -118,6 +119,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     where: { id },
     data: { status: parsed.data.status },
   })
+  await emitUnidadeStatus(id, tenant.status, parsed.data.status, "admin")
 
   // Concessão auditada só agora, com a mudança já gravada: uma trilha que
   // afirma "cortesia concedida" numa operação que falhou é pior do que trilha

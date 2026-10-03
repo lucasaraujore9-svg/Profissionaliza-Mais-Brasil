@@ -9,6 +9,7 @@ import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import { emitUnidadeStatus } from "@/lib/webhooks-saida/unidade"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
@@ -66,6 +67,7 @@ async function processReactivations() {
         where: { id: tenant.id },
         data: { status: "ACTIVE" },
       })
+      await emitUnidadeStatus(tenant.id, "SUSPENDED", "ACTIVE", "cron")
       // PERF-001: invalida o cache p/ a vitrine voltar a vender na hora.
       await invalidateTenantCache(tenant.id)
       result.tenantsReactivated += 1

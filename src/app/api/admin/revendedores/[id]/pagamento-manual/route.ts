@@ -14,6 +14,7 @@ import {
   newManualPaymentId,
 } from "@/lib/tenant-billing/manual-payment"
 import { PAID_STATUSES } from "@/lib/tenant-billing/types"
+import { emitUnidadePagamento } from "@/lib/webhooks-saida/unidade"
 
 const bodySchema = z.object({
   /** Valor de UMA mensalidade, nao o total pago. */
@@ -173,8 +174,9 @@ export const POST = withRequestContextParams<{ id: string }>(
           markedPaidById: ctx.userId,
           notes: `[${agora.toLocaleString("pt-BR")}] ${autor}: ${baseNota}`,
         },
-        select: { id: true },
+        select: { id: true, asaasPaymentId: true },
       })
+      await emitUnidadePagamento("unidade.pagamento.confirmado", row.asaasPaymentId, "manual")
       criadas.push({
         id: row.id,
         competencia: competenceKey(linha.competenceAt),

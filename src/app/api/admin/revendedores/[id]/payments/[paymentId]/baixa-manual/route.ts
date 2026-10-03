@@ -10,6 +10,7 @@ import { createNotification } from "@/lib/notifications"
 import { contextLogger } from "@/lib/logger"
 import { resolverCompetencia } from "@/lib/asaas/competencia"
 import { existeNoGateway } from "@/lib/tenant-billing/manual-payment"
+import { emitUnidadePagamento } from "@/lib/webhooks-saida/unidade"
 
 const bodySchema = z.object({
   /** Quando a unidade pagou (AAAA-MM-DD). Ausente = hoje. */
@@ -147,6 +148,7 @@ export const POST = withRequestContextParams<{ id: string; paymentId: string }>(
         { status: 409 },
       )
     }
+    await emitUnidadePagamento("unidade.pagamento.confirmado", payment.asaasPaymentId, "manual")
 
     // 2) A COBRANCA MORRE NO ASAAS. Mantida viva ela seria cobrada de novo.
     let asaasCancelFailed: string | null = null

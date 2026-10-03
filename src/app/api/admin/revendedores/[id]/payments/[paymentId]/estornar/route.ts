@@ -9,6 +9,7 @@ import { swallow } from "@/lib/errors"
 import { createNotification } from "@/lib/notifications"
 import { flagMonthlyCommissionForRefund } from "@/lib/referrals/monthly"
 import { janelaEstorno, podeEstornar } from "@/lib/tenant-billing/refund"
+import { emitUnidadePagamento } from "@/lib/webhooks-saida/unidade"
 
 const MAX_BYTES = 8 * 1024 * 1024 // 8MB
 const ALLOWED_TYPES = new Set([
@@ -92,6 +93,7 @@ export const POST = withRequestContextParams<{ id: string; paymentId: string }>(
       where: { id: paymentId, tenantId: id },
       select: {
         id: true,
+        asaasPaymentId: true,
         status: true,
         amount: true,
         refundedAt: true,
@@ -201,6 +203,7 @@ export const POST = withRequestContextParams<{ id: string; paymentId: string }>(
         { status: 409 },
       )
     }
+    await emitUnidadePagamento("unidade.pagamento.estornado", payment.asaasPaymentId, "manual")
 
     // A comissao da competencia pode ja ter sido apurada — e ate paga.
     await flagMonthlyCommissionForRefund(

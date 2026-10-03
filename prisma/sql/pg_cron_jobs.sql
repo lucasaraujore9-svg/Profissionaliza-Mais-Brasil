@@ -185,3 +185,8 @@ select cron.schedule('pmb-sweep-subscriptions', '0 8 * * *',
 -- Idempotente: cada transicao so parte do estado que a habilita.
 select cron.schedule('pmb-pedagogia-janela', '*/15 * * * *',
   $$ select app_internal.run_cron('/api/cron/pedagogia-janela') $$);
+
+-- Webhooks de SAIDA: novas tentativas das entregas que falharam (a cada 5 min).
+-- A 1a tentativa sai na hora; sem este job, entrega que falhar fica PENDING.
+select cron.schedule('pmb-webhooks-entregas', '*/5 * * * *',
+  $$ select app_internal.run_cron('/api/cron/webhooks-entregas') $$);

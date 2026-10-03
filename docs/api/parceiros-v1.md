@@ -366,7 +366,137 @@ Resposta `201`:
 
 ---
 
-## 7. Operação (lado PMB)
+## 7. Exemplos curl (todas as rotas)
+
+```bash
+export PMB_API_KEY=pmb_live_xxx
+BASE=https://www.profissionalizamaisbrasil.com.br/api/v1
+
+# Verificar a chave (qualquer escopo)
+curl -H "Authorization: Bearer $PMB_API_KEY" "$BASE/ping"
+
+# Consultar unidade — um identificador por chamada (escopo unidades.read)
+curl -H "Authorization: Bearer $PMB_API_KEY" "$BASE/unidades/lookup?email=joao@exemplo.com.br"
+curl -H "Authorization: Bearer $PMB_API_KEY" "$BASE/unidades/lookup?cpf=52998224725"
+curl -H "Authorization: Bearer $PMB_API_KEY" "$BASE/unidades/lookup?telefone=31999998888"
+curl -H "Authorization: Bearer $PMB_API_KEY" "$BASE/unidades/lookup?slug=cursos-do-joao"
+curl -H "Authorization: Bearer $PMB_API_KEY" "$BASE/unidades/lookup?id=<id-da-unidade>"
+curl -H "Authorization: Bearer $PMB_API_KEY" "$BASE/unidades/lookup?dominio=www.cursosdojoao.com.br"
+curl -H "Authorization: Bearer $PMB_API_KEY" "$BASE/unidades/lookup?codigo=<codigo-de-indicacao>"
+curl -H "Authorization: Bearer $PMB_API_KEY" "$BASE/unidades/lookup?q=joao@exemplo.com.br"
+
+# Consultar pelo caminho (tipo deduzido)
+curl -H "Authorization: Bearer $PMB_API_KEY" "$BASE/unidades/cursos-do-joao"
+
+# Criar unidade (escopo unidades.create)
+curl -X POST "$BASE/unidades" \
+  -H "Authorization: Bearer $PMB_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome": "Cursos do João",
+    "plano": "pro",
+    "titular": {
+      "nome": "João da Silva",
+      "email": "joao@exemplo.com.br",
+      "cpfCnpj": "52998224725",
+      "telefone": "31999998888"
+    }
+  }'
+```
+
+---
+
+## 8. Webhooks (PMB → seu sistema)
+
+Cadastro em **/admin/configuracoes → aba API → Webhooks de saída**: nome, URL
+`https://` e os eventos desejados. O segredo de assinatura (`whsec_…`) aparece
+**uma vez**, ao cadastrar (ou ao clicar em *Trocar segredo*). Sem webhook
+cadastrado, nenhum evento sai.
+
+### Eventos
+
+| Evento | Quando |
+|--------|--------|
+| `unidade.criada` | Unidade criada pelo /admin, painel, API ou cadastro público. |
+| `unidade.pagamento.confirmado` | Mensalidade da unidade paga (Asaas, baixa manual ou reconciliação). |
+| `unidade.pagamento.vencido` | Mensalidade venceu sem pagamento (sai mesmo dentro da carência). |
+| `unidade.pagamento.estornado` | Mensalidade estornada, total ou parcial (`pagamento.status` diz qual). |
+| `unidade.ativada` | Unidade passou a `ACTIVE` (1º pagamento ou reativação). |
+| `unidade.suspensa` | Unidade passou a `SUSPENDED`. |
+| `unidade.cancelada` | Unidade passou a `CANCELLED`. |
+| `webhook.teste` | Só pelo botão *Enviar teste*. Não é assinável. |
+
+### Requisição
+
+```http
+POST <sua URL>
+Content-Type: application/json
+X-PMB-Event-Id: evt_3f2a…          (igual entre tentativas)
+X-PMB-Event-Type: unidade.pagamento.confirmado
+X-PMB-Timestamp: 1759406400        (epoch em segundos)
+X-PMB-Signature: sha256=<hex>
+```
+
+```json
+{
+  "id": "evt_3f2a…",
+  "evento": "unidade.pagamento.confirmado",
+  "criadoEm": "2026-10-02T12:00:00.000Z",
+  "dados": {
+    "unidade": { "…": "mesmo bloco de GET /unidades/lookup (seção 3)" },
+    "pagamento": {
+      "cobrancaId": "pay_abc123",
+      "valor": 239,
+      "status": "RECEIVED",
+      "formaPagamento": "PIX",
+      "vencimento": "2026-10-05",
+      "pagoEm": "2026-10-02T11:58:00.000Z",
+      "url": "https://profissionalizamaisbrasil.com.br/cobranca/pay_abc123"
+    },
+    "origem": "asaas"
+  }
+}
+```
+
+- `dados.pagamento` só existe em `unidade.pagamento.*`. Os eventos de status
+  trazem `dados.statusAnterior`.
+- `origem`: `asaas` | `manual` | `cron` | `api` | `admin` | `painel` | `cadastro`.
+- `pagamento.url` é `null` em mensalidade parcelada no cartão (já autorizada).
+- O mesmo pagamento confirmado por dois caminhos (Asaas + baixa manual,
+  `CONFIRMED` + `RECEIVED`) gera **um** evento só.
+
+### Conferir a assinatura
+
+`HMAC-SHA256(segredo, "<X-PMB-Timestamp>.<corpo cru>")` em hex. Use o corpo
+**cru**, antes de qualquer `JSON.parse`.
+
+```js
+import crypto from "node:crypto"
+
+function assinaturaValida(rawBody, headers, segredo) {
+  const ts = headers["x-pmb-timestamp"]
+  if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false // anti-replay
+  const esperado = crypto.createHmac("sha256", segredo).update(`${ts}.${rawBody}`).digest("hex")
+  const recebido = String(headers["x-pmb-signature"] ?? "").replace(/^sha256=/, "")
+  return recebido.length === esperado.length &&
+    crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(esperado))
+}
+```
+
+### Entrega e novas tentativas
+
+- Responda **2xx em até 10 s**. Qualquer outra coisa, **inclusive redirect**,
+  conta como falha.
+- Novas tentativas em 1 min, 5 min, 30 min, 2 h, 6 h e 24 h. Esgotou, a entrega
+  fica como *Falhou* e pode ser reenviada na tela.
+- Entrega **pelo menos uma vez**: guarde o `X-PMB-Event-Id` e descarte o que já
+  processou.
+- A tela mostra as últimas 30 entregas de cada webhook, com o payload, o código
+  HTTP e o erro.
+
+---
+
+## 9. Operação (lado PMB)
 
 - **Emitir chave:** /admin/configuracoes → aba **API** → *Chaves de acesso dos
   parceiros* → *Gerar chave*. Exige a permissão `integracoes.manage`. Copie o
@@ -393,6 +523,9 @@ Resposta `201`:
 | `src/app/api/v1/**` | Rotas públicas |
 | `src/lib/api-parceiros/gate.ts` | Portaria das rotas: teto por IP, chave + escopo, teto por chave |
 | `src/lib/resellers/create.ts` | Núcleo da criação de unidade (o mesmo do /admin e do painel) |
+| `src/lib/webhooks-saida/` | Webhooks de saída: catálogo de eventos, assinatura, fila e entrega |
+| `src/app/api/admin/webhooks/**` | Gestão dos webhooks |
+| `src/app/api/cron/webhooks-entregas` | Novas tentativas (pg_cron `pmb-webhooks-entregas`, a cada 5 min) |
 | `src/app/api/admin/api-keys/**` | Gestão das chaves |
 
 Para expor um recurso novo (alunos, matrículas, catálogo…), crie **escopo

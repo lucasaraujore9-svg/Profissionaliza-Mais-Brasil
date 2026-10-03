@@ -423,6 +423,7 @@ export const POST = withRequestContext(
     salesUserId,
     referrerTenantId,
     actor: { userId: ctx.userId, role: ctx.role, email: ctx.email },
+    origem: "admin",
   })
 
   if (!result.ok) {

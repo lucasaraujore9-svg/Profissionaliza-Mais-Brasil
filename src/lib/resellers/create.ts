@@ -27,6 +27,7 @@ import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 import { validateSlugFormat, isSlugAvailable } from "@/lib/tenant/slug"
 import { syncTenantBrandingToLms } from "@/lib/lms"
 import { cpfFromDocument } from "@/lib/validation/cpf"
+import { emitUnidadeCriada, type Origem } from "@/lib/webhooks-saida/unidade"
 
 /**
  * Criação de revenda (tenant) — núcleo compartilhado entre:
@@ -71,6 +72,8 @@ export interface CreateResellerInput {
    * chave da API de parceiros (sem usuário humano); a chave vai em `email`.
    */
   actor: { userId: string | null; role: string; email?: string | null }
+  /** De onde veio a criação — vai no webhook `unidade.criada`. */
+  origem: Origem
 }
 
 export interface CreateResellerSuccess {
@@ -485,6 +488,9 @@ export async function createReseller(
       href: `/admin/revendedores/${tenant.id}`,
     })
   }
+
+  // Depois do titular: o payload do evento traz o bloco `titular`.
+  await emitUnidadeCriada(tenant.id, input.origem)
 
   return {
     ok: true,

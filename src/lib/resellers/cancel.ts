@@ -16,12 +16,15 @@ import { cancelSubscription, deletePayment, AsaasApiError } from "@/lib/asaas/cl
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { blockTenantStudents } from "@/lib/auto-block"
 import { swallow } from "@/lib/errors"
+import { emitUnidadeStatus, type Origem } from "@/lib/webhooks-saida/unidade"
 
 export interface CancelTenantOptions {
   /** Cortar o acesso dos alunos junto. */
   blockStudents: boolean
   /** Apagar as mensalidades já emitidas e em aberto. */
   deleteOpenCharges: boolean
+  /** Origem no webhook `unidade.cancelada`. Padrão: "admin". */
+  origem?: Origem
 }
 
 export interface CancelTenantOutcome {
@@ -131,6 +134,7 @@ export async function cancelTenant(
     where: { id: tenant.id },
     data: { status: "CANCELLED" },
   })
+  await emitUnidadeStatus(tenant.id, tenant.status, "CANCELLED", options.origem ?? "admin")
 
   await invalidateTenant(tenant)
 

@@ -58,6 +58,7 @@ import {
   shouldWarnCancellation,
   type OverdueRuler,
 } from "./overdue-policy"
+import { emitUnidadeStatus } from "@/lib/webhooks-saida/unidade"
 
 // Throttle entre emails para não estourar o rate limit do provedor.
 const EMAIL_THROTTLE_MS = 120
@@ -390,6 +391,7 @@ async function suspendTenant(
   const blockStudents = tenant.billingMode === "AUTO" && !policy?.keepStudentsActive
 
   await prisma.tenant.update({ where: { id: tenant.id }, data: { status: "SUSPENDED" } })
+  await emitUnidadeStatus(tenant.id, tenant.status, "SUSPENDED", "cron")
   // PERF-001: invalida o cache p/ a vitrine refletir o bloqueio na hora.
   await invalidateTenantCache(tenant.id)
   result.suspended += 1
@@ -538,6 +540,7 @@ async function cancelTenantForDelinquency(
     // aluno pagou o curso dele; quem não pagou a mensalidade foi a unidade.
     blockStudents: shouldBlockStudentsOnCancel(tenant.cancellationPolicy),
     deleteOpenCharges: true,
+    origem: "cron",
   })
 
   if (!outcome.ok) {

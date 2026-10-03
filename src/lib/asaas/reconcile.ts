@@ -5,6 +5,7 @@ import {
   dataPagamentoCliente,
 } from "@/lib/asaas/competencia"
 import { listPayments } from "./client"
+import { emitUnidadePagamento } from "@/lib/webhooks-saida/unidade"
 
 export interface ReconcileResult {
   /** Pagamentos retornados pela conta Asaas (visão usada na conferência). */
@@ -88,6 +89,11 @@ export async function reconcileTenantPayments(tenant: {
         select: { id: true },
       })
       imported++
+      // Webhook perdido: a reconciliação é quem descobre o pagamento. Se o
+      // webhook já tinha avisado, o dedupe por cobrança descarta este.
+      if (p.status === "RECEIVED" || p.status === "CONFIRMED" || p.status === "RECEIVED_IN_CASH") {
+        await emitUnidadePagamento("unidade.pagamento.confirmado", p.id, "cron")
+      }
     } catch {
       // Uma cobrança que não espelha não pode derrubar as outras nem a
       // inferência de remoção abaixo. O total em `imported` denuncia a falha.

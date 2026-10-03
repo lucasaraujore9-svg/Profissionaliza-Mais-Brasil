@@ -217,7 +217,9 @@ model User {
   studentNotes StudentNote[] @relation("StudentNotes")
 
   // Chaves da API de parceiros (/api/v1) criadas por este usuario
-  createdApiKeys ApiKey[] @relation("CreatedApiKeys")
+  createdApiKeys          ApiKey[]          @relation("CreatedApiKeys")
+  // Webhooks de saida (PMB -> sistemas integrados) criados por este usuario
+  createdWebhookEndpoints WebhookEndpoint[] @relation("CreatedWebhookEndpoints")
 
   // TenantPayments / ReferralPayouts marcados manualmente como pagos por este admin
   markedTenantPayments   TenantPayment[]  @relation("MarkedTenantPayments")
@@ -3280,4 +3282,58 @@ model ApiKey {
 
   @@index([status, createdAt])
   @@map("api_keys")
+}
+
+// Webhook de SAIDA: o PMB avisa um sistema integrado quando algo acontece
+// (unidade criada, mensalidade paga...). Catalogo fechado de eventos em
+// src/lib/webhooks-saida/events.ts.
+model WebhookEndpoint {
+  id              String   @id @default(cuid())
+  name            String
+  url             String
+  // Eventos assinados. Evento fora do catalogo e ignorado na entrega.
+  events          String[] @default([])
+  // Segredo do HMAC, CIFRADO (AES-256-GCM, lib/crypto). Precisamos dele em claro
+  // para assinar cada entrega, entao nao da para guardar so o hash como na ApiKey.
+  secretEncrypted String   @map("secret_encrypted")
+  // ACTIVE | DISABLED. Desligado nao recebe evento novo.
+  status          String   @default("ACTIVE")
+
+  createdById String? @map("created_by_id")
+  createdBy   User?   @relation("CreatedWebhookEndpoints", fields: [createdById], references: [id], onDelete: SetNull)
+
+  deliveries WebhookDelivery[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("webhook_endpoints")
+}
+
+// Uma entrega = um evento para um endpoint. O id e o X-PMB-Event-Id: estavel
+// entre tentativas, e a chave de idempotencia do lado de quem recebe.
+model WebhookDelivery {
+  id             String          @id @default(cuid())
+  endpointId     String          @map("endpoint_id")
+  endpoint       WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  event          String
+  payload        Json
+  // Mesmo fato de negocio emitido por dois caminhos (webhook do Asaas E baixa
+  // manual, CONFIRMED E RECEIVED) vira UMA entrega. Null = sem dedupe.
+  dedupeKey      String?         @map("dedupe_key")
+  // PENDING | DELIVERED | FAILED (esgotou as tentativas)
+  status         String          @default("PENDING")
+  attempts       Int             @default(0)
+  nextAttemptAt  DateTime        @default(now()) @map("next_attempt_at")
+  // Trava curta contra duas execucoes entregando a mesma linha ao mesmo tempo.
+  lockedUntil    DateTime?       @map("locked_until")
+  lastStatusCode Int?            @map("last_status_code")
+  lastError      String?         @map("last_error")
+  deliveredAt    DateTime?       @map("delivered_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  @@unique([endpointId, dedupeKey])
+  @@index([status, nextAttemptAt])
+  @@index([endpointId, createdAt])
+  @@map("webhook_deliveries")
 }

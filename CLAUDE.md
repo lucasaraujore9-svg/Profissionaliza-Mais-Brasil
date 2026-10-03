@@ -2434,6 +2434,56 @@ o link da 1a mensalidade. Para o sistema de automacao interno. Contrato em
 - A chave nova nasce so com `unidades.read` marcado no formulario: antes o
   default era "todos os escopos", e criar viria junto sem ninguem pedir.
 
+### Webhooks de saida (2026-10-02)
+
+O PMB passa a AVISAR sistemas integrados (automacao interna) quando algo
+acontece com uma unidade. Cadastro em /admin/configuracoes -> aba API ->
+"Webhooks de saida": URL https + eventos escolhidos. Contrato em
+`docs/api/parceiros-v1.md` §8.
+
+- **Catalogo fechado** em `lib/webhooks-saida/core.ts` (PURO — a tela importa
+  os rotulos dali; criptografia mora em `secret.ts`): `unidade.criada`,
+  `unidade.pagamento.{confirmado,vencido,estornado}`,
+  `unidade.{ativada,suspensa,cancelada}`, mais `webhook.teste` (so pelo botao).
+- **Outbox:** o evento vira `WebhookDelivery` (uma por endpoint) ANTES de
+  qualquer rede. 1a tentativa via `afterResponse`; as seguintes pelo cron
+  `/api/cron/webhooks-entregas` (pg_cron `pmb-webhooks-entregas`, 5 min) com
+  backoff 1m/5m/30m/2h/6h/24h, depois FAILED (reenvio manual na tela).
+  **Sem o job agendado, entrega que falhar na 1a tentativa fica PENDING.**
+- **Dedupe por fato** (`@@unique([endpointId, dedupeKey])` +
+  `createManyAndReturn({ skipDuplicates })`): pagamento confirmado chega por
+  CONFIRMED e RECEIVED, pelo webhook E pela reconciliacao/baixa manual — sai UM
+  evento por cobranca (`asaasPaymentId`). Eventos de status NAO tem dedupe (a
+  unidade pode ser suspensa e reativada varias vezes): quem chama passa o status
+  anterior e `emitUnidadeStatus` so emite em transicao real.
+- **Pontos de disparo** (nao ha funcao central de "status mudou" no repo):
+  `asaas/process.ts` (confirmado/vencido/estornado, suspensao por overdue, por
+  refund e por assinatura cancelada, mensalidade parcelada), `asaas/reconcile.ts`,
+  `tenants/overdue-sweep.ts`, `resellers/cancel.ts` (`origem` nas opcoes),
+  cron `reactivate-paid`, rotas admin de status, de detalhe (ativacao no GET),
+  baixa/pagamento manual, mark-paid e estorno; `createReseller` (campo `origem`
+  OBRIGATORIO no input — chamador novo nao compila sem ele) e o cadastro publico.
+  **Escrita nova de `Tenant.status` ou de pagamento de unidade precisa chamar o
+  emissor**, senao o integrador nunca fica sabendo.
+- `emitWebhookEvent` **nunca lanca** e so monta o payload se algum endpoint
+  assina o evento — sem webhook cadastrado o custo e uma consulta indexada.
+- **Payload:** o bloco `unidade` e o MESMO de `GET /unidades/lookup`
+  (`serializarUnidade`); `pagamento.url` e `/cobranca/<id>` (checkout do PMB),
+  `null` em mensalidade parcelada no cartao.
+- **Assinatura** igual a do webhook de entrada do LMS:
+  `HMAC-SHA256(segredo, "<timestamp>.<corpo>")`, header `X-PMB-Signature:
+  sha256=<hex>`. O segredo (`whsec_`) e mostrado uma vez e guardado CIFRADO
+  (AES-256-GCM, `lib/crypto`) — nao da para guardar so o hash, precisamos dele
+  em claro para assinar.
+- **SSRF:** so `https`, sem credencial na URL, sem hostname/IP interno, e
+  `redirect: "manual"` (redirect conta como falha). Limite conhecido: dominio que
+  RESOLVE para IP privado passa (marcado com `ponytail:` em `core.ts`).
+- Permissao: `integracoes.view` para ver, `integracoes.manage` para mexer;
+  criar/editar/excluir auditado (`webhook_endpoint.*`, sem o segredo).
+- **Deploy:** migration `20261002_outbound_webhooks` (aditiva, idempotente, RLS
+  ligada, sem backfill) e **agendar `pmb-webhooks-entregas`** no pg_cron
+  (`prisma/sql/pg_cron_jobs.sql`) — job novo nao se agenda sozinho.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

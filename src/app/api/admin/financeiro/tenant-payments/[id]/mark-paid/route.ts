@@ -8,6 +8,7 @@ import { logAudit } from "@/lib/audit"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import { loadTenantLifecycle, CORTESIA_AUDIT } from "@/lib/tenants/lifecycle"
+import { emitUnidadePagamento } from "@/lib/webhooks-saida/unidade"
 
 const bodySchema = z.object({
   paidAt: z.string().optional().nullable(),
@@ -55,6 +56,7 @@ export const POST = withRequestContextParams<{ id: string }>(
     where: { id },
     select: {
       id: true,
+      asaasPaymentId: true,
       status: true,
       notes: true,
       amount: true,
@@ -116,6 +118,7 @@ export const POST = withRequestContextParams<{ id: string }>(
     },
     select: { id: true, status: true, paidAt: true, markedPaidAt: true },
   })
+  await emitUnidadePagamento("unidade.pagamento.confirmado", payment.asaasPaymentId, "manual")
 
   if (saiDaBlacklist) {
     const unidade = payment.tenant?.name ?? payment.tenantId

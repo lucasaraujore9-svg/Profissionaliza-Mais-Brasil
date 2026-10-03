@@ -78,6 +78,7 @@ export const POST = withRequestContext(
         firstPaymentMaxInstallments: data.parcelasPrimeiraMensalidade,
         automationEnabled: plano.automation,
         actor: { userId: null, role: "API_KEY", email: `api:${auth.key.prefix}` },
+        origem: "api",
       })
 
       if (!result.ok) {

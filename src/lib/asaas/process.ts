@@ -32,6 +32,7 @@ import {
 } from "@/lib/course-authoring/split-webhook"
 import { applyAsaasSubscriptionEvent } from "@/lib/subscriptions/asaas-events"
 import { linkPixAutomaticFirstPayment } from "@/lib/subscriptions/carne"
+import { emitUnidadePagamento, emitUnidadeStatus } from "@/lib/webhooks-saida/unidade"
 
 /**
  * Campos da unidade que o processamento de MENSALIDADE precisa. Extraido para
@@ -129,6 +130,7 @@ async function handleSubscriptionCancellation(
       where: { id: tenant.id },
       data: { status: "SUSPENDED" },
     })
+    await emitUnidadeStatus(tenant.id, tenant.status, "SUSPENDED", "asaas")
 
     // Aguarda invalidação de cache antes de seguir — evita race onde requests
     // simultâneos leem status cached ACTIVE enquanto DB já mudou para SUSPENDED.
@@ -294,6 +296,7 @@ export async function processTenantInstallmentPayment(
     select: {
       id: true,
       tenantId: true,
+      asaasPaymentId: true,
       status: true,
       paidAt: true,
       installmentCount: true,
@@ -338,6 +341,10 @@ export async function processTenantInstallmentPayment(
       select: { installmentPaidIds: true },
     })
     const paidCount = updated.installmentPaidIds.length
+
+    // A mensalidade conta como paga na 1ª parcela (o valor cheio já foi
+    // autorizado no cartão); as seguintes caem no dedupe.
+    await emitUnidadePagamento("unidade.pagamento.confirmado", row.asaasPaymentId, "asaas")
 
     contextLogger().info(
       {
@@ -814,6 +821,8 @@ export async function processAsaasWebhook(
             ...(tenant.activatedAt ? {} : { activatedAt: paidAt ?? new Date() }),
           },
         })
+        await emitUnidadePagamento("unidade.pagamento.confirmado", payment.id, "asaas")
+        await emitUnidadeStatus(tenant.id, tenant.status, "ACTIVE", "asaas")
 
         await invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(swallow("asaas.process"))
 
@@ -899,6 +908,10 @@ export async function processAsaasWebhook(
         //
         // O relogio aqui e o MESMO do sweep — `dueDate` da cobranca, em dia
         // civil brasileiro — para as duas metades nao divergirem.
+        // O fato "venceu" vale mesmo dentro da carência — a suspensão é outro
+        // evento (unidade.suspensa), emitido só quando acontece.
+        await emitUnidadePagamento("unidade.pagamento.vencido", payment.id, "asaas")
+
         const ruler = resolveOverdueRuler(tenant.cancellationPolicy)
         const diasDeAtraso = overdueDays(new Date(payment.dueDate))
 
@@ -919,6 +932,7 @@ export async function processAsaasWebhook(
           where: { id: tenant.id },
           data: { status: "SUSPENDED" },
         })
+        await emitUnidadeStatus(tenant.id, tenant.status, "SUSPENDED", "asaas")
 
         await invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(swallow("asaas.process"))
 
@@ -1007,6 +1021,8 @@ export async function processAsaasWebhook(
             data: { status: payment.status },
           })
           .catch(swallow("asaas.process"))
+        // Parcial também avisa: `pagamento.status` diz qual dos dois foi.
+        await emitUnidadePagamento("unidade.pagamento.estornado", payment.id, "asaas")
 
         // Cancela comissao de indicacao (se houver). Para refund TOTAL,
         // a comissão é cancelada inteira. Para refund PARCIAL, só
@@ -1104,6 +1120,7 @@ export async function processAsaasWebhook(
             where: { id: tenant.id },
             data: { status: "SUSPENDED" },
           })
+          await emitUnidadeStatus(tenant.id, tenant.status, "SUSPENDED", "asaas")
           await invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(swallow("asaas.process"))
 
           if (tenant.billingMode === "AUTO") {

@@ -29,6 +29,7 @@ import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 // lista duplicada e DIVERGENTE aqui (sem "pmb"/"__pmb__"), permitindo o cadastro
 // de um slug que sequestra o roteamento de webhook para o contexto PMB.
 import { RESERVED_SLUGS } from "@/lib/tenant/slug"
+import { emitUnidadeCriada } from "@/lib/webhooks-saida/unidade"
 
 function formatDueDate(daysFromNow: number): string {
   const d = new Date()
@@ -282,6 +283,8 @@ export const POST = withRequestContext(
   } catch {
     paymentUrl = null
   }
+
+  await emitUnidadeCriada(createdTenantId, "cadastro")
 
   return NextResponse.json(
     {

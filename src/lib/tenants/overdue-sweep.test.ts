@@ -133,6 +133,8 @@ describe("cancelamento automático em D+7", () => {
       // Política ausente => MANTÉM os alunos (o aluno pagou o curso dele).
       blockStudents: false,
       deleteOpenCharges: true,
+      // Vai no webhook `unidade.cancelada`: distingue do cancelamento manual.
+      origem: "cron",
     })
     const audit = arg<{
       action: string

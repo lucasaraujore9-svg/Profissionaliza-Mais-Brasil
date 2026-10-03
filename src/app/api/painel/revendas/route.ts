@@ -73,6 +73,7 @@ export const POST = withRequestContext(
       accountManagerId: null,
       canSellResellers: false,
       actor: { userId: guard.session.userId, role: guard.session.role },
+      origem: "painel",
     })
 
     if (!result.ok) {

@@ -19,6 +19,7 @@ import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
 import { cancelTenant, CANCELABLE_TENANT_SELECT } from "@/lib/resellers/cancel"
+import { emitUnidadeStatus, emitUnidadePagamento } from "@/lib/webhooks-saida/unidade"
 
 // Escopo de acesso a uma unidade já carregada: ver canAccessTenantScope em
 // @/lib/auth/scope (mesma regra de tenantScopeWhere).
@@ -314,6 +315,7 @@ export const GET = withRequestContextParams<{ id: string }>(
           where: { id },
           data: { status: "ACTIVE" },
         })
+        await emitUnidadeStatus(id, "PENDING", "ACTIVE", "admin")
         effectiveTenantStatus = "ACTIVE"
         await invalidateTenant({
           id: tenant.id,
@@ -350,6 +352,7 @@ export const GET = withRequestContextParams<{ id: string }>(
               bankSlipUrl: p.bankSlipUrl ?? null,
             },
           }).catch(swallow("admin.revendedores"))
+          await emitUnidadePagamento("unidade.pagamento.confirmado", p.id, "admin")
         }
       }
     } catch (error) {
