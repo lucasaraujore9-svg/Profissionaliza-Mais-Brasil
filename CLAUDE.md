@@ -2146,7 +2146,10 @@ Reuniao de suporte (Gilmar, unidade `otymus`). Tres relatos, um defeito real:
   explicou como "regra sequencial gravada na matricula" — isso nao existe.
 - **Rota de diagnostico `GET /api/cron/diagnostico-ea-vinculos?ids=<ea_aluno_id>`**
   (Bearer CRON_SECRET, SOMENTE LEITURA): compara `usuarios/cursosvinculados` da EA
-  com as nossas matriculas (`soNaEa` / `soAqui`). Segredos da EA sao Sensitive e
+  com as nossas matriculas (`soNaEa` / `soAqui`). Com `?cpf=`/`?email=` busca o
+  cadastro na EA (`usuarios/listar`) e diz se a senha de la e a do PMB, sem
+  devolve-la. Aluno inexistente na EA vem como `{ aviso: "Não foi encontrado..." }`,
+  nao como erro — `buscarAluno` nao trata esse formato. Segredos da EA sao Sensitive e
   nao descem para a maquina: dispare por
   `select app_internal.run_cron('/api/cron/diagnostico-ea-vinculos?ids=...')` e
   leia `net._http_response`.
