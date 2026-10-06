@@ -47,7 +47,12 @@ export async function POST(request: Request) {
           busca.push({
             filtro: filtro.cpf ? "cpf" : "email",
             formato: Array.isArray(bruto) ? `array(${bruto.length})` : typeof bruto,
-            texto: typeof bruto === "string" ? bruto.slice(0, 200) : undefined,
+            texto:
+              typeof bruto === "string"
+                ? bruto.slice(0, 200)
+                : a && typeof a === "object" && "aviso" in a
+                  ? String((a as { aviso: unknown }).aviso).slice(0, 200)
+                  : undefined,
             chaves: a && typeof a === "object" ? Object.keys(a).slice(0, 40) : undefined,
           })
           continue
