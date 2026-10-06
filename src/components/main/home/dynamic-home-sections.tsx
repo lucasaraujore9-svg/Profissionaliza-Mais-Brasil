@@ -2,6 +2,7 @@ import { cookies } from "next/headers"
 import { CourseRow } from "./course-row"
 import { TecnicaSection } from "./tecnica-section"
 import { EjaSection } from "./eja-section"
+import { AcolheBanner, ACOLHE_ANCHOR_CATEGORY } from "./acolhe-banner"
 import { PackagesRow } from "@/components/loja/packages-row"
 import { PlansRow } from "@/components/loja/plans-row"
 import { resolveVitrinePackages } from "@/lib/packages/vitrine"
@@ -58,6 +59,9 @@ export async function DynamicHomeSections({
   const snapshotHolder: { current: BestsellersSnapshot | null } = {
     current: null,
   }
+  // Banner Acolhe entra antes da seção "Diversas áreas"; vitrine sem ela
+  // recebe o banner no fim das seções, para aparecer em todas as unidades.
+  const acolheHolder = { placed: false }
 
   // Pré-processa as seções EM PARALELO (PERF-002): cada renderSection faz I/O
   // independente (queries de catálogo/categorias). O fan-out serial anterior
@@ -72,6 +76,9 @@ export async function DynamicHomeSections({
         bestsellersSnapshot: initialSnapshot,
         onNewBestsellersSnapshot: (snap) => {
           snapshotHolder.current = snap
+        },
+        onAcolhePlaced: () => {
+          acolheHolder.placed = true
         },
       })
         .then((node) => ({ id: section.id, node }))
@@ -118,6 +125,7 @@ export async function DynamicHomeSections({
       {nodes.map((n) => (
         <div key={n.id}>{n.node}</div>
       ))}
+      {!acolheHolder.placed && <AcolheBanner />}
     </>
   )
 }
@@ -130,6 +138,7 @@ async function renderSection(
     supportHoursText: string | null
     bestsellersSnapshot: BestsellersSnapshot | null
     onNewBestsellersSnapshot: (snap: BestsellersSnapshot) => void
+    onAcolhePlaced: () => void
   },
 ): Promise<React.ReactNode | null> {
   const cfg = section.config
@@ -148,7 +157,7 @@ async function renderSection(
     ) {
       seeMoreHref = `/cursos?categoria=${resolved.meta.categorySlug}`
     }
-    return (
+    const row = (
       <CourseRow
         titulo={cfg.title}
         subtitulo={cfg.subtitle || undefined}
@@ -159,6 +168,19 @@ async function renderSection(
         hrefBase={ctx.tenantId ? "/curso" : "/cursos"}
       />
     )
+    if (
+      cfg.kind === "category_courses" &&
+      resolved.meta.categorySlug === ACOLHE_ANCHOR_CATEGORY
+    ) {
+      ctx.onAcolhePlaced()
+      return (
+        <>
+          <AcolheBanner />
+          {row}
+        </>
+      )
+    }
+    return row
   }
 
   if (cfg.kind === "packages") {
