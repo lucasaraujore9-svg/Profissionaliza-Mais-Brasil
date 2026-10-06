@@ -40,7 +40,18 @@ export async function POST(request: Request) {
     const busca = []
     for (const filtro of [cpf && { cpf }, email && { email }].filter(Boolean) as Array<{ cpf?: string; email?: string }>) {
       try {
-        const a = await buscarAluno(filtro)
+        const bruto: unknown = await buscarAluno(filtro)
+        // A doc diz objeto; na pratica pode vir lista ou texto ("nao encontrado").
+        const a = (Array.isArray(bruto) ? bruto[0] : bruto) as Awaited<ReturnType<typeof buscarAluno>> | undefined
+        if (!a || typeof a !== "object" || !("login" in a)) {
+          busca.push({
+            filtro: filtro.cpf ? "cpf" : "email",
+            formato: Array.isArray(bruto) ? `array(${bruto.length})` : typeof bruto,
+            texto: typeof bruto === "string" ? bruto.slice(0, 200) : undefined,
+            chaves: a && typeof a === "object" ? Object.keys(a).slice(0, 40) : undefined,
+          })
+          continue
+        }
         const local = await prisma.student.findFirst({
           where: cpf ? { cpf } : { email: { equals: email, mode: "insensitive" } },
           select: { passwordHash: true },
