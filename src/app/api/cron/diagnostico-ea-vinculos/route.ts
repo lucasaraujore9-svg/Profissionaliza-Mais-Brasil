@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { cursosVinculados } from "@/lib/plataforma-cursos/client"
+import { compare } from "bcryptjs"
+import { buscarAluno, cursosVinculados } from "@/lib/plataforma-cursos/client"
 import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 
 export const maxDuration = 60
@@ -30,8 +31,49 @@ export async function POST(request: Request) {
     .map((s) => s.trim())
     .filter((s) => /^\d+$/.test(s))
     .slice(0, 20)
+  // Busca por CPF/e-mail: acha o cadastro na EA quando o nosso ainda e
+  // `pending_` (aluno de curso do LMS que alguem cadastrou na EA por fora).
+  const params = new URL(request.url).searchParams
+  const cpf = params.get("cpf")?.replace(/\D/g, "") || undefined
+  const email = params.get("email")?.trim() || undefined
+  if (cpf || email) {
+    const busca = []
+    for (const filtro of [cpf && { cpf }, email && { email }].filter(Boolean) as Array<{ cpf?: string; email?: string }>) {
+      try {
+        const a = await buscarAluno(filtro)
+        const local = await prisma.student.findFirst({
+          where: cpf ? { cpf } : { email: { equals: email, mode: "insensitive" } },
+          select: { passwordHash: true },
+        })
+        busca.push({
+          filtro: cpf && filtro.cpf ? "cpf" : "email",
+          ea: a
+            ? {
+                login: a.login,
+                nome: a.nome,
+                email: a.email,
+                polo: a.polo,
+                status: a.status,
+                apostila: a.apostila,
+                datacadastro: a.datacadastro,
+                funcionario_cadastro: a.funcionario_cadastro,
+                vendedor: a.vendedor,
+                // Nunca a senha: so se ela e a mesma do login do PMB.
+                temSenha: Boolean(a.senha),
+                senhaIgualPmb:
+                  a.senha && local?.passwordHash ? await compare(a.senha, local.passwordHash) : null,
+                cursos: /^\d+$/.test(a.login) ? await cursosVinculados(Number(a.login)) : null,
+              }
+            : null,
+        })
+      } catch (err) {
+        busca.push({ filtro: filtro.cpf ? "cpf" : "email", erro: err instanceof Error ? err.message : String(err) })
+      }
+    }
+    return NextResponse.json({ busca })
+  }
   if (ids.length === 0) {
-    return NextResponse.json({ error: "Informe ids=<ea_aluno_id>,..." }, { status: 400 })
+    return NextResponse.json({ error: "Informe ids=<ea_aluno_id>,... ou cpf=/email=" }, { status: 400 })
   }
 
   const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim().toLowerCase()
