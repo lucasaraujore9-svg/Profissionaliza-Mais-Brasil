@@ -15,6 +15,7 @@ export type SectionKind =
   | "institutional"
   | "tecnica"
   | "eja"
+  | "acolhe"
   | "packages"
   | "subscriptions"
 
@@ -86,6 +87,11 @@ export interface EjaConfig {
   kind: "eja"
 }
 
+/** Banner Acolhe Mais Brasil — conteúdo fixo; só posição/ativação. */
+export interface AcolheConfig {
+  kind: "acolhe"
+}
+
 /**
  * Seção "Pacotes de cursos". O conteúdo (quais pacotes) é derivado em runtime
  * pela vitrine (PMB + próprios da unidade, menos os ocultos) — a config carrega
@@ -114,6 +120,7 @@ export type AnySectionConfig =
   | InstitutionalConfig
   | TecnicaConfig
   | EjaConfig
+  | AcolheConfig
   | PackagesConfig
   | SubscriptionsConfig
 

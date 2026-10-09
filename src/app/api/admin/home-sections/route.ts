@@ -3,6 +3,7 @@ import { listSections, createSection } from "@/lib/home/api"
 import {
   ensureTecnicaSection,
   ensureEjaSection,
+  ensureAcolheSection,
   ensureSubscriptionsSection,
 } from "@/lib/home/sections"
 import { requireAdmin } from "@/lib/auth/admin-guard"
@@ -17,6 +18,7 @@ export const GET = withRequestContext(
     // Backfill: garante as seções singleton para ambientes/escopos anteriores a elas.
     await ensureTecnicaSection(null)
     await ensureEjaSection(null)
+    await ensureAcolheSection(null)
     await ensureSubscriptionsSection(null)
     return listSections(SCOPE)
   },

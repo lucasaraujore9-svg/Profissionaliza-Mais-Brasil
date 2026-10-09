@@ -1,11 +1,9 @@
 export const ACOLHE_URL = "https://acolhemaisbrasil.com.br/"
 
-/** Seção de cursos antes da qual o banner entra (pedido do cliente: na divisão do "Diversas áreas"). */
-export const ACOLHE_ANCHOR_CATEGORY = "diversas"
-
 /**
- * Banner do Acolhe Mais Brasil (atendimento psicológico gratuito para alunos),
- * fixo em todas as vitrines — PMB e unidades. Mesmo formato do banner EJA:
+ * Banner do Acolhe Mais Brasil (atendimento psicológico gratuito para alunos).
+ * Renderizado pela seção kind="acolhe" da home — PMB e unidades movem ou
+ * desativam como qualquer seção. Mesmo formato do banner EJA:
  * só imagem, clicável, desktop 2048×243 e mobile 1080×1080, até 1600px.
  */
 export function AcolheBanner() {

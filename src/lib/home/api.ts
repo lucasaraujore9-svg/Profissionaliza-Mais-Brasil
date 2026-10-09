@@ -83,7 +83,8 @@ export async function createSection(scope: Scope, body: unknown) {
     validation.kind === "bestsellers" ||
     validation.kind === "categories_grid" ||
     validation.kind === "tecnica" ||
-    validation.kind === "eja"
+    validation.kind === "eja" ||
+    validation.kind === "acolhe"
   ) {
     const exists = await prisma.homeSection.findFirst({
       where: { tenantId: scope.tenantId, kind: validation.kind },
@@ -97,6 +98,8 @@ export async function createSection(scope: Scope, body: unknown) {
             ? "Já existe a seção “Cursos Técnicos” — edite a existente"
             : validation.kind === "eja"
               ? "Já existe a seção “EJA” — edite a existente"
+              : validation.kind === "acolhe"
+                ? "Já existe o banner “Acolhe Mais Brasil”"
               : "Já existe um bloco de categorias — edite o existente"
       return NextResponse.json({ error: message }, { status: 409 })
     }
@@ -197,7 +200,8 @@ export async function updateSection(
   // revendedor: a vitrine herda o conteúdo da PMB no render; a unidade só altera
   // position/enabled. Ignora qualquer `config` enviado em escopo de tenant para
   // essas kinds — enforcement server-side do lock que o painel já mostra.
-  const isPmbStandardizedKind = slide.kind === "tecnica" || slide.kind === "eja"
+  const isPmbStandardizedKind =
+    slide.kind === "tecnica" || slide.kind === "eja" || slide.kind === "acolhe"
   const ignoreTenantConfig = scope.tenantId !== null && isPmbStandardizedKind
 
   if (b.config !== undefined && !ignoreTenantConfig) {
@@ -293,6 +297,12 @@ export async function deleteSection(scope: Scope, id: string): Promise<Response>
   if (slide.kind === "eja") {
     return NextResponse.json(
       { error: "A seção “EJA” não pode ser removida — desative-a se não quiser exibi-la" },
+      { status: 400 },
+    )
+  }
+  if (slide.kind === "acolhe") {
+    return NextResponse.json(
+      { error: "O banner “Acolhe Mais Brasil” não pode ser removido — desative-o se não quiser exibi-lo" },
       { status: 400 },
     )
   }

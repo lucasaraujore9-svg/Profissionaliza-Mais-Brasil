@@ -7,6 +7,7 @@ import {
   ChevronUp,
   GraduationCap,
   GripVertical,
+  HeartHandshake,
   Layers,
   Loader2,
   Lock,
@@ -149,7 +150,11 @@ export function SectionList({
           // Técnica e EJA não usam o fluxo de draft/config (conteúdo vive em
           // SystemSettings, editor autossuficiente) — não cria draft.
           const sec = sections.find((x) => x.id === id)
-          if (sec && (sec.kind === "tecnica" || sec.kind === "eja")) continue
+          if (
+            sec &&
+            (sec.kind === "tecnica" || sec.kind === "eja" || sec.kind === "acolhe")
+          )
+            continue
           onStartEditing(id)
         }
       }}
@@ -358,6 +363,14 @@ export function SectionList({
               <AccordionContent>
                 <EjaEditor canEdit={canEditTecnica} />
               </AccordionContent>
+            ) : s.kind === "acolhe" ? (
+              <AccordionContent>
+                <p className="text-sm text-zinc-600">
+                  Banner fixo do Acolhe Mais Brasil (atendimento psicológico
+                  gratuito para alunos), com link para o site do programa. Use
+                  as setas para mudar a posição ou o botão para desativar.
+                </p>
+              </AccordionContent>
             ) : (
             <AccordionContent>
               <div className="space-y-4">
@@ -444,6 +457,11 @@ function SectionIcon({ kind }: { kind: SectionRecord["kind"] }) {
       bg: "bg-[var(--color-pmb-gold,#F2B705)]/15",
       fg: "text-[var(--color-pmb-green)]",
     },
+    acolhe: {
+      icon: HeartHandshake,
+      bg: "bg-rose-100",
+      fg: "text-rose-600",
+    },
     packages: {
       icon: Package,
       bg: "bg-emerald-100",
@@ -495,6 +513,8 @@ function titleOfSection(
       return "Cursos Técnicos"
     case "eja":
       return "EJA"
+    case "acolhe":
+      return "Banner Acolhe Mais Brasil"
     case "packages":
       return (s.config as PackagesConfig).title || "Pacotes de cursos"
     case "subscriptions":
@@ -529,6 +549,8 @@ function summaryOfSection(s: SectionRecord): string {
       return "Lista padronizada pela administração · 8 cursos"
     case "eja":
       return "Banner com link · imagem padronizada pela administração"
+    case "acolhe":
+      return "Banner do atendimento psicológico gratuito · padrão da rede"
     case "packages":
       return "Pacotes montados automaticamente · rede + próprios da unidade"
     case "subscriptions":
@@ -654,7 +676,8 @@ function EditorForKind({
       return <InstitutionalEditor section={section} onPatch={onPatch} />
     case "tecnica":
     case "eja":
-      // Técnica/EJA são renderizadas fora do EditorForKind (autossuficientes).
+    case "acolhe":
+      // Técnica/EJA/Acolhe são renderizadas fora do EditorForKind (autossuficientes).
       return null
     case "packages":
       return <PackagesEditor section={section} onPatch={onPatch} />

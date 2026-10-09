@@ -114,6 +114,15 @@ export interface EjaSectionConfig {
 }
 
 /**
+ * Banner do Acolhe Mais Brasil (atendimento psicológico gratuito para alunos).
+ * Conteúdo fixo no código (`AcolheBanner`), igual em toda vitrine: a config é
+ * só marcador — PMB e unidades movem ou desativam, não editam.
+ */
+export interface AcolheSectionConfig {
+  kind: "acolhe"
+}
+
+/**
  * Seção "Pacotes de cursos" — exibe uma linha de cards de pacote. O conteúdo
  * (quais pacotes, preço) é resolvido em runtime pela vitrine: pacotes da PMB
  * (auto-distribuídos) + pacotes próprios da unidade, descontando os que a
@@ -147,6 +156,7 @@ export type AnySectionConfig =
   | InstitutionalConfig
   | TecnicaSectionConfig
   | EjaSectionConfig
+  | AcolheSectionConfig
   | PackagesSectionConfig
   | SubscriptionsSectionConfig
 
@@ -172,6 +182,7 @@ export const SECTION_KINDS = [
   "institutional",
   "tecnica",
   "eja",
+  "acolhe",
   "packages",
   "subscriptions",
 ] as const
@@ -296,6 +307,12 @@ export function validateSectionPayload(
   // (PMB) e Tenant.eja* (link por unidade).
   if (kind === "eja") {
     return { ok: true, kind, config: { kind: "eja" } }
+  }
+
+  // ---------- acolhe ----------
+  // Marcador: o banner é fixo no código.
+  if (kind === "acolhe") {
+    return { ok: true, kind, config: { kind: "acolhe" } }
   }
 
   // ---------- packages ----------
@@ -785,6 +802,7 @@ export async function ensureTenantHomeSections(tenantId: string): Promise<void> 
     // tenants antigos — caso contrário não apareceriam no painel nem na home.
     await ensureTecnicaSection(tenantId)
     await ensureEjaSection(tenantId)
+    await ensureAcolheSection(tenantId)
     await ensurePackagesSection(tenantId)
     await ensureSubscriptionsSection(tenantId)
     return
@@ -875,6 +893,35 @@ export async function ensurePackagesSection(
     kind: "packages",
     enabled: true,
     config: { kind: "packages", title: "Pacotes de cursos", subtitle: "Leve vários cursos por um valor único" },
+  })
+}
+
+/**
+ * Garante (idempotente) a linha singleton kind="acolhe" para um escopo. Nasce
+ * logo após "Mais vendidos" (bestsellers), ligada; sem âncora, no fim. Depois
+ * disso é uma seção como as outras — a âncora só define a posição inicial.
+ */
+export async function ensureAcolheSection(
+  tenantId: string | null,
+): Promise<void> {
+  const existing = await prisma.homeSection.findFirst({
+    where: { tenantId, kind: "acolhe" },
+    select: { id: true },
+  })
+  if (existing) return
+
+  const bestsellers = await prisma.homeSection.findFirst({
+    where: { tenantId, kind: "bestsellers" },
+    select: { position: true },
+  })
+  const position =
+    bestsellers != null
+      ? bestsellers.position + 1
+      : (await lastPosition(tenantId)) + 1
+  await createSectionAt(tenantId, position, {
+    kind: "acolhe",
+    enabled: true,
+    config: { kind: "acolhe" },
   })
 }
 
@@ -1046,6 +1093,8 @@ function canonicalRank(
       return 1000
     case "bestsellers":
       return 1
+    case "acolhe":
+      return 1.2
     case "packages":
       return 1.5
     case "subscriptions":
