@@ -66,3 +66,6 @@ next-env.d.ts
 # recria-lo para o arquivo sumir do repo em silencio. As linhas 13-20 ja cobrem
 # os arquivos de env reais.
 .env*.local
+
+# saida local da skill /brag (video de lancamento)
+brag-output/
