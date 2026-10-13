@@ -2496,6 +2496,31 @@ acontece com uma unidade. Cadastro em /admin/configuracoes -> aba API ->
   `nullish()`. O progresso nao se perdeu (o delta horario `day-update` cobre),
   so a latencia era de ate 1h e a cota de aulas reagia atrasada.
 
+### Estorno MP revogava a matricula errada (2026-10-13)
+
+Chamado educasobral: aluna com matricula paga (LDB para professores) apareceu
+cancelada sem ninguem ter cancelado. O PIX abandonado da 1a tentativa
+(mesma `external_reference`) expirou dias depois e chegou `cancelled`; o webhook
+revogou a matricula que um 2o PIX ja tinha pago.
+
+- **Dois defeitos em `mercadopago/process.ts`.** (1) O revoke nao conferia se o
+  pagamento avisado era o que LIBEROU a matricula. (2) O Passo 1 descartava todo
+  webhook de pagamento com linha em `payments` — entao estorno/chargeback de
+  pagamento PAGO nunca chegou ao revoke (as 147 linhas MP estavam `APPROVED`).
+  O revoke so rodava para pagamento nunca pago: o branch inteiro so acertava o
+  caso errado.
+- **Agora:** o Passo 1 so encerra se a linha ja foi revertida; o revoke exige
+  `payments.enrollmentId === enrollmentId` para aquele `mpPaymentId`; aprovado
+  repetido nao refaz fulfill nem re-avisa HMAC. No topico de
+  `subscription_authorized_payment` a linha e re-buscada pelo id real.
+- **Muda comportamento:** estorno/chargeback feito no painel do MP passa a tirar
+  o acesso; venda PENDENTE com PIX expirado deixa de virar CANCELLED (o aluno
+  ainda pode pagar em `/pagar/<id>`).
+- **Raio medido:** dos 20 revokes por `cancelled` desde julho, so a matricula da
+  Regina era paga — reativada no LMS (mesmo `enrollmentId`, progresso mantido) e
+  no banco, com `audit_logs` `enrollment.reactivate`.
+- Testes em `process.test.ts`, verificados POR MUTACAO (3/3).
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

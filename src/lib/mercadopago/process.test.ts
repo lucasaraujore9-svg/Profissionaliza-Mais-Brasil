@@ -8,8 +8,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("@/lib/prisma", () => {
   const prisma = {
-    payment: { findUnique: vi.fn() },
-    enrollment: { findFirst: vi.fn() },
+    payment: { findUnique: vi.fn(), updateMany: vi.fn() },
+    enrollment: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    $transaction: vi.fn(async (ops: unknown[]) => ops),
     tenant: { findUnique: vi.fn() },
     webhookLog: { update: vi.fn() },
     studentSubscription: { findUnique: vi.fn() },
@@ -73,8 +74,13 @@ import { handleMpCarnePayment } from "@/lib/subscriptions/carne-webhook"
 import { revokeSubscriptionForRefund } from "@/lib/subscriptions/renew"
 
 const p = prisma as unknown as {
-  payment: { findUnique: ReturnType<typeof vi.fn> }
-  enrollment: { findFirst: ReturnType<typeof vi.fn> }
+  payment: { findUnique: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> }
+  enrollment: {
+    findFirst: ReturnType<typeof vi.fn>
+    findUnique: ReturnType<typeof vi.fn>
+    update: ReturnType<typeof vi.fn>
+  }
+  $transaction: ReturnType<typeof vi.fn>
   tenant: { findUnique: ReturnType<typeof vi.fn> }
   webhookLog: { update: ReturnType<typeof vi.fn> }
   studentSubscription: { findUnique: ReturnType<typeof vi.fn> }
@@ -298,5 +304,74 @@ describe("processMpWebhook — assinatura de aluno (pmb_sub_)", () => {
     await processMpWebhook(args())
 
     expect(revokeMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("processMpWebhook — estorno/cancelamento de matricula avulsa", () => {
+  const paidEnrollment = {
+    id: "e1",
+    status: "ACTIVE",
+    studentId: "s1",
+    courseId: "c1",
+    course: { nome: "LDB" },
+    student: { id: "s1", nome: "Aluna" },
+  }
+
+  it("PIX abandonado (`cancelled`, sem linha local) NAO revoga a matricula paga por outro pagamento", async () => {
+    getPaymentMock.mockResolvedValue(mpPayment("cancelled"))
+    p.payment.findUnique.mockResolvedValue(null)
+    p.enrollment.findUnique.mockResolvedValue(paidEnrollment)
+
+    await processMpWebhook(args())
+
+    expect(p.enrollment.update).not.toHaveBeenCalled()
+    expect(p.$transaction).not.toHaveBeenCalled()
+    expect(p.webhookLog.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ processed: true, error: expect.stringContaining("ignorado") }),
+      }),
+    )
+  })
+
+  it("estorno do pagamento que LIBEROU a matricula revoga (antes o Passo 1 o descartava)", async () => {
+    getPaymentMock.mockResolvedValue(mpPayment("refunded"))
+    p.payment.findUnique.mockResolvedValue({ id: "pmt1", enrollmentId: "e1", mpStatus: "APPROVED" })
+    p.enrollment.findUnique.mockResolvedValue(paidEnrollment)
+
+    await processMpWebhook(args())
+
+    expect(p.enrollment.update).toHaveBeenCalledWith({ where: { id: "e1" }, data: { status: "CANCELLED" } })
+    expect(p.payment.updateMany).toHaveBeenCalledWith({
+      where: { mpPaymentId: "pay_1" },
+      data: { mpStatus: "REFUNDED" },
+    })
+  })
+
+  it("pagamento de OUTRA matricula com a mesma referencia nao revoga", async () => {
+    getPaymentMock.mockResolvedValue(mpPayment("refunded"))
+    p.payment.findUnique.mockResolvedValue({ id: "pmt9", enrollmentId: "e9", mpStatus: "APPROVED" })
+
+    await processMpWebhook(args())
+
+    expect(p.enrollment.update).not.toHaveBeenCalled()
+  })
+
+  it("aprovado repetido de pagamento ja liberado: sem fulfill e sem re-avisar HMAC", async () => {
+    hmacMock.mockReturnValue(false)
+    getPaymentMock.mockResolvedValue(mpPayment("approved"))
+    p.payment.findUnique.mockResolvedValue({ id: "pmt1", enrollmentId: "e1", mpStatus: "APPROVED" })
+
+    await processMpWebhook(args())
+
+    expect(fulfillMock).not.toHaveBeenCalled()
+    expect(notifyMock).not.toHaveBeenCalled()
+  })
+
+  it("ja revertido: encerra no Passo 1 sem consultar o MP", async () => {
+    p.payment.findUnique.mockResolvedValue({ id: "pmt1", enrollmentId: "e1", mpStatus: "REFUNDED" })
+
+    await processMpWebhook(args())
+
+    expect(getPaymentMock).not.toHaveBeenCalled()
   })
 })

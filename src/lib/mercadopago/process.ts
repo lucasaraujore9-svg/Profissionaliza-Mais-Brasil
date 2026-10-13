@@ -320,12 +320,14 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
 
   try {
     // ── Passo 1: idempotência ──────────────────────────────────────────────
-    // Se já processamos este payment, ignora antes de qualquer query/IO.
-    const alreadyPaid = await prisma.payment.findUnique({
+    // Pagamento ja liquidado E ja revertido: nada mais a fazer. O APROVADO segue
+    // adiante: estorno/chargeback chega com o MESMO id e precisa alcancar o
+    // revoke (antes ele era descartado aqui e nenhum estorno jamais revogou).
+    let alreadyPaid = await prisma.payment.findUnique({
       where: { mpPaymentId: paymentId },
-      select: { id: true },
+      select: { id: true, enrollmentId: true, mpStatus: true },
     })
-    if (alreadyPaid) {
+    if (alreadyPaid && alreadyPaid.mpStatus !== "APPROVED") {
       await markLog(logId, true, "payment ja processado")
       return
     }
@@ -436,6 +438,11 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         return
       }
       effectivePaymentId = String(ap.payment_id)
+      // O id da notificacao era o do authorized_payment: a linha local e a do pagamento.
+      alreadyPaid = await prisma.payment.findUnique({
+        where: { mpPaymentId: effectivePaymentId },
+        select: { id: true, enrollmentId: true, mpStatus: true },
+      })
     }
 
     const payment = await getPayment(accessToken, effectivePaymentId)
@@ -555,6 +562,12 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
 
     // ── Passo 6: rotear conforme status ─────────────────────────────────────
     if (payment.status === "approved") {
+      // Notificacao repetida de pagamento ja liberado: sem fulfill e sem
+      // re-avisar a unidade do HMAC a cada reenvio.
+      if (alreadyPaid) {
+        await markLog(logId, true, "payment ja processado")
+        return
+      }
       await fulfillFromMp(tenant, enrollmentId, payment)
       await markLog(logId, true, unverified ? `aprovado via API (${unverified})` : undefined)
       if (unverified) await notifyUnverifiedWebhook(tenant, unverified)
@@ -562,6 +575,14 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     }
 
     if (payment.status in MP_TO_PAYMENT_STATUS) {
+      // So revoga com o pagamento que LIBEROU esta matricula. O PIX abandonado de
+      // uma 1a tentativa carrega a mesma external_reference e chega `cancelled`
+      // dias depois de o aluno pagar por outro PIX — revogar ali cancelava uma
+      // matricula paga (caso educasobral, 09/10/2026).
+      if (alreadyPaid?.enrollmentId !== enrollmentId) {
+        await markLog(logId, true, `ignorado: ${payment.status} de pagamento que nao liberou a matricula`)
+        return
+      }
       await revokeEnrollmentFromMp(tenant, enrollmentId, payment)
       await markLog(logId, true, `revoked: status=${payment.status}`)
       return
