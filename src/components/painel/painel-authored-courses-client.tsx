@@ -1,10 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { toast } from "sonner"
 import {
   AlertTriangle,
   BookOpen,
+  ClipboardCheck,
   ExternalLink,
   Loader2,
   Pencil,
@@ -13,7 +15,7 @@ import {
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog,
@@ -241,18 +243,23 @@ export function PainelAuthoredCoursesClient({ canManage }: { canManage: boolean 
             vitrine; na sua, o valor é todo seu.
           </p>
         </div>
-        {canManage && (
-          /* Dois botões, e não um menu: o tipo é decidido na criação e não muda
-             depois. Escolher antes é o que torna a decisão consciente. */
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setEditing("new")}>
-              <Plus className="size-4" /> Novo curso
-            </Button>
-            <Button variant="outline" onClick={() => setEditing("new-ebook")}>
-              <BookOpen className="size-4" /> Novo e-book
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <Link href="/painel/cursos/correcoes" className={buttonVariants({ variant: "outline" })}>
+            <ClipboardCheck className="size-4" /> Corrigir provas
+          </Link>
+          {canManage && (
+            /* Dois botões, e não um menu: o tipo é decidido na criação e não muda
+               depois. Escolher antes é o que torna a decisão consciente. */
+            <>
+              <Button onClick={() => setEditing("new")}>
+                <Plus className="size-4" /> Novo curso
+              </Button>
+              <Button variant="outline" onClick={() => setEditing("new-ebook")}>
+                <BookOpen className="size-4" /> Novo e-book
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {!meta.canDistribute && (

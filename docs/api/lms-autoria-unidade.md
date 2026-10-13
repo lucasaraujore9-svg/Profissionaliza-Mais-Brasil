@@ -142,6 +142,24 @@ PMB registra um aviso e mantém o curso fora de todas as vitrines.
 O mesmo campo deve viajar em `GET /api/v1/courses/:slug` e no delta
 `GET /api/v1/day-update`.
 
+### 3.5 Correção de dissertativas — `GET/POST /api/v1/tenants/:id/correcoes`
+
+A unidade dona corrige, no painel do PMB (`/painel/cursos/correcoes`), as
+questões dissertativas das provas dos cursos dela. Antes isso só existia em
+`/autoria/correcoes` do LMS, fechado para admin da plataforma.
+
+- `GET /api/v1/tenants/:id/correcoes` — tentativas com `pendingReview = true` em
+  curso cujo `ownerTenantExternalId = :id` (as 100 mais antigas). Devolve só o
+  NOME do aluno: ele pode ter comprado em outra vitrine, e e-mail daria ao
+  produtor a carteira de clientes de outra unidade.
+- `POST /api/v1/tenants/:id/correcoes/:attemptId` `{ awards: { [answerId]: pontos }, gradedBy? }`
+  — toda dissertativa pendente precisa de nota (400); tentativa de outra unidade
+  ou do catálogo da plataforma = 404; já corrigida = 409 (CAS em `pendingReview`,
+  dois corretores não gravam duas notas). Nota limitada ao peso da questão.
+
+O núcleo é `src/lib/quizGrading.ts` do LMS, o MESMO usado por `/autoria/correcoes`:
+recalcula o progresso do curso (é o que libera o certificado) e avisa o aluno.
+
 ## 4. O que NÃO muda
 
 - Matrícula, SSO do aluno, progresso, bloqueio e branding continuam idênticos.
