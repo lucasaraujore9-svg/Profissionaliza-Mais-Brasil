@@ -69,19 +69,12 @@ const ALTERNATIVAS = [
 
 const PLANOS = [
   {
-    titulo: "Profissionaliza",
-    preco: "R$ 209",
-    periodo: "/mês",
-    descricao: "Sua escola no ar: site próprio e 200 cursos, sem comissão.",
-    destaque: false,
-  },
-  {
     titulo: "Profissionaliza PRO",
     preco: "R$ 239",
     periodo: "/mês",
     descricao:
-      "Tudo do Profissionaliza mais a Automação, que vende no WhatsApp por você.",
-    destaque: true,
+      "Sua escola no ar: site próprio, 200 cursos, sem comissão e a Automação que vende no WhatsApp por você.",
+    destaque: false,
   },
 ] as const
 
@@ -101,7 +94,7 @@ const PASSOS = [
   {
     quando: "Em até 1 dia útil",
     titulo: "A gente te chama no WhatsApp",
-    descricao: "Pra tirar as suas dúvidas e escolher com você o melhor plano.",
+    descricao: "Pra tirar as suas dúvidas e colocar a sua escola no ar.",
     icon: Headset,
   },
   {

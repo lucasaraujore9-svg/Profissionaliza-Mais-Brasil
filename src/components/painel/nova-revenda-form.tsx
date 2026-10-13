@@ -63,7 +63,7 @@ export function NovaRevendaForm({ initial }: { initial?: NovaRevendaInitial } = 
   const [ownerEmail, setOwnerEmail] = useState(initial?.ownerEmail ?? "")
   const [ownerCpfCnpj, setOwnerCpfCnpj] = useState(initial?.ownerCpfCnpj ?? "")
   const [ownerPhone, setOwnerPhone] = useState(initial?.ownerPhone ?? "")
-  // Plano da sub-revenda: só 209 (base) ou 239 (PRO, com Automação). Nunca grátis.
+  // Plano da sub-revenda: só o PRO (239, com Automação). Nunca grátis.
   const [planValue, setPlanValue] = useState<number>(RESELLER_PLANS[0].value)
   const [installments, setInstallments] = useState("1")
 

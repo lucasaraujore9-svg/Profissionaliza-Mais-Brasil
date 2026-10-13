@@ -209,7 +209,7 @@ const PARCEIRO_AGENT_MD = [
   "    }",
   "",
   "  slug       opcional (3-32, minusculas, numeros e hifen); ausente = derivado do nome",
-  "  plano      profissionaliza (R$ 209) ou pro (R$ 239, ja liga Automacao). Nao ha outro.",
+  "  plano      pro (R$ 239, ja liga Automacao). Opcional; nao ha outro.",
   "  parcelasPrimeiraMensalidade  opcional, 1-12 (teto do cartao na 1a mensalidade)",
   "  titular.email vira o login do titular e nao pode ja existir",
   "",

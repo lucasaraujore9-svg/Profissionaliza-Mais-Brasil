@@ -16,10 +16,7 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { contextLogger } from "@/lib/logger"
-import {
-  PLANO_GROWTH_VALOR,
-  PLANO_GROWTH_DESCRICAO,
-} from "@/lib/revendedor/plano"
+import { RESELLER_PLANS } from "@/lib/resellers/plans"
 import { generateUniqueReferralCode } from "@/lib/referrals/code"
 import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
@@ -50,6 +47,10 @@ async function buildUniqueSlug(base: string): Promise<string> {
   }
   return slug
 }
+
+// Mesmo plano de tabela das outras portas de criação (só o PRO).
+const PLANO = RESELLER_PLANS[0]
+const PLANO_DESCRICAO = `Assinatura mensal do plano ${PLANO.label} - Profissionaliza Mais Brasil`
 
 export const POST = withRequestContext(
   { action: "revendedores.cadastro", route: "/api/revendedores/cadastro" },
@@ -158,10 +159,10 @@ export const POST = withRequestContext(
     asaasSubscription = await createSubscription({
       customer: asaasCustomer.id,
       billingType: pagamento.billingType,
-      value: PLANO_GROWTH_VALOR,
+      value: PLANO.value,
       nextDueDate: formatDueDate(3),
       cycle: "MONTHLY",
-      description: PLANO_GROWTH_DESCRICAO,
+      description: PLANO_DESCRICAO,
       externalReference: `tenant_pending_${slug}`,
     }, motherAsaasKey())
   } catch (error) {
@@ -187,7 +188,8 @@ export const POST = withRequestContext(
           slug,
           status: "PENDING",
           billingMode: "AUTO",
-          planValue: new Prisma.Decimal(PLANO_GROWTH_VALOR),
+          planValue: new Prisma.Decimal(PLANO.value),
+          automationEnabled: PLANO.automation,
           asaasCustomerId: asaasCustomer.id,
           asaasSubscriptionId: asaasSubscription.id,
           referralCode,
@@ -271,7 +273,7 @@ export const POST = withRequestContext(
           data: {
             tenantId: createdTenantId,
             asaasPaymentId: firstPayment.id,
-            amount: PLANO_GROWTH_VALOR,
+            amount: PLANO.value,
             billingType: pagamento.billingType,
             status: "PENDING",
             dueDate: new Date(firstPayment.dueDate),

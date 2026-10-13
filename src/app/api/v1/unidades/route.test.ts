@@ -81,6 +81,20 @@ describe("POST /api/v1/unidades", () => {
     expect(create).not.toHaveBeenCalled()
   })
 
+  it("plano profissionaliza (R$ 209) saiu de venda: recusado", async () => {
+    const res = await post({ ...BODY, plano: "profissionaliza" })
+    expect(res.status).toBe(400)
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it("sem plano: cria no PRO com Automação", async () => {
+    create.mockResolvedValue(OK_RESULT)
+    const { plano: _omit, ...semPlano } = BODY
+    const res = await post(semPlano)
+    expect(res.status).toBe(201)
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ planValue: 239, automationEnabled: true }))
+  })
+
   it("e-mail/slug já usado vira 409 CONFLICT", async () => {
     create.mockResolvedValue({ ok: false, status: 409, error: "Já existe" })
     const res = await post(BODY)

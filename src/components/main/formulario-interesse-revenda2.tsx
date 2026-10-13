@@ -11,7 +11,7 @@ import { slugify } from "@/lib/utils"
 // Variante do formulario de captacao usada SOMENTE na landing /lp-revenda2 (so
 // no dominio PMB). Alem de nome/email/whatsapp, coleta: o subdominio (slug)
 // desejado para a vitrine — auto-gerado a partir do nome e editavel —, o CPF do
-// interessado e o plano (R$ 209 ou R$ 239). Tudo cai no mesmo /api/leads e
+// interessado e o plano (R$ 239). Tudo cai no mesmo /api/leads e
 // aparece nos dados do lead de revenda.
 
 type SubmitState =
@@ -36,16 +36,10 @@ interface ApiError {
 
 const PLANOS = [
   {
-    value: "Profissionaliza (R$ 209)",
-    titulo: "Profissionaliza",
-    preco: "R$ 209/mês",
-    descricao: "Site personalizado + mais de 100 cursos, sem comissão.",
-  },
-  {
     value: "Profissionaliza PRO (R$ 239)",
     titulo: "Profissionaliza PRO",
     preco: "R$ 239/mês",
-    descricao: "Tudo do plano + Automação que vende no WhatsApp por você.",
+    descricao: "Site personalizado + mais de 100 cursos, sem comissão, com a Automação que vende no WhatsApp por você.",
   },
 ] as const
 

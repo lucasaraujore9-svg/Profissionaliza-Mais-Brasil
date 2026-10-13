@@ -2421,8 +2421,8 @@ o link da 1a mensalidade. Para o sistema de automacao interno. Contrato em
   PMB, e-mail de onboarding com a senha temporaria, vitrine semeada. O `actor`
   aceita `userId: null`; a auditoria grava `actorRole: "API_KEY"` e
   `actorEmail: "api:<prefixo da chave>"`.
-- **So os planos de tabela** (`profissionaliza` 209 / `pro` 239, mapeados de
-  `RESELLER_PLANS`). Cortesia, promocao e valor livre seguem so no /admin: uma
+- **So o plano de tabela** (`pro` 239, de `RESELLER_PLANS`; o `profissionaliza`
+  209 saiu de venda em 2026-10-13 — unidade que ja esta nele segue igual). Cortesia, promocao e valor livre seguem so no /admin: uma
   chave vazada nao abre unidade de graca. Com isso a trava de cortesia por
   titular nunca dispara por aqui.
 - **O link e `/cobranca/<paymentId>`** (checkout transparente do PMB), nunca o

@@ -100,8 +100,8 @@ export function AutomacaoSection() {
               Uma venda recuperada já paga o mês inteiro.
             </p>
             <p className="mt-3 text-sm font-medium text-[var(--color-pmb-green-900)]/75">
-              São só R$ 30 a mais na mensalidade pra ter um time de vendas
-              trabalhando por você sem parar.
+              Já vem no plano: um time de vendas trabalhando por você sem
+              parar.
             </p>
             <a
               href="#planos"

@@ -19,7 +19,7 @@ export const metadata = {
   title:
     "Tenha o seu portal de cursos profissionalizantes | Profissionaliza Mais Brasil",
   description:
-    "Empreenda na educação com um modelo inovador. Mais de 100 cursos profissionalizantes prontos, site personalizado e suporte do maior grupo educacional do Brasil. A partir de R$ 209/mês, sem comissão — ou R$ 239/mês com a Automação que vende no WhatsApp por você.",
+    "Empreenda na educação com um modelo inovador. Mais de 100 cursos profissionalizantes prontos, site personalizado e suporte do maior grupo educacional do Brasil. R$ 239/mês, sem comissão, com a Automação que vende no WhatsApp por você.",
 }
 
 const faqSchema = {

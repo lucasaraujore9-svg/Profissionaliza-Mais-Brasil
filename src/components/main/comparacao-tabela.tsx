@@ -3,7 +3,7 @@ import { Check, X } from "lucide-react"
 const linhas = [
   {
     criterio: "Quanto custa pra começar",
-    pmb: "R$ 209/mês",
+    pmb: "R$ 239/mês",
     afiliados: "Grátis",
     propria: "R$ 30 mil+",
   },

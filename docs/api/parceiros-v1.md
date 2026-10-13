@@ -321,7 +321,7 @@ Authorization: Bearer pmb_live_xxx
 |-------|-------------|-------|
 | `nome` | sim | 2–80 caracteres. |
 | `slug` | não | 3–32, letras minúsculas, números e hífen. Ausente = derivado do `nome`. Vira o subdomínio da vitrine. |
-| `plano` | sim | `profissionaliza` (R$ 209) ou `pro` (R$ 239, já liga o módulo de Automação). Não há outro valor: cortesia, promoção e preço livre são só pelo /admin. |
+| `plano` | não | `pro` (R$ 239, já liga o módulo de Automação), que é o padrão. Não há outro valor — `profissionaliza` (R$ 209) saiu de venda em 2026-10-13 e é recusado com 400. Cortesia, promoção e preço livre são só pelo /admin. |
 | `parcelasPrimeiraMensalidade` | não | 1–12, teto do cartão na 1ª mensalidade. Padrão 1. |
 | `titular.nome` / `email` / `cpfCnpj` | sim | O e-mail vira o login do titular e não pode já existir. |
 | `titular.telefone` | não | 8–20 caracteres. |

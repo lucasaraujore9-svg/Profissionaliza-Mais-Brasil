@@ -25,13 +25,13 @@ import { slugify } from "@/lib/utils"
 export const dynamic = "force-dynamic"
 
 const PLANO_PRO = RESELLER_PLANS.find((p) => p.automation)!
-const PLANO_BASE = RESELLER_PLANS.find((p) => !p.automation)!
 
 const bodySchema = z.object({
   nome: z.string().trim().min(2).max(80),
   /** Ausente = derivado do nome. */
   slug: z.string().trim().toLowerCase().min(3).max(32).regex(SLUG_REGEX, "Use apenas letras, números e hífen").optional(),
-  plano: z.enum(["profissionaliza", "pro"]),
+  /** Só "pro": o "profissionaliza" (R$ 209) saiu de venda em 2026-10-13. */
+  plano: z.literal("pro").default("pro"),
   /** Teto de parcelas no cartão da 1ª mensalidade (1 = à vista). */
   parcelasPrimeiraMensalidade: z.number().int().min(1).max(12).default(1),
   titular: z.object({
@@ -63,7 +63,7 @@ export const POST = withRequestContext(
       })
     }
     const data = parsed.data
-    const plano = data.plano === "pro" ? PLANO_PRO : PLANO_BASE
+    const plano = PLANO_PRO
     const slug = data.slug ?? slugify(data.nome).slice(0, 32).replace(/-+$/, "")
 
     try {

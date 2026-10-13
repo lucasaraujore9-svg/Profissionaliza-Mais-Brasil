@@ -1,13 +1,10 @@
 import { Check, Shield } from "lucide-react"
 
-// Resumo do plano base (Profissionaliza, R$ 209) para o checkout direto.
-// A landing /seja-revendedor agora oferece dois planos (ver planos-pmb.tsx):
-// Profissionaliza e Profissionaliza PRO (+R$ 30, com Automação). Quando o
-// checkout passar a vender o PRO, este componente deve receber o plano
-// selecionado via props em vez de hardcoded.
+// Resumo do plano para o checkout direto. Só existe o PRO (R$ 239, com
+// Automação) — mesmo valor que /api/revendedores/cadastro cobra.
 const PLAN = {
-  name: "Plano Profissionaliza",
-  priceLabel: "R$ 209",
+  name: "Plano Profissionaliza PRO",
+  priceLabel: "R$ 239",
   cadenceLabel: "/mês",
   pitch: "Tudo o que você precisa para montar sua escola digital.",
   features: [
@@ -16,6 +13,7 @@ const PLAN = {
     "Mercado Pago integrado — receba direto na sua conta",
     "Matrícula automática do aluno após o pagamento",
     "Cupons de desconto, equipe e suporte por WhatsApp",
+    "Automação: WhatsApp automático, recuperação de carrinho e CRM de leads",
   ],
 }
 

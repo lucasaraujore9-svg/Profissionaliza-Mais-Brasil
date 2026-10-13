@@ -1,7 +1,8 @@
-// Planos que um revendedor-vendedor pode oferecer ao criar uma SUB-REVENDA.
-// Fonte única (form do painel + validação da API): a sub-revenda NUNCA é gratuita
-// e o vendedor escolhe SEMPRE entre estes dois. O PRO (239) já habilita o módulo
-// de Automação automaticamente. (Admin/sistema mãe segue com valor livre.)
+// Planos de tabela para unidade NOVA. Fonte única: sub-revenda do painel, API de
+// parceiros e cadastro público. Desde 2026-10-13 só existe o PRO (R$ 239, já com
+// Automação): o Profissionaliza (R$ 209) saiu de venda. Quem já está nele segue
+// como está — por isso a comissão de indicação ainda conhece o 209
+// (lib/referrals/plano-base.ts). Nunca gratuito; o /admin segue com valor livre.
 
 export interface ResellerPlan {
   value: number
@@ -14,12 +15,6 @@ export interface ResellerPlan {
 }
 
 export const RESELLER_PLANS: readonly ResellerPlan[] = [
-  {
-    value: 209,
-    label: "Profissionaliza",
-    automation: false,
-    blurb: "Plano base da revenda.",
-  },
   {
     value: 239,
     label: "Profissionaliza PRO",

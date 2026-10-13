@@ -23,11 +23,11 @@ const createSchema = z.object({
   ownerEmail: z.string().email().toLowerCase(),
   ownerCpfCnpj: z.string().min(11).max(20),
   ownerPhone: z.string().min(8).max(20).optional(),
-  // Mensalidade da sub-revenda: SÓ os planos permitidos (209 ou 239). O vendedor
+  // Mensalidade da sub-revenda: SÓ o plano de tabela (PRO, 239). O vendedor
   // NUNCA cria revenda gratuita — qualquer outro valor (inclusive 0) é rejeitado.
   planValue: z
     .number()
-    .refine(isAllowedResellerPlan, "Escolha o plano Profissionaliza (R$ 209) ou PRO (R$ 239)."),
+    .refine(isAllowedResellerPlan, "O plano da revenda é o Profissionaliza PRO (R$ 239)."),
   firstPaymentMaxInstallments: z.number().int().min(1).max(12).default(1),
   // Lead de revenda sendo convertido (opcional) — marcado CONVERTED ao criar.
   leadId: z.string().min(1).optional(),

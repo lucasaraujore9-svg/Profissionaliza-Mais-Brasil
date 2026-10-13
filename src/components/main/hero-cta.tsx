@@ -72,7 +72,7 @@ export async function HeroCTA() {
               {cursos ? <> de <strong className="font-bold text-white">mais de {cursos} cursos</strong></> : <> <strong className="font-bold text-white">completo de cursos</strong></>}{" "}
               profissionalizantes pra vender com a sua marca, no Brasil inteiro.
               Você define cada preço, recebe direto na sua conta e a matrícula é
-              automática. <strong className="font-bold text-white">A partir de R$ 209/mês</strong>{" "}
+              automática. <strong className="font-bold text-white">Por R$ 239/mês</strong>{" "}
               — sem CNPJ, sem gravar aula, sem comissão sobre as suas vendas.
             </p>
 

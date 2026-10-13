@@ -166,7 +166,7 @@ export async function createReseller(
   // cheio a pessoa volta como cliente de verdade e, se não pagar, cai na trava
   // sozinha. Fica no núcleo compartilhado de propósito, então /admin e o painel
   // herdam a mesma regra e um chamador novo não nasce sem ela. Na rota do
-  // painel o gatilho nunca dispara (planValue é restrito a 209/239, sem promo).
+  // painel o gatilho nunca dispara (planValue é restrito ao plano de tabela, sem promo).
   const cortesiaTrigger = isFree ? "free" : isPromo ? "promo" : null
   if (cortesiaTrigger) {
     const blockedUnits = await findBlockedUnitsForPerson({
