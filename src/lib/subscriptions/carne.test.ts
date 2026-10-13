@@ -228,14 +228,14 @@ beforeEach(() => {
 
 describe("createSubscriptionCarne", () => {
   it("Asaas: o carnê inteiro sai na venda, um boleto por ciclo, na conta da UNIDADE", async () => {
-    const first = noonUtc("2026-10-10")
+    const first = noonUtc("2099-10-10")
     const r = await createSubscriptionCarne({ subscriptionId: "sub_1", count: 3, firstDueDate: first })
 
     expect(asaas.createPayment).toHaveBeenCalledTimes(3)
     expect(asaas.createPayment.mock.calls.map((c) => c[0].dueDate)).toEqual([
-      "2026-10-10",
-      "2026-11-10",
-      "2026-12-10",
+      "2099-10-10",
+      "2099-11-10",
+      "2099-12-10",
     ])
     for (const [params, key] of asaas.createPayment.mock.calls) {
       expect(params).toMatchObject({
