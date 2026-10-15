@@ -28,6 +28,8 @@ export const GET = withRequestContext(
 const createSchema = z.object({
   title: z.string().trim().min(1).max(120),
   category: z.string().trim().max(60).optional().nullable(),
+  // 1..12 = arte daquele mes (pasta no painel); null = vale o ano todo.
+  month: z.number().int().min(1).max(12).nullable().optional(),
   hasPrice: z.boolean().default(false),
   logoCorner: z.enum(["top-left", "top-right"]).default("top-right"),
   feedPath: z.string().min(1),
@@ -116,6 +118,7 @@ export const POST = withRequestContext(
         data: {
           title: data.title,
           category: data.category || null,
+          month: data.month ?? null,
           filePath: data.feedPath,
           width: feed.width,
           height: feed.height,

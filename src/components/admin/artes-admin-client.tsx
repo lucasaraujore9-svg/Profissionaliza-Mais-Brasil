@@ -17,6 +17,7 @@ import {
   BadgeDollarSign,
   Move,
   ArrowLeft,
+  CalendarDays,
 } from "lucide-react"
 import {
   Dialog,
@@ -44,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -57,11 +59,20 @@ import {
   type ArtVariantKind,
   type LogoCorner,
 } from "@/lib/artes/types"
+import {
+  ART_MONTHS,
+  currentBrMonth,
+  filterByMonth,
+  monthLabel,
+  type MonthFilter,
+} from "@/lib/artes/months"
+import { MonthFolders } from "@/components/shared/artes/month-folders"
 
 interface MarketingArt {
   id: string
   title: string
   category: string | null
+  month: number | null
   filePath: string
   publicUrl: string
   width: number
@@ -153,6 +164,11 @@ export function ArtesAdminClient() {
   const [positioning, setPositioning] = useState<MarketingArt | null>(null)
   const [confirm, setConfirm] = useState<MarketingArt | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [monthFilter, setMonthFilter] = useState<MonthFilter>("all")
+  const shown = useMemo(() => filterByMonth(arts, monthFilter), [arts, monthFilter])
+  // Reordenar troca vizinhos na lista INTEIRA: com uma pasta aberta o vizinho
+  // visivel nao e o vizinho real, entao as setas so aparecem em "Todas".
+  const canReorder = monthFilter === "all"
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -263,8 +279,17 @@ export function ArtesAdminClient() {
         </div>
       )}
 
+      {arts.length > 0 && (
+        <MonthFolders
+          arts={arts}
+          value={monthFilter}
+          onChange={setMonthFilter}
+          currentMonth={currentBrMonth()}
+        />
+      )}
+
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {arts.map((art, i) => (
+        {shown.map((art, i) => (
           <div
             key={art.id}
             className="overflow-hidden rounded-xl border border-gray-200 bg-white"
@@ -294,6 +319,9 @@ export function ArtesAdminClient() {
                     <Tag className="h-3 w-3" /> {art.category}
                   </Badge>
                 )}
+                <Badge variant="outline" className="gap-1 text-sky-700">
+                  <CalendarDays className="h-3 w-3" /> {monthLabel(art.month)}
+                </Badge>
                 {art.hasPrice && (
                   <Badge variant="outline" className="gap-1 text-emerald-700">
                     <BadgeDollarSign className="h-3 w-3" /> Com valor
@@ -310,7 +338,7 @@ export function ArtesAdminClient() {
                 {art.width}x{art.height}px · {CORNER_LABEL[art.logoCorner]}
               </p>
               <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-                <div className="flex items-center gap-1">
+                <div className={cn("flex items-center gap-1", !canReorder && "invisible")}>
                   <button
                     type="button"
                     onClick={() => move(i, -1)}
@@ -451,6 +479,7 @@ function UploadDialog({
   const [layout, setLayout] = useState<ArtLayout | null>(null)
   const [title, setTitle] = useState("")
   const [category, setCategory] = useState("")
+  const [month, setMonth] = useState<number | null>(null)
   const [hasPrice, setHasPrice] = useState(false)
   const [logoCorner, setLogoCorner] = useState<"top-left" | "top-right">("top-right")
   const [sending, setSending] = useState(false)
@@ -507,6 +536,7 @@ function UploadDialog({
         body: JSON.stringify({
           title: finalTitle,
           category: category.trim() || null,
+          month,
           hasPrice,
           logoCorner,
           feedPath,
@@ -657,6 +687,7 @@ function UploadDialog({
               ))}
             </datalist>
           </div>
+          <MonthSelect value={month} onChange={setMonth} disabled={sending} />
           <div className="space-y-1.5">
             <Label>Posição do logo da unidade</Label>
             <Select
@@ -809,6 +840,7 @@ function EditDialog({
 }) {
   const [title, setTitle] = useState(art.title)
   const [category, setCategory] = useState(art.category ?? "")
+  const [month, setMonth] = useState<number | null>(art.month)
   const [hasPrice, setHasPrice] = useState(art.hasPrice)
   const [logoCorner, setLogoCorner] = useState<"top-left" | "top-right">(art.logoCorner)
   const [feedFile, setFeedFile] = useState<File | null>(null)
@@ -835,6 +867,7 @@ function EditDialog({
         body: JSON.stringify({
           title: title.trim(),
           category: category.trim() || null,
+          month,
           hasPrice,
           logoCorner,
         }),
@@ -906,6 +939,7 @@ function EditDialog({
               ))}
             </datalist>
           </div>
+          <MonthSelect value={month} onChange={setMonth} disabled={saving} />
           <div className="space-y-1.5">
             <Label>Posição do logo da unidade</Label>
             <Select
@@ -942,5 +976,43 @@ function EditDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/* ------------------------------ Month select ----------------------------- */
+
+function MonthSelect({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: number | null
+  onChange: (next: number | null) => void
+  disabled?: boolean
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>Mês da arte</Label>
+      <Select
+        value={value ? String(value) : "year"}
+        onValueChange={(v) => onChange(v === "year" ? null : Number(v))}
+        disabled={disabled}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="year">Ano todo (não é de uma data)</SelectItem>
+          {ART_MONTHS.map((label, i) => (
+            <SelectItem key={label} value={String(i + 1)}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-gray-500">
+        Datas comemorativas e campanhas vão para a pasta do mês no painel das unidades.
+      </p>
+    </div>
   )
 }

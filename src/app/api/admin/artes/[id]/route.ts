@@ -12,6 +12,8 @@ const updateSchema = z
   .object({
     title: z.string().trim().min(1).max(120).optional(),
     category: z.string().trim().max(60).nullable().optional(),
+  // 1..12 = arte daquele mes (pasta no painel); null = vale o ano todo.
+  month: z.number().int().min(1).max(12).nullable().optional(),
     hasPrice: z.boolean().optional(),
     logoCorner: z.enum(["top-left", "top-right"]).optional(),
     published: z.boolean().optional(),
@@ -52,6 +54,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
         data: {
           ...(data.title !== undefined ? { title: data.title } : {}),
           ...(data.category !== undefined ? { category: data.category || null } : {}),
+          ...(data.month !== undefined ? { month: data.month } : {}),
           ...(data.hasPrice !== undefined ? { hasPrice: data.hasPrice } : {}),
           ...(data.logoCorner !== undefined ? { logoCorner: data.logoCorner } : {}),
           ...(data.published !== undefined ? { published: data.published } : {}),

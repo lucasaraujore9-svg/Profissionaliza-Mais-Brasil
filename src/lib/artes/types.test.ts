@@ -72,6 +72,7 @@ describe("resolveVariantLayout", () => {
     id: "a1",
     title: "Arte",
     category: null,
+    month: null,
     feed: { url: "u", width: 1080, height: 1350 },
     story: null,
     hasPrice: true,

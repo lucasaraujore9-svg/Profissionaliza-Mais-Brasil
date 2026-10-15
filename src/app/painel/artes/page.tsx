@@ -13,6 +13,7 @@ import { parseArtLayout } from "@/lib/artes/layout-schema"
 import { PageHeader } from "@/components/painel/page-header"
 import { ArtesGrid } from "@/components/painel/artes/artes-grid"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
+import { currentBrMonth } from "@/lib/artes/months"
 
 export const metadata = {
   title: "Artes de divulgação | Painel",
@@ -34,6 +35,7 @@ export default async function PainelArtesPage() {
         id: true,
         title: true,
         category: true,
+        month: true,
         filePath: true,
         width: true,
         height: true,
@@ -70,6 +72,7 @@ export default async function PainelArtesPage() {
     id: art.id,
     title: art.title,
     category: art.category,
+    month: art.month,
     feed: { url: publicUrlFor(art.filePath), width: art.width, height: art.height },
     story:
       art.storyFilePath && art.storyWidth && art.storyHeight
@@ -115,9 +118,9 @@ export default async function PainelArtesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Artes de divulgação"
-        description="Escolha as artes e baixe já personalizadas com o logo, site, WhatsApp e rede social da sua unidade."
+        description="Escolha as artes e baixe já personalizadas com o logo, site, WhatsApp e rede social da sua unidade. As datas comemorativas ficam na pasta do mês."
       />
-      <ArtesGrid arts={items} brand={brand} />
+      <ArtesGrid arts={items} brand={brand} currentMonth={currentBrMonth()} />
     </div>
   )
 }

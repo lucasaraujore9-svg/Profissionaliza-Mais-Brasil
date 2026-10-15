@@ -7,26 +7,41 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { ArtItem, TenantBrand } from "@/lib/artes/types"
+import { defaultMonthFilter, filterByMonth, monthLabel, type MonthFilter } from "@/lib/artes/months"
+import { MonthFolders } from "@/components/shared/artes/month-folders"
 import { ArteDownloadDialog } from "./arte-download-dialog"
 import { BatchDownloadDialog } from "./batch-download-dialog"
 
-export function ArtesGrid({ arts, brand }: { arts: ArtItem[]; brand: TenantBrand }) {
+export function ArtesGrid({
+  arts,
+  brand,
+  currentMonth,
+}: {
+  arts: ArtItem[]
+  brand: TenantBrand
+  currentMonth: number
+}) {
+  const [month, setMonth] = useState<MonthFilter>(() => defaultMonthFilter(arts, currentMonth))
   const [category, setCategory] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [preview, setPreview] = useState<ArtItem | null>(null)
   const [batchOpen, setBatchOpen] = useState(false)
 
+  // Categorias so da pasta aberta: em Dezembro nao faz sentido oferecer o
+  // filtro "Outubro Rosa".
+  const inMonth = useMemo(() => filterByMonth(arts, month), [arts, month])
+
   const categories = useMemo(
     () =>
       Array.from(
-        new Set(arts.map((a) => a.category).filter((c): c is string => !!c)),
+        new Set(inMonth.map((a) => a.category).filter((c): c is string => !!c)),
       ).sort(),
-    [arts],
+    [inMonth],
   )
 
   const visible = useMemo(
-    () => (category ? arts.filter((a) => a.category === category) : arts),
-    [arts, category],
+    () => (category ? inMonth.filter((a) => a.category === category) : inMonth),
+    [inMonth, category],
   )
 
   const selecting = selected.size > 0
@@ -54,6 +69,23 @@ export function ArtesGrid({ arts, brand }: { arts: ArtItem[]; brand: TenantBrand
 
   return (
     <div className="space-y-4 pb-20">
+      <MonthFolders
+        arts={arts}
+        value={month}
+        currentMonth={currentMonth}
+        onChange={(next) => {
+          setMonth(next)
+          setCategory(null)
+        }}
+      />
+
+      {typeof month === "number" && (
+        <p className="text-sm text-gray-600">
+          Artes para <span className="font-semibold text-gray-900">{monthLabel(month)}</span>
+          {month === currentMonth ? " — datas e campanhas deste mês." : " — prepare-se com antecedência."}
+        </p>
+      )}
+
       {categories.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -66,7 +98,7 @@ export function ArtesGrid({ arts, brand }: { arts: ArtItem[]; brand: TenantBrand
                 : "border-gray-200 text-gray-600 hover:border-gray-300",
             )}
           >
-            Todas ({arts.length})
+            Todas ({inMonth.length})
           </button>
           {categories.map((c) => (
             <button
@@ -130,8 +162,12 @@ export function ArtesGrid({ arts, brand }: { arts: ArtItem[]; brand: TenantBrand
                   <p className="truncate text-sm font-semibold text-gray-900" title={art.title}>
                     {art.title}
                   </p>
-                  {art.category && (
-                    <p className="mt-0.5 truncate text-xs text-gray-500">{art.category}</p>
+                  {(art.category || art.month) && (
+                    <p className="mt-0.5 truncate text-xs text-gray-500">
+                      {[art.category, art.month && monthLabel(art.month)]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
                   )}
                 </div>
               </button>

@@ -2521,6 +2521,24 @@ revogou a matricula que um 2o PIX ja tinha pago.
   no banco, com `audit_logs` `enrollment.reactivate`.
 - Testes em `process.test.ts`, verificados POR MUTACAO (3/3).
 
+### Banco de artes organizado por mês (2026-10-15)
+
+`MarketingArt.month` (1..12; null = vale o ano todo) organiza as artes em
+pastas no /painel/artes e no /admin/artes (`components/shared/artes/month-folders.tsx`:
+Todas · Ano todo · Janeiro..Dezembro, mês corrente marcado). O painel abre na
+pasta do mês corrente quando ela tem arte (`defaultMonthFilter`); o mês é o do
+calendário de Brasília (`currentBrMonth`), não UTC. No admin, as setas de
+reordenar só aparecem em "Todas": com uma pasta aberta o vizinho visível não é
+o vizinho real.
+
+- **Ordem = ordem de postagem.** Arte nova entra no topo (`position` menor que
+  todas). Num lote, poste por ÚLTIMO o que deve aparecer primeiro (data de
+  hoje, depois o tema do mês). Não existe "fixar no topo" — decisão do dono.
+- Migration `20261015_marketing_art_month` (aditiva, idempotente) faz backfill
+  só das categorias sazonais (Dia dos Professores, Mês das Crianças, Outubro
+  Rosa → 10; Novembro Azul, Black Friday → 11).
+- Artes de data NUNCA levam o número do ano: são reaproveitadas todo ano.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

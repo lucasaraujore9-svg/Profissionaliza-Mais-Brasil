@@ -96,6 +96,7 @@ export interface ArtItem {
   id: string
   title: string
   category: string | null
+  month: number | null // 1..12 = arte do mes; null = vale o ano todo
   feed: ArtVariant
   story: ArtVariant | null
   hasPrice: boolean
