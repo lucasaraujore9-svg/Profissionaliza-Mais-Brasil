@@ -105,8 +105,10 @@ export const POST = withRequestContext(
     }
 
     try {
-      const last = await prisma.marketingArt.findFirst({
-        orderBy: { position: "desc" },
+      // Arte nova entra no TOPO (admin e painel listam por position asc): a
+      // mais recente aparece primeiro. As setas do admin continuam reordenando.
+      const first = await prisma.marketingArt.findFirst({
+        orderBy: { position: "asc" },
         select: { position: true },
       })
 
@@ -123,7 +125,7 @@ export const POST = withRequestContext(
           hasPrice: data.hasPrice,
           logoCorner: data.logoCorner,
           ...(data.layout ? { layout: data.layout } : {}),
-          position: (last?.position ?? -1) + 1,
+          position: (first?.position ?? 1) - 1,
         },
       })
 
