@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
-import { chargeStatus, isChargePayable } from "./charge-status"
+import { chargeStatus, isChargePayable, isPixRecebidoSemCobranca } from "./charge-status"
 
 /*
  * O caso real: a mensalidade da unidade `n1-professional-institute` foi
@@ -86,4 +86,28 @@ describe("cobertura: nenhuma rota de /cobranca decide por status na mão", () =>
       expect(src).toMatch(/isChargePayable|chargeStatus/)
     },
   )
+})
+
+describe("isPixRecebidoSemCobranca", () => {
+  // Payload real (15/10/2026): PIX de R$ 1 direto na chave, contado como
+  // mensalidade da unidade do titular.
+  const pixDireto = {
+    billingType: "PIX",
+    description: "Cobrança gerada automaticamente a partir de Pix recebido.",
+  }
+
+  it("reconhece o PIX que o Asaas transformou em cobranca", () => {
+    expect(isPixRecebidoSemCobranca(pixDireto)).toBe(true)
+  })
+
+  it("nao pega mensalidade paga por PIX numa cobranca nossa", () => {
+    expect(
+      isPixRecebidoSemCobranca({ billingType: "PIX", description: "Mensalidade Profissionaliza" }),
+    ).toBe(false)
+    expect(isPixRecebidoSemCobranca({ billingType: "PIX", description: "" })).toBe(false)
+  })
+
+  it("so vale para PIX", () => {
+    expect(isPixRecebidoSemCobranca({ ...pixDireto, billingType: "BOLETO" })).toBe(false)
+  })
 })

@@ -47,3 +47,27 @@ export function chargeStatus(payment: ChargeState): string {
 export function isChargePayable(payment: ChargeState): boolean {
   return !payment.deleted && OPEN_STATUSES.has(payment.status)
 }
+
+/**
+ * PIX que alguem mandou DIRETO para a chave da conta, sem cobranca nossa.
+ *
+ * O Asaas registra todo PIX recebido como uma cobranca que ele mesmo cria, com
+ * o cliente do PAGADOR e esta descricao fixa. Quando o CPF de quem pagou e o do
+ * titular de uma unidade, o fallback de "mensalidade avulsa" (casamento por
+ * `customer`) contava qualquer valor como mensalidade: um PIX de teste de R$ 1
+ * e uma transferencia de R$ 16 entraram no financeiro em 15/10/2026.
+ *
+ * Nao existe campo que marque a origem — a descricao e o unico sinal.
+ * ponytail: se o Asaas mudar o texto, o PIX volta a contar; o teste com o
+ * payload real denuncia so a regressao do nosso lado, nao a do Asaas.
+ */
+export function isPixRecebidoSemCobranca(
+  payment: Pick<AsaasPayment, "billingType" | "description">,
+): boolean {
+  return (
+    payment.billingType === "PIX" &&
+    /a partir de pix recebido/i.test(
+      (payment.description ?? "").normalize("NFD").replace(/[̀-ͯ]/g, ""),
+    )
+  )
+}

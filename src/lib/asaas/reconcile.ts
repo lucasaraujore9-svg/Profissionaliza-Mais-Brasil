@@ -5,6 +5,7 @@ import {
   dataPagamentoCliente,
 } from "@/lib/asaas/competencia"
 import { listPayments } from "./client"
+import { isPixRecebidoSemCobranca } from "./charge-status"
 import { emitUnidadePagamento } from "@/lib/webhooks-saida/unidade"
 
 export interface ReconcileResult {
@@ -57,6 +58,9 @@ export async function reconcileTenantPayments(tenant: {
   // do Supabase (ver histórico do projeto) e este laço tem no máximo 100 itens.
   let imported = 0
   for (const p of asaas.data) {
+    // PIX direto na chave (cobranca criada pelo Asaas a partir do PIX): o
+    // cliente e o do pagador, nao prova mensalidade. Ver charge-status.ts.
+    if (isPixRecebidoSemCobranca(p)) continue
     try {
       await prisma.tenantPayment.upsert({
         where: { asaasPaymentId: p.id },

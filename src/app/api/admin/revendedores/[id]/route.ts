@@ -13,6 +13,7 @@ import {
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { logAudit } from "@/lib/audit"
 import { getSubscription, listPayments } from "@/lib/asaas/client"
+import { isPixRecebidoSemCobranca } from "@/lib/asaas/charge-status"
 import { swallow } from "@/lib/errors"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { contextLogger } from "@/lib/logger"
@@ -224,7 +225,7 @@ export const GET = withRequestContextParams<{ id: string }>(
       // Busca subscription e pagamentos em paralelo.
       // Usa customer como filtro para capturar pagamentos de subscriptions
       // anteriores (ex: quando recriamos por mudança de valor).
-      const [sub, asaasPayments] = await Promise.all([
+      const [sub, asaasListed] = await Promise.all([
         getSubscription(tenant.asaasSubscriptionId),
         listPayments(
           tenant.asaasCustomerId
@@ -232,6 +233,12 @@ export const GET = withRequestContextParams<{ id: string }>(
             : { subscription: tenant.asaasSubscriptionId, limit: 24 },
         ),
       ])
+      // PIX direto na chave nao e mensalidade (ver charge-status.ts): fora da
+      // lista, da auto-ativacao e do upsert abaixo.
+      const asaasPayments = {
+        ...asaasListed,
+        data: asaasListed.data.filter((p) => !isPixRecebidoSemCobranca(p)),
+      }
       asaasNextDueDate = sub.nextDueDate ?? null
       asaasSubscriptionStatus = sub.status ?? null
       asaasSubscriptionValue = sub.value ?? null

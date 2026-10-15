@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { resolveOverdueRuler, overdueDays } from "@/lib/tenants/overdue-policy"
 import { getPayment as getAsaasPayment, AsaasApiError } from "./client"
+import { isPixRecebidoSemCobranca } from "./charge-status"
 import { isTransientWebhookError } from "@/lib/webhooks/transient"
 import { sendEmail } from "@/lib/email/resend"
 import { afterResponse } from "@/lib/after-response"
@@ -718,6 +719,25 @@ export async function processAsaasWebhook(
 
       if (!tenantFromCustomer) {
         await markLog(logId, true, `sem subscription: ${event}`)
+        return
+      }
+
+      // PIX mandado direto para a chave, sem cobranca nossa: o `customer` e o
+      // do pagador, nao prova que e mensalidade. Nao entra no financeiro; se
+      // for, o financeiro lanca pela baixa manual.
+      if (isPixRecebidoSemCobranca(payment)) {
+        if (event === "PAYMENT_RECEIVED") {
+          await createNotification({
+            audience: "ROLE",
+            roleTarget: "PMB_FINANCEIRO",
+            level: "WARNING",
+            title: `PIX de R$ ${payment.value.toFixed(2).replace(".", ",")} recebido de ${tenantFromCustomer.name}, sem cobrança`,
+            body: `PIX direto na chave (${payment.id}), fora de qualquer link da plataforma. Não entrou no financeiro. Se for mensalidade, lance pela baixa manual da unidade.`,
+            category: "tenant-billing",
+            href: `/admin/revendedores/${tenantFromCustomer.id}`,
+          }).catch(swallow("asaas.pix_sem_cobranca_notify"))
+        }
+        await markLog(logId, true, `pix recebido sem cobranca (${tenantFromCustomer.id}): ${event} — ignorado`)
         return
       }
     }
