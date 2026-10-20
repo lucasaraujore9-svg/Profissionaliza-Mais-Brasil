@@ -22,7 +22,7 @@ export const POST = withRequestContext(
   async (request: Request) => {
     const rl = await rateLimit(request, RATE_LIMITS.installments)
     if (!rl.ok) return rateLimitResponse(rl)
-    const bot = await rejectBot()
+    const bot = await rejectBot(request, null)
     if (bot) return bot
 
     let payload: unknown

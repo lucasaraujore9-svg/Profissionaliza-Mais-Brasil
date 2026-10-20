@@ -41,11 +41,13 @@ const SECURITY_HEADERS = [
       "object-src 'none'",
       // img.youtube.com / i.ytimg.com: thumbnails (capa) dos modulos de
       // Treinamento, que usam o frame do YouTube. Sem isto a CSP bloqueia a capa.
-      px("img-src 'self' data: blob: https://*.supabase.co https://playcurso.com https://s3.bmbr.com.br https://img.youtube.com https://i.ytimg.com", "img"),
+      px("img-src 'self' data: blob: https://*.supabase.co https://playcurso.com https://s3.bmbr.com.br https://img.youtube.com https://i.ytimg.com https://www.google.com https://www.gstatic.com", "img"),
       px("font-src 'self' data:", "font"),
       "style-src 'self' 'unsafe-inline'",
-      px("script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.mercadopago.com https://www.mercadopago.com https://va.vercel-scripts.com", "script"),
-      px("connect-src 'self' https://api.mercadopago.com https://*.supabase.co https://*.upstash.io https://api.resend.com https://vitals.vercel-insights.com", "connect"),
+      // www.google.com / www.gstatic.com (script, frame, connect, img): caixinha
+      // "Nao sou um robo" (reCAPTCHA v2) dos checkouts publicos.
+      px("script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.mercadopago.com https://www.mercadopago.com https://va.vercel-scripts.com https://www.google.com https://www.gstatic.com", "script"),
+      px("connect-src 'self' https://api.mercadopago.com https://*.supabase.co https://*.upstash.io https://api.resend.com https://vitals.vercel-insights.com https://www.google.com https://www.gstatic.com", "connect"),
       // 'self' blob: permite o preview do PDF do certificado, embutido via
       // <iframe src="blob:..."> no editor de template (admin/painel). Sem isto
       // o navegador bloqueia o embed ("conteúdo bloqueado"). frame-ancestors
@@ -53,7 +55,7 @@ const SECURITY_HEADERS = [
       // youtube-nocookie.com / youtube.com: player embutido (iframe) dos videos
       // de Treinamento (youtubeEmbedUrl usa youtube-nocookie). Sem isto o video
       // nao carrega ("conteudo bloqueado").
-      px("frame-src 'self' blob: https://www.mercadopago.com https://sdk.mercadopago.com https://www.youtube-nocookie.com https://www.youtube.com", "frame"),
+      px("frame-src 'self' blob: https://www.mercadopago.com https://sdk.mercadopago.com https://www.youtube-nocookie.com https://www.youtube.com https://www.google.com https://recaptcha.google.com", "frame"),
       "form-action 'self' https://www.mercadopago.com",
     ].join("; "),
   },

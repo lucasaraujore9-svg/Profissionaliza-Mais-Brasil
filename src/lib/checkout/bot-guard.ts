@@ -1,6 +1,7 @@
 import { checkBotId } from "botid/server"
 import { NextResponse } from "next/server"
 import { contextLogger } from "@/lib/logger"
+import { requireHuman, type HumanCheckMode } from "@/lib/checkout/human-check"
 
 /**
  * Recusa robo nos checkouts publicos (Vercel BotID, modo basico).
@@ -15,16 +16,23 @@ import { contextLogger } from "@/lib/logger"
  * Fail-OPEN se o servico do BotID falhar: as travas por conta/cartao
  * (`card-guard.ts`) e o limite por IP continuam valendo.
  *
+ * Depois do BotID vem a caixinha "Nao sou um robo" (`human-check.ts`), menos
+ * na consulta de parcelas (`captcha: null`), que nao cobra nada e roda enquanto
+ * a pessoa ainda digita o cartao.
+ *
  * Devolve a resposta 403 a retornar, ou `null` para seguir.
  */
-export async function rejectBot(): Promise<Response | null> {
+export async function rejectBot(
+  request: Request,
+  captcha: HumanCheckMode | null,
+): Promise<Response | null> {
+  let isBot = false
   try {
-    const verification = await checkBotId()
-    if (!verification.isBot) return null
+    isBot = (await checkBotId()).isBot
   } catch (err) {
     contextLogger().error({ err, event: "botid.check_failed" }, "BotID falhou — liberando")
-    return null
   }
+  if (!isBot) return captcha ? requireHuman(request, captcha) : null
   contextLogger().warn({ event: "botid.blocked" }, "checkout recusado: robo")
   return NextResponse.json(
     {

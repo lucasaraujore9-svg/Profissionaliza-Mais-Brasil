@@ -22,6 +22,7 @@ import { useGuardian } from "@/components/shared/guardian/use-guardian"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { isPublicCheckoutPath, useRecaptcha } from "@/components/loja/recaptcha-box"
 import { TermsAcceptance } from "@/components/loja/terms-acceptance"
 import { clientLogger } from "@/lib/logger-client"
 import {
@@ -187,6 +188,7 @@ export function PmbCheckoutForm({
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const guardianCtl = useGuardian()
+  const captcha = useRecaptcha(isPublicCheckoutPath(initPath))
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState(false)
   const [cardInstallments, setCardInstallments] = useState(1)
@@ -213,6 +215,11 @@ export function PmbCheckoutForm({
     if (status.kind === "submitting") return
     if (!acceptedTerms) {
       setTermsError(true)
+      return
+    }
+    const captchaMissing = captcha.missingMessage()
+    if (captchaMissing) {
+      setStatus({ kind: "error", message: captchaMissing })
       return
     }
 
@@ -261,7 +268,7 @@ export function PmbCheckoutForm({
     try {
       const res = await fetch(initPath, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...captcha.headers() },
         body: JSON.stringify(body),
       })
       const payload = await res.json()
@@ -386,6 +393,8 @@ export function PmbCheckoutForm({
         kind: "error",
         message: "Erro de conexão. Tente novamente.",
       })
+    } finally {
+      captcha.reset()
     }
   }
 
@@ -836,6 +845,7 @@ export function PmbCheckoutForm({
       )}
 
       <div className="space-y-3">
+        {captcha.element}
         <TermsAcceptance
           checked={acceptedTerms}
           onChange={(v) => {

@@ -2574,6 +2574,17 @@ fora do ar desde 02:49 UTC de 20/10.
   tentativas do mesmo cartao/hora recusadas. Impressao = HMAC do PAN, nunca o
   numero. No MP o cartao vem tokenizado: so o disjuntor. Bloqueio vira
   `AsaasApiError` 400 — as portas ja sabem mostrar e desfazer. Fail-open no Redis.
+- **Caixinha "Nao sou um robo" (reCAPTCHA v2)** em cima do BotID
+  (`lib/checkout/human-check.ts` + `components/loja/recaptcha-box.tsx`). UMA
+  chave para todos os dominios: a "verificacao de origem" fica DESLIGADA no
+  console do Google e a origem e conferida no servidor (hostname do token ==
+  host da requisicao). Cadastro (`"issue"`) exige token e emite passe de uso
+  unico (cookie `pmb_hc`, 2 min, `SET NX` no Redis) para o pagamento do mesmo
+  envio; pagamento/assinatura (`"consume"`) aceita passe ou token novo; parcelas
+  (`null`) nao pedem. Nova tentativa de cartao = caixinha nova. Desligada ate
+  `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` e `RECAPTCHA_SECRET_KEY` existirem (a do site
+  e de BUILD: mudar exige redeploy). Google fora = fail-open. Formularios do
+  aluno logado (`/api/aluno/*`) nao mostram a caixinha (`isPublicCheckoutPath`).
 - Invariante: `checkout/bot-guard-coverage.test.ts` (rota nova sem BotID ou com
   `provisionStudentAccess` quebra). Verificado POR MUTACAO (4/4).
 - **Pendente:** liberar as caixas com a Hostinger / trocar `SMTP_*`; estorno das

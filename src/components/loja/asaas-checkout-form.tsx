@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { isPublicCheckoutPath, useRecaptcha } from "@/components/loja/recaptcha-box"
 import { SectionHeader, FieldText } from "@/components/loja/checkout-fields"
 import { TermsAcceptance } from "@/components/loja/terms-acceptance"
 import { applyServerFieldErrors } from "@/lib/checkout/field-errors"
@@ -190,6 +191,7 @@ export function AsaasCheckoutForm({
   // Data de nascimento + responsável financeiro. A regra de "quem é menor" vem
   // de src/lib/students/guardian.ts — a MESMA que o Zod do servidor usa.
   const guardianCtl = useGuardian()
+  const captcha = useRecaptcha([initPath, processPath].some(isPublicCheckoutPath))
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState(false)
   // payMode: a matrícula já existe (recebida via prop) → ensureEnrollment a
@@ -207,7 +209,7 @@ export function AsaasCheckoutForm({
     if (activeEnrollmentId) return { enrollmentId: activeEnrollmentId }
     const res = await fetch(initPath, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...captcha.headers() },
       body: JSON.stringify({
         ...(packageId ? { packageId } : { courseId }),
         couponCode: couponCode ?? undefined,
@@ -295,6 +297,11 @@ export function AsaasCheckoutForm({
       setTermsError(true)
       return
     }
+    const captchaMissing = captcha.missingMessage()
+    if (captchaMissing) {
+      setStatus({ kind: "error", message: captchaMissing })
+      return
+    }
     setStatus({ kind: "submitting" })
     setFieldErrors({})
 
@@ -304,7 +311,7 @@ export function AsaasCheckoutForm({
 
       const res = await fetch(processPath, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...captcha.headers() },
         body: JSON.stringify({
           enrollmentId: ensured.enrollmentId,
           ...(boletoInstallmentId ? { boletoInstallmentId } : {}),
@@ -355,6 +362,8 @@ export function AsaasCheckoutForm({
         "asaas-checkout submit falhou",
       )
       setStatus({ kind: "error", message: "Erro de conexão. Tente novamente." })
+    } finally {
+      captcha.reset()
     }
   }
 
@@ -590,6 +599,7 @@ export function AsaasCheckoutForm({
       )}
 
       <div className="space-y-3">
+        {captcha.element}
         <TermsAcceptance
           checked={acceptedTerms}
           onChange={(v) => {

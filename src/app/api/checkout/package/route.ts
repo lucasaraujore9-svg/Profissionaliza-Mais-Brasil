@@ -124,7 +124,7 @@ export const POST = withRequestContext(
 
     const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
     if (!rl.ok) return rateLimitResponse(rl)
-    const bot = await rejectBot()
+    const bot = await rejectBot(request, "issue")
     if (bot) return bot
 
     let payload: unknown

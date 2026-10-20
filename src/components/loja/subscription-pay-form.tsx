@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
+import { isPublicCheckoutPath, useRecaptcha } from "@/components/loja/recaptcha-box"
 import { tokenizeMpCard } from "@/lib/mercadopago/browser-sdk"
 import {
   INTERVAL_PRICE_SUFFIX,
@@ -92,6 +93,7 @@ export function SubscriptionPayForm({
   const [method, setMethod] = useState<Method>(methods[0])
   const [address, setAddress] = useState(EMPTY_BOLETO_ADDRESS)
   const needsAddress = askBoletoAddress && gateway === "MP" && method === "BOLETO"
+  const captcha = useRecaptcha(isPublicCheckoutPath(endpoint))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<Done | null>(null)
@@ -116,6 +118,11 @@ export function SubscriptionPayForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    const captchaMissing = captcha.missingMessage()
+    if (captchaMissing) {
+      setError(captchaMissing)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -133,7 +140,7 @@ export function SubscriptionPayForm({
 
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...captcha.headers() },
         body: JSON.stringify({
           subscriptionId,
           paymentMethod: method,
@@ -182,6 +189,7 @@ export function SubscriptionPayForm({
       )
     } finally {
       setLoading(false)
+      captcha.reset()
     }
   }
 
@@ -304,6 +312,8 @@ export function SubscriptionPayForm({
           </div>
         )}
       </fieldset>
+
+      {captcha.element}
 
       {error && (
         <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

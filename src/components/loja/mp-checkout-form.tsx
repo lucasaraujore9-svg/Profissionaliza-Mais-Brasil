@@ -22,6 +22,7 @@ import { useGuardian } from "@/components/shared/guardian/use-guardian"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { isPublicCheckoutPath, useRecaptcha } from "@/components/loja/recaptcha-box"
 import { SectionHeader, FieldText } from "@/components/loja/checkout-fields"
 import { TermsAcceptance } from "@/components/loja/terms-acceptance"
 import { clientLogger } from "@/lib/logger-client"
@@ -218,6 +219,7 @@ export function MpCheckoutForm({
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const guardianCtl = useGuardian()
+  const captcha = useRecaptcha([initPath, processPath].some(isPublicCheckoutPath))
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState(false)
   // enrollment ativo (criado no submit em createMode, ou recebido em payMode)
@@ -344,7 +346,7 @@ export function MpCheckoutForm({
     }
     const res = await fetch(initPath, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...captcha.headers() },
       body: JSON.stringify({
         ...(packageId ? { packageId } : { courseId }),
         couponCode: couponCode ?? undefined,
@@ -537,6 +539,11 @@ export function MpCheckoutForm({
       setTermsError(true)
       return
     }
+    const captchaMissing = captcha.missingMessage()
+    if (captchaMissing) {
+      setStatus({ kind: "error", message: captchaMissing })
+      return
+    }
     setStatus({ kind: "submitting" })
     setFieldErrors({})
 
@@ -549,7 +556,7 @@ export function MpCheckoutForm({
 
       const res = await fetch(processPath, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...captcha.headers() },
         body: JSON.stringify({ enrollmentId: ensured.enrollmentId, formData }),
       })
       const payload = await res.json()
@@ -597,6 +604,8 @@ export function MpCheckoutForm({
         "mp-checkout submit falhou",
       )
       setStatus({ kind: "error", message: "Erro de conexão. Tente novamente." })
+    } finally {
+      captcha.reset()
     }
   }
 
@@ -848,6 +857,7 @@ export function MpCheckoutForm({
       )}
 
       <div className="space-y-3">
+        {captcha.element}
         <TermsAcceptance
           checked={acceptedTerms}
           onChange={(v) => {

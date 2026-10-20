@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Cake, CheckCircle2, IdCard, Mail, MapPin, Phone, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { isPublicCheckoutPath, useRecaptcha } from "@/components/loja/recaptcha-box"
 import { SectionHeader, FieldText } from "@/components/loja/checkout-fields"
 import { TermsAcceptance } from "@/components/loja/terms-acceptance"
 import { GuardianFields } from "@/components/shared/guardian/guardian-fields"
@@ -90,6 +91,7 @@ export function FreeCheckoutForm({
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const guardianCtl = useGuardian()
+  const captcha = useRecaptcha(isPublicCheckoutPath(initPath))
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState(false)
 
@@ -107,13 +109,18 @@ export function FreeCheckoutForm({
       setTermsError(true)
       return
     }
+    const captchaMissing = captcha.missingMessage()
+    if (captchaMissing) {
+      setStatus({ kind: "error", message: captchaMissing })
+      return
+    }
     setStatus({ kind: "submitting" })
     setFieldErrors({})
 
     try {
       const res = await fetch(initPath, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...captcha.headers() },
         body: JSON.stringify({
           ...(packageId ? { packageId } : { courseId }),
           couponCode: couponCode ?? undefined,
@@ -160,6 +167,8 @@ export function FreeCheckoutForm({
     } catch (err) {
       clientLogger.error({ err, event: "loja.free_checkout.failed" }, "matricula gratuita falhou")
       setStatus({ kind: "error", message: "Erro de rede. Tente novamente." })
+    } finally {
+      captcha.reset()
     }
   }
 
@@ -236,6 +245,7 @@ export function FreeCheckoutForm({
       )}
 
       <div className="space-y-3">
+        {captcha.element}
         <TermsAcceptance
           checked={acceptedTerms}
           onChange={(v) => {

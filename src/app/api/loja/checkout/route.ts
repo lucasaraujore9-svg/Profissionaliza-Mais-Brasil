@@ -97,7 +97,7 @@ export const POST = withRequestContext(
   // bloqueio do MP do revendedor por rate-limit upstream.
   const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
   if (!rl.ok) return rateLimitResponse(rl)
-  const bot = await rejectBot()
+  const bot = await rejectBot(request, "issue")
   if (bot) return bot
 
   const tenantIdHeader = request.headers.get("x-tenant-id")

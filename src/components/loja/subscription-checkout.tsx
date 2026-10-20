@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
+import { isPublicCheckoutPath, useRecaptcha } from "@/components/loja/recaptcha-box"
 import { PARENTESCOS, PARENTESCO_LABEL } from "@/lib/students/guardian"
 import { tokenizeMpCard } from "@/lib/mercadopago/browser-sdk"
 import {
@@ -75,6 +76,7 @@ export function SubscriptionCheckout({
   const [address, setAddress] = useState(EMPTY_BOLETO_ADDRESS)
   // O boleto do Mercado Pago exige o endereço completo do pagador.
   const needsAddress = gateway === "MP" && method === "BOLETO"
+  const captcha = useRecaptcha(isPublicCheckoutPath(endpoint))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{
@@ -122,6 +124,11 @@ export function SubscriptionCheckout({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    const captchaMissing = captcha.missingMessage()
+    if (captchaMissing) {
+      setError(captchaMissing)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -143,7 +150,7 @@ export function SubscriptionCheckout({
 
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...captcha.headers() },
         body: JSON.stringify({
           ...(mpCard
             ? {
@@ -203,6 +210,7 @@ export function SubscriptionCheckout({
       setError("Erro de conexão. Tente novamente.")
     } finally {
       setLoading(false)
+      captcha.reset()
     }
   }
 
@@ -402,6 +410,8 @@ export function SubscriptionCheckout({
           </div>
         )}
       </fieldset>
+
+      {captcha.element}
 
       {error && (
         <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

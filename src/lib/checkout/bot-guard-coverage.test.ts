@@ -37,7 +37,15 @@ describe("checkouts publicos", () => {
 
   it.each(postRoutes.map((f) => [f.replace(API, "api")]))("%s confere o BotID", (rel) => {
     const src = readFileSync(join(API, rel.replace(/^api/, "")), "utf8")
-    expect(src).toMatch(/const bot = await rejectBot\(\)\s*\n\s*if \(bot\) return bot/)
+    expect(src).toMatch(/const bot = await rejectBot\(request, (null|"issue"|"consume")\)\s*\n\s*if \(bot\) return bot/)
+  })
+
+  // A caixinha "Nao sou um robo" so pode faltar na consulta de parcelas (nao
+  // cobra e roda enquanto a pessoa digita o cartao).
+  it.each(postRoutes.map((f) => [f.replace(API, "api")]))("%s exige a caixinha (menos parcelas)", (rel) => {
+    const src = readFileSync(join(API, rel.replace(/^api/, "")), "utf8")
+    const semCaptcha = /rejectBot\(request, null\)/.test(src)
+    expect(semCaptcha).toBe(rel.endsWith("/installments/route.ts"))
   })
 
   it("o cliente BotID protege os mesmos prefixos", () => {
@@ -51,5 +59,25 @@ describe("checkouts publicos", () => {
   it.each(routes.map((f) => [f.replace(API, "api")]))("%s nao cria acesso antes do pagamento", (rel) => {
     const src = readFileSync(join(API, rel.replace(/^api/, "")), "utf8")
     expect(src).not.toMatch(/provisionStudentAccess|generatePasswordWithHash|student-welcome/)
+  })
+})
+
+// Todo formulario que chama checkout publico desenha a caixinha, manda o token
+// em toda chamada e a reseta depois do envio (o token so vale uma vez).
+const FORMS = [
+  "asaas-checkout-form.tsx",
+  "mp-checkout-form.tsx",
+  "pmb-checkout-form.tsx",
+  "free-checkout-form.tsx",
+  "subscription-checkout.tsx",
+  "subscription-pay-form.tsx",
+]
+describe("formularios de checkout", () => {
+  it.each(FORMS)("%s usa a caixinha Nao sou um robo", (name) => {
+    const src = readFileSync(join(process.cwd(), "src/components/loja", name), "utf8")
+    expect(src).toContain("{captcha.element}")
+    expect(src).toContain("captcha.missingMessage()")
+    expect(src).toContain("captcha.reset()")
+    expect(src).toContain("...captcha.headers()")
   })
 })

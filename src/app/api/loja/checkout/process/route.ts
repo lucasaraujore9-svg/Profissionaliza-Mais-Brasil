@@ -35,7 +35,7 @@ export const POST = withRequestContext(
   async (request: Request) => {
     const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
     if (!rl.ok) return rateLimitResponse(rl)
-    const bot = await rejectBot()
+    const bot = await rejectBot(request, "consume")
     if (bot) return bot
 
     // Resolve o tenant pelo header injetado pelo proxy (mesmo padrão do init).
