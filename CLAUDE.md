@@ -2582,7 +2582,8 @@ fora do ar desde 02:49 UTC de 20/10.
   unico (cookie `pmb_hc`, 2 min, `SET NX` no Redis) para o pagamento do mesmo
   envio; pagamento/assinatura (`"consume"`) aceita passe ou token novo; parcelas
   (`null`) nao pedem. Nova tentativa de cartao = caixinha nova. Desligada ate
-  `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` e `RECAPTCHA_SECRET_KEY` existirem (a do site
+  `RECAPTCHA_SITE_KEY` (mapeada para `NEXT_PUBLIC_` no next.config) e
+  `RECAPTCHA_SECRET_KEY` existirem (a do site
   e de BUILD: mudar exige redeploy). Google fora = fail-open. Formularios do
   aluno logado (`/api/aluno/*`) nao mostram a caixinha (`isPublicCheckoutPath`).
 - Invariante: `checkout/bot-guard-coverage.test.ts` (rota nova sem BotID ou com

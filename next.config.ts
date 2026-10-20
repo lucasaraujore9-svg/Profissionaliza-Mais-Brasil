@@ -62,6 +62,14 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Chave do SITE do reCAPTCHA (publica): cadastrada na Vercel como
+  // RECAPTCHA_SITE_KEY, sem o prefixo NEXT_PUBLIC_. Daqui ela entra no bundle do
+  // navegador e no servidor (human-check.ts) no build — mudar a chave exige
+  // novo deploy.
+  env: {
+    NEXT_PUBLIC_RECAPTCHA_SITE_KEY:
+      process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? process.env.RECAPTCHA_SITE_KEY ?? "",
+  },
   // Pacotes pesados/CJS usados apenas no servidor (geracao de PDF do
   // certificado). Mante-los externos evita que o bundler do Next tente
   // empacota-los em paginas/rotas server.
