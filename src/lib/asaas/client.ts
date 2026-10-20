@@ -19,9 +19,16 @@ import type {
   AsaasWebhookConfigList,
   AsaasCreatePixAutomaticAuthorizationParams,
   AsaasPixAutomaticAuthorization,
+  AsaasCreditCard,
+  AsaasCreditCardHolderInfo,
 } from "./types"
 import { contextLogger } from "@/lib/logger"
 import { decrypt } from "@/lib/crypto"
+import {
+  assertCardAttemptAllowed,
+  CardGuardError,
+  recordCardRefusal,
+} from "@/lib/checkout/card-guard"
 
 const MAX_RETRIES = 3
 const INITIAL_BACKOFF_MS = 500
@@ -152,6 +159,41 @@ async function request<T>(
   throw new AsaasApiError("Unexpected retry exhaustion", 0)
 }
 
+/**
+ * Chamada que COBRA no cartao: passa pela trava de teste de cartao antes e
+ * registra a recusa depois (`checkout/card-guard.ts`). A trava devolve um
+ * AsaasApiError 400 — o mesmo formato de uma recusa do Asaas —, entao toda porta
+ * de checkout ja sabe mostrar a mensagem e desfazer o que preparou.
+ */
+async function cardRequest<T>(
+  path: string,
+  body: { creditCard?: AsaasCreditCard; creditCardHolderInfo?: AsaasCreditCardHolderInfo },
+  apiKey: string,
+): Promise<T> {
+  if (body.creditCard) {
+    try {
+      await assertCardAttemptAllowed({
+        apiKey,
+        cardNumber: body.creditCard.number,
+        holderCpf: body.creditCardHolderInfo?.cpfCnpj ?? "",
+      })
+    } catch (err) {
+      if (err instanceof CardGuardError) {
+        throw new AsaasApiError(err.message, 400, [{ code: "card_guard", description: err.message }])
+      }
+      throw err
+    }
+  }
+  try {
+    return await request<T>("POST", path, body, apiKey)
+  } catch (err) {
+    if (body.creditCard && err instanceof AsaasApiError && err.statusCode >= 400 && err.statusCode < 500) {
+      await recordCardRefusal(apiKey)
+    }
+    throw err
+  }
+}
+
 // ── Customers ──
 
 function sanitizeDoc(value: string): string {
@@ -229,8 +271,8 @@ export async function createSubscription(
   // POST /v3/subscriptions (sem barra). Postar o cartao no endpoint sem barra
   // faz o Asaas ignorar os campos do cartao (assinatura sem cartao na fatura).
   // Mesma convencao de createInstallmentWithCreditCard (-> "/installments/").
-  const path = params.creditCard ? "/subscriptions/" : "/subscriptions"
-  return request<AsaasSubscription>("POST", path, params, apiKey)
+  if (params.creditCard) return cardRequest<AsaasSubscription>("/subscriptions/", params, apiKey)
+  return request<AsaasSubscription>("POST", "/subscriptions", params, apiKey)
 }
 
 export async function getSubscription(
@@ -291,8 +333,8 @@ export async function createPayment(
   // remoteIp). Sem cartao e o padrao POST /v3/payments (sem barra) — PIX/boleto
   // e o fluxo do PMB (UNDEFINED). Explicitar o path evita depender de
   // normalizacao de barra do Asaas e espelha a convencao do "/installments/".
-  const path = params.creditCard ? "/payments/" : "/payments"
-  return request<AsaasPayment>("POST", path, params, apiKey)
+  if (params.creditCard) return cardRequest<AsaasPayment>("/payments/", params, apiKey)
+  return request<AsaasPayment>("POST", "/payments", params, apiKey)
 }
 
 export async function getPayment(
@@ -417,7 +459,7 @@ export async function payWithCreditCard(
   params: AsaasPayWithCreditCardParams,
   apiKey: string,
 ): Promise<AsaasPayment> {
-  return request<AsaasPayment>("POST", `/payments/${paymentId}/payWithCreditCard`, params, apiKey)
+  return cardRequest<AsaasPayment>(`/payments/${paymentId}/payWithCreditCard`, params, apiKey)
 }
 
 /**
@@ -434,7 +476,7 @@ export async function createInstallmentWithCreditCard(
   params: AsaasCreateInstallmentCardParams,
   apiKey: string,
 ): Promise<AsaasInstallment> {
-  return request<AsaasInstallment>("POST", "/installments/", params, apiKey)
+  return cardRequest<AsaasInstallment>("/installments/", params, apiKey)
 }
 
 /**

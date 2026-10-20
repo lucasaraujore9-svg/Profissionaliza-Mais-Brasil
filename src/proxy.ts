@@ -296,6 +296,9 @@ export default async function proxy(request: NextRequest) {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/internal") ||
+    // Script e verificacao do Vercel BotID (rewrite do withBotId, next.config).
+    // Reescrever para /loja na vitrine quebraria a prova de todo checkout.
+    pathname.startsWith("/149e9513-01fa-4fb0-aad4-566afd725d1b/") ||
     pathname.startsWith("/favicon.ico") ||
     /\.(?:ico|png|jpg|jpeg|gif|webp|svg|css|js|map|txt|xml|woff2?|ttf|eot|json)$/i.test(pathname)
   ) {

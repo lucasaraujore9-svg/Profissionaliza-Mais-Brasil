@@ -3,12 +3,12 @@ import { prisma } from "@/lib/prisma"
 import { discardAbandonedCheckouts } from "@/lib/subscriptions/abandoned"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { rejectBot } from "@/lib/checkout/bot-guard"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { cpfHasRegisteredLogin } from "@/lib/students/cpf-already-registered"
-import { provisionStudentAccess } from "@/lib/students/access"
 import { buildGuardianWrite } from "@/lib/students/guardian"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
@@ -42,6 +42,8 @@ export const POST = withRequestContext(
 
     const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
     if (!rl.ok) return rateLimitResponse(rl)
+    const bot = await rejectBot()
+    if (bot) return bot
 
     let payload: unknown
     try {
@@ -115,15 +117,11 @@ export const POST = withRequestContext(
       throw err
     }
 
-    await provisionStudentAccess(student.id, {
-      isPmbVitrine: true,
-      slug: pmbTenant.slug,
-    }).catch((err) => {
-      contextLogger().error(
-        { err, event: "subscription_checkout.provision_access_failed", studentId: student.id },
-        "provisionStudentAccess falhou",
-      )
-    })
+    // Sem senha nem e-mail de boas-vindas antes do pagamento: o fulfill (curso/
+    // pacote) e o 1o ciclo da assinatura criam o acesso quando o gateway aprova.
+    // Checkout anonimo que manda e-mail virava amplificador — em 20/10/2026 um
+    // robo de teste de cartao disparou ~1.280 boas-vindas e a Hostinger
+    // suspendeu todas as caixas da plataforma.
 
     // Uma assinatura viva por aluno nesta vitrine. Sem isto, um duplo clique ou
     // um retorno ao formulário criaria uma SEGUNDA recorrência no gateway,

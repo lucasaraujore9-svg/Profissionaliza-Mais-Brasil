@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withBotId } from "botid/next/config";
 import { trackingOrigins } from "./src/lib/tracking/csp";
 
 // Headers de seguranca aplicados a todas as rotas (HTML, API, assets).
@@ -120,4 +121,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// withBotId: rewrites do script e da verificacao do Vercel BotID (checkouts
+// publicos — ver src/lib/checkout/bot-guard.ts). O proxy multi-tenant deixa o
+// prefixo passar sem reescrever para /loja.
+export default withBotId(nextConfig);

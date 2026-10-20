@@ -9,11 +9,11 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { cpfHasRegisteredLogin } from "@/lib/students/cpf-already-registered"
-import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { rejectBot } from "@/lib/checkout/bot-guard"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -78,6 +78,8 @@ export const POST = withRequestContext(
   async (request: Request) => {
     const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
     if (!rl.ok) return rateLimitResponse(rl)
+    const bot = await rejectBot()
+    if (bot) return bot
 
     const tenantIdHeader = request.headers.get("x-tenant-id")
     const tenantSlug = request.headers.get("x-tenant-slug")
@@ -293,16 +295,11 @@ export const POST = withRequestContext(
         guardian,
       })
 
-      await provisionStudentAccess(student.id, {
-        isPmbVitrine: false,
-        slug: tenant.slug,
-        name: tenant.name,
-      }).catch((err) => {
-        contextLogger().error(
-          { err, event: "loja_pkg_checkout.provision_access_failed", studentId: student.id },
-          "provisionStudentAccess falhou",
-        )
-      })
+      // Sem senha nem e-mail de boas-vindas antes do pagamento: o fulfill (curso/
+      // pacote) e o 1o ciclo da assinatura criam o acesso quando o gateway aprova.
+      // Checkout anonimo que manda e-mail virava amplificador — em 20/10/2026 um
+      // robo de teste de cartao disparou ~1.280 boas-vindas e a Hostinger
+      // suspendeu todas as caixas da plataforma.
 
       // Matrícula primária existente para ESTE pacote (reaproveita PENDING, bloqueia ATIVO).
       const existing = await prisma.enrollment.findFirst({

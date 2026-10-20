@@ -3,9 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { discardAbandonedCheckouts } from "@/lib/subscriptions/abandoned"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { rejectBot } from "@/lib/checkout/bot-guard"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { cpfHasRegisteredLogin } from "@/lib/students/cpf-already-registered"
-import { provisionStudentAccess } from "@/lib/students/access"
 import { buildGuardianWrite } from "@/lib/students/guardian"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
@@ -51,6 +51,8 @@ export const POST = withRequestContext(
   async (request: Request) => {
     const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
     if (!rl.ok) return rateLimitResponse(rl)
+    const bot = await rejectBot()
+    if (bot) return bot
 
     // O tenant vem do PROXY (host verificado), nunca do corpo — é o que impede
     // uma loja de cobrar em nome de outra.
@@ -193,15 +195,11 @@ export const POST = withRequestContext(
       throw err
     }
 
-    await provisionStudentAccess(student.id, {
-      isPmbVitrine: false,
-      slug: tenant.slug,
-    }).catch((err) => {
-      contextLogger().error(
-        { err, event: "loja.assinatura.provision_access_failed", studentId: student.id },
-        "provisionStudentAccess falhou",
-      )
-    })
+    // Sem senha nem e-mail de boas-vindas antes do pagamento: o fulfill (curso/
+    // pacote) e o 1o ciclo da assinatura criam o acesso quando o gateway aprova.
+    // Checkout anonimo que manda e-mail virava amplificador — em 20/10/2026 um
+    // robo de teste de cartao disparou ~1.280 boas-vindas e a Hostinger
+    // suspendeu todas as caixas da plataforma.
 
     const pendingCutoff = new Date(Date.now() - PENDING_CHECKOUT_TTL_MS)
     const alreadyLive = await prisma.studentSubscription.findFirst({

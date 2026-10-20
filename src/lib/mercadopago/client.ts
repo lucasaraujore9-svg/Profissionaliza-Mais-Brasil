@@ -9,6 +9,11 @@ import type {
   MPAuthorizedPayment,
 } from "./types"
 import { contextLogger } from "@/lib/logger"
+import {
+  assertAccountCardOpen,
+  CardGuardError,
+  recordCardRefusal,
+} from "@/lib/checkout/card-guard"
 
 const MP_BASE_URL = "https://api.mercadopago.com"
 const MAX_RETRIES = 3
@@ -163,9 +168,23 @@ export async function createPayment(
   params: MPCreatePaymentParams,
   idempotencyKey: string,
 ): Promise<MPPayment> {
-  return request<MPPayment>("POST", "/v1/payments", accessToken, params, {
+  // Cartao (token): passa pelo disjuntor de teste de cartao e conta a recusa.
+  // O MP recusa com 201 + status "rejected", nao com erro HTTP.
+  if (params.token) await guardMpCard(accessToken)
+  const payment = await request<MPPayment>("POST", "/v1/payments", accessToken, params, {
     "X-Idempotency-Key": idempotencyKey,
   })
+  if (params.token && payment.status === "rejected") await recordCardRefusal(accessToken)
+  return payment
+}
+
+async function guardMpCard(accessToken: string): Promise<void> {
+  try {
+    await assertAccountCardOpen(accessToken)
+  } catch (err) {
+    if (err instanceof CardGuardError) throw new MPApiError(err.message, 400)
+    throw err
+  }
 }
 
 export async function getPayment(
@@ -230,9 +249,22 @@ export async function createPreapproval(
   params: MPCreatePreapprovalParams,
   idempotencyKey: string,
 ): Promise<MPPreapproval> {
-  return request<MPPreapproval>("POST", "/preapproval", accessToken, params, {
-    "X-Idempotency-Key": idempotencyKey,
-  })
+  if (!params.card_token_id) {
+    return request<MPPreapproval>("POST", "/preapproval", accessToken, params, {
+      "X-Idempotency-Key": idempotencyKey,
+    })
+  }
+  await guardMpCard(accessToken)
+  try {
+    return await request<MPPreapproval>("POST", "/preapproval", accessToken, params, {
+      "X-Idempotency-Key": idempotencyKey,
+    })
+  } catch (err) {
+    if (err instanceof MPApiError && err.statusCode >= 400 && err.statusCode < 500) {
+      await recordCardRefusal(accessToken)
+    }
+    throw err
+  }
 }
 
 export async function getAuthorizedPayment(

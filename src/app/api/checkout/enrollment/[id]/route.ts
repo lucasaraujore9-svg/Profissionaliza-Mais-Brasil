@@ -15,6 +15,7 @@ import {
 import { issuePmbAsaasCharge } from "@/lib/checkout/issue-pmb-asaas-charge"
 import { TenantGatewayIsolationError } from "@/lib/checkout/assert-tenant-gateway"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { rejectBot } from "@/lib/checkout/bot-guard"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { clientIp } from "@/lib/http/client-ip"
 import { descreverItemCobranca } from "@/lib/enrollment/multi-course-server"
@@ -82,6 +83,8 @@ export const POST = withRequestContextParams<{ id: string }>(
 
     const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
     if (!rl.ok) return rateLimitResponse(rl)
+    const bot = await rejectBot()
+    if (bot) return bot
 
     const { id } = await params
 

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
+import { provisionStudentAccess } from "@/lib/students/access"
+import { afterResponse } from "@/lib/after-response"
 import { cancelSubscriptionAccess } from "./cancel"
 import { addInterval, isRecurringInterval } from "./interval"
 import { CARNE_STATUS, carnePeriodEnd } from "./carne-schedule"
@@ -181,6 +183,7 @@ export async function settleSubscriptionCycle(
   // escolhe um curso), entao nada mais avisava ninguem. O aluno caia numa area
   // sem curso nenhum e a unidade nao via venda — os dois liam "nao deu baixa".
   if (!sub.startedAt) {
+    provisionSubscriberAccess(sub)
     await notifySubscriptionActivated(sub, event.amount)
   }
 
@@ -214,6 +217,31 @@ export function cycleBase(
   }
   if (currentPeriodEnd && currentPeriodEnd > base) base = currentPeriodEnd
   return base
+}
+
+/**
+ * Senha do painel + boas-vindas no 1o pagamento. Os checkouts publicos deixaram
+ * de criar o acesso antes de cobrar (ver `/api/loja/checkout`), e a assinatura
+ * nao passa pelo fulfill — sem isto o assinante pagava e nunca recebia senha.
+ * Idempotente: quem ja tem senha nao recebe outra.
+ */
+function provisionSubscriberAccess(sub: { tenantId: string | null; studentId: string }): void {
+  // Depois da resposta: o envio pode esperar vaga no pool SMTP, e o webhook do
+  // gateway tem prazo para receber o 200.
+  const run = async () => {
+    const tenant = sub.tenantId
+      ? await prisma.tenant.findUnique({
+          where: { id: sub.tenantId },
+          select: { slug: true, name: true },
+        })
+      : null
+    await provisionStudentAccess(sub.studentId, {
+      isPmbVitrine: !tenant,
+      slug: tenant?.slug ?? "",
+      name: tenant?.name,
+    })
+  }
+  afterResponse(() => run().catch(swallow("subscription.activated.access")))
 }
 
 async function notifySubscriptionActivated(

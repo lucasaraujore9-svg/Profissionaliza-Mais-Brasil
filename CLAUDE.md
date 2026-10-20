@@ -2539,6 +2539,46 @@ o vizinho real.
   Rosa → 10; Novembro Azul, Black Friday → 11).
 - Artes de data NUNCA levam o número do ano: são reaproveitadas todo ano.
 
+### Teste de cartao roubado no checkout publico (2026-10-20)
+
+Robo usou a vitrine da `profissionalizantes` (Certifica Pro) de 23h28 de 19/10 a
+00h34 de 20/10 (BRT): 1.281 cadastros + matriculas, 496 tentativas de cartao, 8
+aprovadas (R$ 719,20, "MEI na Pratica"). Chamava `POST /api/loja/checkout`
+DIRETO (1.281 POSTs x 10 aberturas de /checkout), IPs de 30+ paises, mesmo
+user-agent — o limite de 10/min POR IP nao pegou nada (zero 429).
+
+**Efeito colateral pior que a fraude:** cada cadastro disparava o e-mail de
+boas-vindas ANTES do pagamento. ~1.280 e-mails em 1h e a Hostinger suspendeu as
+5 caixas (554); `SMTP_*` da Vercel com senha velha (535). E-mail da rede inteira
+fora do ar desde 02:49 UTC de 20/10.
+
+- **Contencao (feita em prod):** as 8 matriculas CANCELLED + revogadas no LMS
+  (`/api/cron/refazer-revogacao`); 1.273 pendentes CANCELLED; 1.280 leads LOST
+  (senao `pmb-sweep-abandoned-leads` mandaria 1.272 recuperacoes 24h depois);
+  1.281 alunos BLOQUEADO, sem senha, `obs` "SUSPEITO". `audit_logs` com
+  `actorEmail = incidente-fraude-cartao-2026-10-20`. Nada apagado.
+- **Nenhum checkout publico cria senha/e-mail antes de pagar.** O fulfill ja
+  gerava senha + boas-vindas na aprovacao; a assinatura (que nao passa pelo
+  fulfill) ganhou `provisionSubscriberAccess` no 1o ciclo (`renew.ts`).
+  Perda aceita: quem nao pagou nao entra em /aluno (paga por `/pagar/<id>`).
+- **Vercel BotID (basico) nos 13 POST de `/api/loja/checkout/**` e
+  `/api/checkout/**`** — `lib/checkout/bot-guard.ts` + `src/instrumentation-client.ts`
+  + `withBotId` no next.config. BotID e nao Turnstile: Turnstile pede cada host
+  no widget e temos dezenas de dominios proprios. O proxy deixa passar o prefixo
+  `/149e9513-01fa-4fb0-aad4-566afd725d1b/` — reescrever para /loja quebra a prova.
+  Fail-open se o servico cair.
+- **Trava de cartao no CLIENTE do gateway** (`lib/checkout/card-guard.ts`,
+  chamada por `asaas/client.ts` e `mercadopago/client.ts`): disjuntor por CONTA
+  (10 recusas/10 min fecham o cartao 30 min naquela conta + alerta SUPER_ADMIN
+  sem `category`), mesmo cartao com outro CPF recusado (24h), mais de 4
+  tentativas do mesmo cartao/hora recusadas. Impressao = HMAC do PAN, nunca o
+  numero. No MP o cartao vem tokenizado: so o disjuntor. Bloqueio vira
+  `AsaasApiError` 400 — as portas ja sabem mostrar e desfazer. Fail-open no Redis.
+- Invariante: `checkout/bot-guard-coverage.test.ts` (rota nova sem BotID ou com
+  `provisionStudentAccess` quebra). Verificado POR MUTACAO (4/4).
+- **Pendente:** liberar as caixas com a Hostinger / trocar `SMTP_*`; estorno das
+  8 cobrancas e feito pelo dono da unidade no Asaas dele.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

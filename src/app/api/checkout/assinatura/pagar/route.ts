@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { rejectBot } from "@/lib/checkout/bot-guard"
 import { storeSubscriptionPaymentSchema } from "@/lib/subscriptions/checkout-schema"
 import { payStoreSubscription } from "@/lib/subscriptions/store-payment"
 import { clientIp } from "@/lib/http/client-ip"
@@ -30,6 +31,8 @@ export const POST = withRequestContext(
 
     const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
     if (!rl.ok) return rateLimitResponse(rl)
+    const bot = await rejectBot()
+    if (bot) return bot
 
     let payload: unknown
     try {

@@ -12,6 +12,7 @@ import {
   PMB_PUBLIC_NAME,
 } from "@/lib/pmb-config"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { rejectBot } from "@/lib/checkout/bot-guard"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { mpWebhookUrl, isPmbAppHost } from "@/lib/tenant/urls"
@@ -43,6 +44,8 @@ export const POST = withRequestContext(
 
     const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
     if (!rl.ok) return rateLimitResponse(rl)
+    const bot = await rejectBot()
+    if (bot) return bot
 
     let payload: unknown
     try {

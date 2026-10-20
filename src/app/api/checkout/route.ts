@@ -29,6 +29,7 @@ import {
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { rejectBot } from "@/lib/checkout/bot-guard"
 import {
   pmbPlataformaPolo,
   pmbPlataformaVendedorId,
@@ -39,7 +40,6 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { swallow } from "@/lib/errors"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { cpfHasRegisteredLogin } from "@/lib/students/cpf-already-registered"
-import { provisionStudentAccess } from "@/lib/students/access"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { clientIp } from "@/lib/http/client-ip"
@@ -158,6 +158,8 @@ export const POST = withRequestContext(
   // Mesmo bucket de /api/loja/checkout — bots não conseguem gerar cobranças em massa.
   const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
   if (!rl.ok) return rateLimitResponse(rl)
+  const bot = await rejectBot()
+  if (bot) return bot
 
   let payload: unknown
   try {
@@ -359,15 +361,11 @@ export const POST = withRequestContext(
       guardian,
     })
 
-    await provisionStudentAccess(student.id, {
-      isPmbVitrine: true,
-      slug: pmbTenant.slug,
-    }).catch((err) => {
-      contextLogger().error(
-        { err, event: "pmb_checkout.provision_access_failed", studentId: student.id },
-        "provisionStudentAccess falhou",
-      )
-    })
+    // Sem senha nem e-mail de boas-vindas antes do pagamento: o fulfill (curso/
+    // pacote) e o 1o ciclo da assinatura criam o acesso quando o gateway aprova.
+    // Checkout anonimo que manda e-mail virava amplificador — em 20/10/2026 um
+    // robo de teste de cartao disparou ~1.280 boas-vindas e a Hostinger
+    // suspendeu todas as caixas da plataforma.
 
     // Detecta matrícula existente ANTES de consumir o cupom — assim, ao trocar
     // de forma de pagamento, o cupom reservado pela cobrança anterior é

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { getCardInstallments, MPApiError } from "@/lib/mercadopago/client"
 import { getPmbMpAccessTokenAsync } from "@/lib/system-settings"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { rejectBot } from "@/lib/checkout/bot-guard"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -21,6 +22,8 @@ export const POST = withRequestContext(
   async (request: Request) => {
     const rl = await rateLimit(request, RATE_LIMITS.installments)
     if (!rl.ok) return rateLimitResponse(rl)
+    const bot = await rejectBot()
+    if (bot) return bot
 
     let payload: unknown
     try {

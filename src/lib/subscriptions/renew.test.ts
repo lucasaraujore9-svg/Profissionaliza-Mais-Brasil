@@ -11,7 +11,15 @@ vi.mock("@/lib/prisma", () => ({
     },
     studentSubscription: { findUnique: vi.fn(), update: vi.fn() },
     student: { findUnique: vi.fn(async () => ({ nome: "Ana Souza" })) },
+    tenant: { findUnique: vi.fn(async () => ({ slug: "loja1", name: "Loja 1" })) },
   },
+}))
+// Acesso do assinante nasce no 1o pagamento (o checkout publico nao cria mais
+// senha antes de cobrar). afterResponse inline para o teste enxergar a chamada.
+vi.mock("@/lib/after-response", () => ({ afterResponse: (fn: () => Promise<unknown>) => fn() }))
+const provisionStudentAccess = vi.fn(async (..._a: unknown[]) => ({ created: true }))
+vi.mock("@/lib/students/access", () => ({
+  provisionStudentAccess: (...a: unknown[]) => provisionStudentAccess(...a),
 }))
 vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn(async () => null) }))
 vi.mock("@/lib/errors", () => ({ swallow: () => () => undefined }))
@@ -206,6 +214,25 @@ describe("1o pagamento avisa aluno e unidade", () => {
     expect(notify).toHaveBeenCalledWith(
       expect.objectContaining({ audience: "TENANT", tenantId: "t_1", href: "/painel/vendas" }),
     )
+  })
+
+  it("1o pagamento cria o acesso do assinante (senha + boas-vindas) com a marca da unidade", async () => {
+    provisionStudentAccess.mockClear()
+    findSub.mockResolvedValue(sub({ tenantId: "t_1" }))
+    await settleSubscriptionCycle("sub_1", event())
+    await new Promise((r) => setTimeout(r, 0))
+    expect(provisionStudentAccess).toHaveBeenCalledWith("st_1", {
+      isPmbVitrine: false,
+      slug: "loja1",
+      name: "Loja 1",
+    })
+  })
+
+  it("renovacao nao recria o acesso", async () => {
+    provisionStudentAccess.mockClear()
+    findSub.mockResolvedValue(sub({ tenantId: "t_1", startedAt: new Date("2026-07-20T12:00:00Z") }))
+    await settleSubscriptionCycle("sub_1", event())
+    expect(provisionStudentAccess).not.toHaveBeenCalled()
   })
 
   it("renovacao (ja tinha startedAt) nao repete o aviso", async () => {
