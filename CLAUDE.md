@@ -1525,6 +1525,9 @@ A assinatura de aluno nasceu aberta para toda revenda: o preset do dono e
 - **`Tenant.subscriptionsEnabled`**, default FALSE para TODA unidade — decisao
   do dono, inclusive para quem ja tinha plano montado. Migration
   `20260910_tenant_subscriptions_module` (aditiva, idempotente, sem backfill).
+  **Invertido em 2026-10-22** (decisao do dono): default TRUE e todas as
+  unidades religadas (`20261022_tenant_subscriptions_default_on`, backfill
+  guardado pelo default antigo para nao religar quem for desligado depois).
   Liga em /admin/revendedores/[id] → "Vitrine & extras"
   (`PUT /api/admin/tenants/[id]/assinaturas`, `unidades.governanca`, auditado
   como `tenant.subscriptions_module`, notifica a unidade). Nao se confunde com

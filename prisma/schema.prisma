@@ -555,7 +555,7 @@ model Tenant {
   // `courseAuthoringEnabled`. Nao se confunde com `assinaturas.*`, que diz QUEM
   // dentro da unidade mexe nos planos depois de ligado. Desligar fecha a VENDA;
   // quem ja assina segue com acesso. Ver src/lib/subscriptions/module.ts.
-  subscriptionsEnabled   Boolean   @default(false) @map("subscriptions_enabled")
+  subscriptionsEnabled   Boolean   @default(true)  @map("subscriptions_enabled")
   // Nome unico da sessao no engine de WhatsApp (gerado como cuid na 1a conexao).
   waSessionName          String?   @unique @map("wa_session_name")
   // Telefone E.164 conectado (snapshot apos QR scan). Unique = um numero
