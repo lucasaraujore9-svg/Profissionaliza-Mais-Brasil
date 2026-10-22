@@ -231,6 +231,17 @@ describe("assinatura NO BOLETO (carnê)", () => {
     expect(gatewayCall).not.toHaveBeenCalled()
   })
 
+  it("unidade no Asaas não vende carnê: o aluno escolhe cartão recorrente ou Pix Automático no link", async () => {
+    const res = await createDirectSubscriptionSale({
+      ...base(),
+      checkout: { gateway: "ASAAS", storeUrl: "https://loja.test" },
+      carne: { count: 12, firstDueDate: inDays(7) },
+    })
+    expect(res).toMatchObject({ ok: false, status: 400, code: "CARNE_NOT_AVAILABLE" })
+    expect(db.create).not.toHaveBeenCalled()
+    expect(carneCall).not.toHaveBeenCalled()
+  })
+
   it("pedido inválido é recusado ANTES de criar a assinatura", async () => {
     const res = await createDirectSubscriptionSale({
       ...base(),

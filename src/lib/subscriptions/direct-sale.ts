@@ -206,6 +206,20 @@ export async function createDirectSubscriptionSale(
     }
   }
 
+  // Unidade no Asaas não vende carnê pela venda direta: o link leva o aluno ao
+  // checkout, onde cartão vira assinatura do Asaas e PIX vira Pix Automático.
+  // O boleto continua lá como escolha DO ALUNO. A vitrine PMB (tenantId null)
+  // segue como era.
+  if (input.carne && input.tenantId && input.checkout.gateway === "ASAAS") {
+    return {
+      ok: false,
+      status: 400,
+      code: "CARNE_NOT_AVAILABLE",
+      error:
+        "Nesta loja a assinatura é paga pelo link: o aluno escolhe cartão (recorrente), PIX recorrente ou boleto.",
+    }
+  }
+
   // Carnê: o pedido é conferido ANTES de criar qualquer linha — o vendedor
   // recebe a mensagem pronta em vez de uma venda pela metade.
   const carneCheck = input.carne

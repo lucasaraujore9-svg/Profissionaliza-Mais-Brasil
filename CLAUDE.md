@@ -2591,6 +2591,27 @@ fora do ar desde 02:49 UTC de 20/10.
 - **Pendente:** liberar as caixas com a Hostinger / trocar `SMTP_*`; estorno das
   8 cobrancas e feito pelo dono da unidade no Asaas dele.
 
+### Assinatura de unidade no Asaas: cartao recorrente ou Pix Automatico (2026-10-22)
+
+Pedido do dono: unidade no Asaas vende assinatura como assinatura do Asaas no
+cartao ou como PIX recorrente (Pix Automatico). As quatro portas de checkout ja
+faziam isso; o que fugia era o carne.
+
+- **Venda direta de unidade Asaas nao gera mais carne de boleto**
+  (`CARNE_NOT_AVAILABLE` em `direct-sale.ts`, opcao escondida em
+  /painel/vendas). O link leva ao checkout e o ALUNO escolhe cartao, PIX ou
+  boleto. A vitrine PMB (`tenantId` null) e o MP seguem como eram.
+- **Carne do Asaas nunca pago + aluno escolhe cartao = assinatura do Asaas no
+  cartao** (`convertCarneToCard` em `store-payment.ts`). Antes o cartao pagava
+  so aquele ciclo e a assinatura seguia no boleto/PIX. Fail-closed contra
+  cobranca em dobro: recusa (`CARNE_PAYMENT_IN_FLIGHT`) se a autorizacao do Pix
+  Automatico ja nao esta `CREATED` ou se alguma cobranca do carne nao sai do
+  Asaas. Carne com ciclo ja pago continua pagando so a cobranca aberta.
+- A pagina `/pagar/assinatura` passou a oferecer cartao no carne de PIX do
+  Asaas ainda nao pago.
+- Fora: a venda de 21/10 da eadcenatep (carne PENDING) ficou como estava, por
+  decisao do dono.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

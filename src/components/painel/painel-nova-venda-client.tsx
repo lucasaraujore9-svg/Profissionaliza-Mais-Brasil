@@ -334,9 +334,11 @@ export function PainelNovaVendaClient({
   // Carnê de CURSO: parcelamento de valor fechado, só com o parcelado liberado
   // para a unidade. Carnê de ASSINATURA: um boleto por ciclo, pelo preço do
   // plano — vale para todo plano recorrente (o vitalício é pago de uma vez, e o
-  // aluno escolhe boleto no próprio link).
+  // aluno escolhe boleto no próprio link). Loja no Asaas não tem carnê de
+  // assinatura: o aluno escolhe cartão recorrente, Pix Automático ou boleto no
+  // link (o servidor também recusa).
   const installmentAvailable =
-    !bolsista && (isPlan ? planRecurring : !!installmentConfig)
+    !bolsista && (isPlan ? planRecurring && gateway !== "ASAAS" : !!installmentConfig)
   const isInstallment = installmentAvailable && paymentMode === "installment"
   const isPlanCarne = isInstallment && isPlan
   const isCourseCarne = isInstallment && !isPlan

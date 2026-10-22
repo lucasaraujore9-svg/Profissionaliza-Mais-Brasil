@@ -13,11 +13,13 @@ const db = vi.hoisted(() => ({
   findUnique: vi.fn(),
   update: vi.fn(),
 }))
-const payments = vi.hoisted(() => ({ findMany: vi.fn(), findFirst: vi.fn() }))
+const payments = vi.hoisted(() => ({ findMany: vi.fn(), findFirst: vi.fn(), count: vi.fn() }))
 const asaas = vi.hoisted(() => ({
   getPayment: vi.fn(),
   listPayments: vi.fn(),
   payWithCreditCard: vi.fn(),
+  getPixAutomaticAuthorization: vi.fn(),
+  cancelPixAutomaticAuthorization: vi.fn(),
 }))
 const lock = vi.hoisted(() => ({ acquired: true }))
 
@@ -52,6 +54,7 @@ vi.mock("./carne", () => {
       firstBoleto: { url: "https://mp.test/boleto.pdf", digitableLine: "2379" },
     })),
     resetSubscriptionCarne: vi.fn(async () => undefined),
+    cancelOpenCarneRows: vi.fn(async () => ({ ok: true })),
     openCarnePix: vi.fn(async () => ({ qrCode: "pix-aberto", qrCodeBase64: "b64" })),
   }
 })
@@ -84,6 +87,7 @@ import { createSubscriptionAtGateway } from "./checkout"
 import { settleSubscriptionCycle } from "./renew"
 import {
   CarneInputError,
+  cancelOpenCarneRows,
   openCarnePix,
   resetSubscriptionCarne,
   startSelfServiceCarne,
@@ -96,6 +100,7 @@ const planLookup = getPlanForCheckout as unknown as ReturnType<typeof vi.fn>
 const startCarne = startSelfServiceCarne as unknown as ReturnType<typeof vi.fn>
 const resetCarne = resetSubscriptionCarne as unknown as ReturnType<typeof vi.fn>
 const openPix = openCarnePix as unknown as ReturnType<typeof vi.fn>
+const cancelRows = cancelOpenCarneRows as unknown as ReturnType<typeof vi.fn>
 
 const mpTenant = {
   id: "t1",
@@ -158,8 +163,11 @@ beforeEach(() => {
   vi.clearAllMocks()
   lock.acquired = true
   db.findFirst.mockResolvedValue(pendingSub())
+  // `clearAllMocks` não limpa os "Once" que um teste não consumiu.
+  db.findUnique.mockReset()
   db.findUnique.mockResolvedValue(pendingSub())
   payments.findMany.mockResolvedValue([])
+  payments.count.mockResolvedValue(0)
 })
 
 /** A linha como o lock a relê: é ela que decide o caminho. */
@@ -558,5 +566,85 @@ describe("payStoreSubscription — assinatura NO BOLETO", () => {
     openPix.mockResolvedValueOnce(null)
     const res = await payStoreSubscription(mpTenant, { subscriptionId: "sub_1", paymentMethod: "PIX" })
     expect(res).toMatchObject({ ok: false, code: "NO_OPEN_CHARGE" })
+  })
+})
+
+describe("payStoreSubscription — carnê do Asaas nunca pago, aluno escolhe cartão", () => {
+  const asaasCard = {
+    subscriptionId: "sub_1",
+    paymentMethod: "CREDIT_CARD" as const,
+    creditCard: {
+      holderName: "ALUNO",
+      number: "4111111111111111",
+      expiryMonth: "12",
+      expiryYear: "2030",
+      ccv: "123",
+    },
+    creditCardHolder: { postalCode: "30110000", addressNumber: "10" },
+  }
+  const carneRow = {
+    boletoCarne: true,
+    gateway: "ASAAS",
+    billingType: "PIX",
+    externalReference: "pmb_sub_sub_1",
+    pixAutomaticAuthorizationId: "auth_1",
+  }
+
+  /** A 1ª leitura é o carnê; depois do reset, a linha volta sem carnê. */
+  function carneThenReset() {
+    db.findFirst.mockResolvedValue(pendingSub(carneRow))
+    db.findUnique
+      .mockResolvedValueOnce(pendingSub(carneRow))
+      .mockResolvedValueOnce(pendingSub({ gateway: "ASAAS" }))
+  }
+
+  it("vira assinatura do Asaas no cartão, depois de desfazer o carnê", async () => {
+    carneThenReset()
+    asaas.getPixAutomaticAuthorization.mockResolvedValue({ id: "auth_1", status: "CREATED" })
+    asaas.cancelPixAutomaticAuthorization.mockResolvedValue({ id: "auth_1", status: "CANCELLED" })
+
+    const res = await payStoreSubscription(asaasTenant, asaasCard)
+
+    expect(res).toEqual({ ok: true, authorized: true })
+    expect(asaas.cancelPixAutomaticAuthorization).toHaveBeenCalledWith("auth_1", "dec:enc_asaas")
+    expect(cancelRows).toHaveBeenCalledWith("sub_1")
+    expect(resetCarne).toHaveBeenCalledWith("sub_1")
+    expect(gatewayCall).toHaveBeenCalledWith(
+      expect.objectContaining({ subscriptionId: "sub_1", billingType: "CREDIT_CARD" }),
+      "ASAAS",
+      expect.objectContaining({ asaasApiKey: "dec:enc_asaas" }),
+    )
+    expect(asaas.payWithCreditCard).not.toHaveBeenCalled()
+  })
+
+  it("PIX Automático já autorizado (QR pago, webhook a caminho) não troca", async () => {
+    carneThenReset()
+    asaas.getPixAutomaticAuthorization.mockResolvedValue({ id: "auth_1", status: "ACTIVE" })
+    const res = await payStoreSubscription(asaasTenant, asaasCard)
+    expect(res).toMatchObject({ ok: false, code: "CARNE_PAYMENT_IN_FLIGHT" })
+    expect(resetCarne).not.toHaveBeenCalled()
+    expect(gatewayCall).not.toHaveBeenCalled()
+  })
+
+  it("cobrança do carnê que não sai do Asaas (pode estar paga) não troca", async () => {
+    carneThenReset()
+    asaas.getPixAutomaticAuthorization.mockResolvedValue({ id: "auth_1", status: "EXPIRED" })
+    cancelRows.mockResolvedValueOnce({ ok: false, error: "não removida" })
+    const res = await payStoreSubscription(asaasTenant, asaasCard)
+    expect(res).toMatchObject({ ok: false, code: "CARNE_PAYMENT_IN_FLIGHT" })
+    expect(resetCarne).not.toHaveBeenCalled()
+    expect(gatewayCall).not.toHaveBeenCalled()
+  })
+
+  it("carnê com ciclo já pago segue pagando a cobrança aberta, sem trocar", async () => {
+    rowIs({ ...carneRow, billingType: "BOLETO", pixAutomaticAuthorizationId: null })
+    payments.count.mockResolvedValue(1)
+    payments.findMany.mockResolvedValue([{ asaasPaymentId: "pay_open" }])
+    asaas.getPayment.mockResolvedValue(openCharge())
+    asaas.payWithCreditCard.mockResolvedValue(openCharge({ status: "CONFIRMED" }))
+    await payStoreSubscription(asaasTenant, asaasCard)
+    expect(cancelRows).not.toHaveBeenCalled()
+    expect(gatewayCall).not.toHaveBeenCalled()
+    expect(asaas.payWithCreditCard).toHaveBeenCalled()
   })
 })

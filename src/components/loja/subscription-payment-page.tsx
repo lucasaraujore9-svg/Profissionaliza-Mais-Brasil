@@ -301,6 +301,10 @@ async function CarnePayment({
   )
   const price = Number(open?.amount ?? sub.priceAtPurchase)
   const unidade = pix ? "PIX" : "boleto"
+  // Carnê do Asaas nunca pago: ainda é a 1ª contratação. O aluno pode trocar
+  // para o cartão, e aí a assinatura vira cartão recorrente (store-payment.ts).
+  const firstCycleAsaas =
+    sub.gateway === "ASAAS" && sub.status === "PENDING" && !rows.some((r) => r.paidAt)
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -350,10 +354,10 @@ async function CarnePayment({
             gateway="ASAAS"
             mpPublicKey={sub.tenant?.mpPublicKey ?? null}
             endpoint={payEndpoint}
-            renewal
-            carneOpen
+            renewal={!firstCycleAsaas}
+            carneOpen={!firstCycleAsaas}
             defaultHolderName={sub.student.nome ?? ""}
-            methods={pix ? ["PIX"] : undefined}
+            methods={pix ? (firstCycleAsaas ? ["PIX", "CREDIT_CARD"] : ["PIX"]) : undefined}
           />
         )}
       </div>

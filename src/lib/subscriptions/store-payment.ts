@@ -3,7 +3,9 @@ import { contextLogger } from "@/lib/logger"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import {
   AsaasApiError,
+  cancelPixAutomaticAuthorization,
   decryptTenantAsaasKey,
+  getPixAutomaticAuthorization,
   getPayment,
   listPayments,
   motherAsaasKey,
@@ -29,6 +31,7 @@ import { settleSubscriptionCycle } from "./renew"
 import type { StoreSubscriptionPaymentInput } from "./checkout-schema"
 import {
   CarneInputError,
+  cancelOpenCarneRows,
   resetSubscriptionCarne,
   openCarnePix,
   startSelfServiceCarne,
@@ -105,6 +108,7 @@ const PAYABLE_SELECT = {
   externalReference: true,
   boletoCarne: true,
   billingType: true,
+  pixAutomaticAuthorizationId: true,
   studentId: true,
   student: { select: PAYER_SELECT },
 } as const
@@ -121,6 +125,7 @@ type PayableSubscription = {
   externalReference: string | null
   boletoCarne: boolean
   billingType: string | null
+  pixAutomaticAuthorizationId: string | null
   studentId: string
 }
 
@@ -323,7 +328,23 @@ async function payUnderLock(
   remoteIp: string | undefined,
 ): Promise<StorePaymentResult> {
   // ── Assinatura no boleto: paga o boleto em aberto ────────────────────────
-  if (sub.boletoCarne) return payCarneBoleto(sub, data, resolved, payer, remoteIp)
+  if (sub.boletoCarne) {
+    // Carnê do Asaas que nunca foi pago e o aluno escolheu CARTÃO: vira
+    // assinatura do Asaas no cartão, em vez de pagar só este ciclo e seguir no
+    // boleto/PIX.
+    if (
+      data.paymentMethod === "CREDIT_CARD" &&
+      sub.status === "PENDING" &&
+      sub.gateway === "ASAAS" &&
+      resolved.gateway === "ASAAS" &&
+      (await prisma.subscriptionPayment.count({
+        where: { subscriptionId: sub.id, paidAt: { not: null } },
+      })) === 0
+    ) {
+      return convertCarneToCard(sub, data, resolved, payer, remoteIp)
+    }
+    return payCarneBoleto(sub, data, resolved, payer, remoteIp)
+  }
 
   // ── Já existe cobrança no gateway ────────────────────────────────────────
   if (hasGatewayCharge(sub)) {
@@ -411,6 +432,79 @@ async function payUnderLock(
     ...(charged.pix ? { pix: charged.pix } : {}),
     ...(charged.boleto ? { boleto: charged.boleto } : {}),
   }
+}
+
+/**
+ * Troca um carnê do Asaas ainda NÃO pago por assinatura do Asaas no cartão.
+ *
+ * Fail-closed: o boleto/PIX em aberto pode ter sido pago agora há pouco, com o
+ * webhook ainda a caminho. Se a autorização do Pix Automático já não está
+ * `CREATED`, ou se alguma cobrança do carnê não sai do Asaas (o Asaas recusa
+ * remover cobrança paga), não troca — cobrar o cartão por cima seria cobrar em
+ * dobro.
+ */
+async function convertCarneToCard(
+  sub: PayableSubscription,
+  data: StoreSubscriptionPaymentInput,
+  resolved: ResolvedAccount,
+  payer: PayerData,
+  remoteIp: string | undefined,
+): Promise<StorePaymentResult> {
+  const apiKey = resolved.asaasApiKey
+  if (!apiKey) {
+    return fail(400, "GATEWAY_NOT_READY", "Esta loja ainda não está pronta para receber pagamentos")
+  }
+  const cardCheck = checkCard(data, "ASAAS")
+  if (cardCheck) return cardCheck
+  // Antes de desfazer o carnê: plano fora de venda não pode deixar o aluno sem
+  // o boleto/PIX que ele já tinha.
+  if (!(await getPlanForCheckout(sub.tenantId, sub.planId))) {
+    return fail(
+      409,
+      "PLAN_UNAVAILABLE",
+      "Este plano não está mais disponível nesta loja. Fale com a loja.",
+    )
+  }
+
+  const inFlight = fail(
+    409,
+    "CARNE_PAYMENT_IN_FLIGHT",
+    "O pagamento em aberto desta assinatura pode já ter sido feito. Aguarde alguns minutos e atualize a página.",
+  )
+
+  const authId = sub.pixAutomaticAuthorizationId
+  if (authId) {
+    const auth = await getPixAutomaticAuthorization(authId, apiKey).catch(() => null)
+    if (!auth || auth.status === "ACTIVE") return inFlight
+    if (auth.status === "CREATED") {
+      const cancelled = await cancelPixAutomaticAuthorization(authId, apiKey)
+        .then(() => true)
+        .catch(() => false)
+      if (!cancelled) return inFlight
+    }
+  }
+
+  const rows = await cancelOpenCarneRows(sub.id)
+  if (!rows.ok) {
+    // ponytail: falha parcial deixa parte das linhas CANCELLED e o carnê de pé;
+    // a próxima tentativa só reprocessa as que ficaram abertas.
+    contextLogger().warn(
+      { event: "subscription.carne.card_switch_blocked", subscriptionId: sub.id, error: rows.error },
+      "carnê não desfeito; troca para cartão recusada",
+    )
+    return inFlight
+  }
+
+  await resetSubscriptionCarne(sub.id)
+  const fresh = await prisma.studentSubscription.findUnique({
+    where: { id: sub.id },
+    select: PAYABLE_SELECT,
+  })
+  if (!fresh) return fail(404, "SUBSCRIPTION_NOT_FOUND", "Cobrança não encontrada")
+  if (fresh.boletoCarne) return inFlight
+  // Sem carnê e sem cobrança no gateway: segue o caminho da 1ª contratação no
+  // cartão (`createSubscriptionAtGateway` → assinatura do Asaas).
+  return payUnderLock(fresh, data, resolved, payer, remoteIp)
 }
 
 /**

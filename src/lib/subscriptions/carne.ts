@@ -910,6 +910,7 @@ export async function resetSubscriptionCarne(subscriptionId: string): Promise<vo
       externalReference: null,
       billingType: "UNDEFINED",
       pixAutomaticAuthorizationId: null,
+      pixAutomaticQrId: null,
     },
   })
 }
