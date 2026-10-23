@@ -243,8 +243,14 @@ export const GET = withRequestContextParams<{ id: string }>(
       asaasSubscriptionStatus = sub.status ?? null
       asaasSubscriptionValue = sub.value ?? null
 
+      // `id` e o da LINHA DO BANCO: baixa manual e estorno buscam por ele.
+      // Com o id do Asaas aqui, os dois botoes respondiam 404 em toda unidade
+      // com assinatura. Cobranca que so existe no Asaas fica com o id de la.
+      const localIdByAsaas = new Map(
+        payments.map((p) => [p.asaasPaymentId, p.id]),
+      )
       const fromAsaas = asaasPayments.data.map((p) => ({
-        id: p.id,
+        id: localIdByAsaas.get(p.id) ?? p.id,
         asaasPaymentId: p.id,
         amount: p.value,
         billingType: p.billingType,
