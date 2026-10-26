@@ -17,8 +17,16 @@ const PMB_SLUG = "__pmb__"
 // entao `gt: 0` cobre os dois casos. Ver src/app/api/admin/revendedores.
 const COUNTABLE = { slug: { not: PMB_SLUG }, planValue: { gt: 0 } } as const
 
-// Meta de revendas ATIVAS do lancamento. Configuravel via env sem deploy.
+// Meta INICIAL de revendas ATIVAS do lancamento. Configuravel via env sem deploy.
 export const PLACAR_META = env.PLACAR_META ?? 100
+// Bateu a meta, a proxima sobe este degrau: 150 ativas -> meta 200, 200 -> 250.
+export const PLACAR_META_STEP = 50
+
+/** Meta vigente: a inicial ate bate-la; depois, o proximo degrau ACIMA das ativas. */
+export function metaAtual(ativos: number, base = PLACAR_META, step = PLACAR_META_STEP): number {
+  if (ativos < base) return base
+  return base + step * (Math.floor((ativos - base) / step) + 1)
+}
 
 export interface PlacarSnapshot {
   meta: number
@@ -107,11 +115,11 @@ export async function getPlacarSnapshot(): Promise<PlacarSnapshot> {
   }
 
   const ativos = funnel.ativos
-  const progresso =
-    PLACAR_META > 0 ? Math.min(100, Math.round((ativos / PLACAR_META) * 100)) : 0
+  const meta = metaAtual(ativos)
+  const progresso = meta > 0 ? Math.min(100, Math.round((ativos / meta) * 100)) : 0
 
   return {
-    meta: PLACAR_META,
+    meta,
     ativos,
     progresso,
     funnel,

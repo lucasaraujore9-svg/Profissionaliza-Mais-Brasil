@@ -17,7 +17,9 @@ import { trackingOrigins } from "./src/lib/tracking/csp";
 const px = (base: string, directive: "script" | "connect" | "img" | "frame" | "font") =>
   [base, ...trackingOrigins(directive)].join(" ");
 
-const SECURITY_HEADERS = [
+// `fonts` libera o Google Fonts: so a pagina estatica /relatos (public/relatos)
+// carrega fonte de fora — o resto do app usa next/font, servido de 'self'.
+const securityHeaders = (fonts = false) => [
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
@@ -42,8 +44,8 @@ const SECURITY_HEADERS = [
       // img.youtube.com / i.ytimg.com: thumbnails (capa) dos modulos de
       // Treinamento, que usam o frame do YouTube. Sem isto a CSP bloqueia a capa.
       px("img-src 'self' data: blob: https://*.supabase.co https://playcurso.com https://s3.bmbr.com.br https://img.youtube.com https://i.ytimg.com https://www.google.com https://www.gstatic.com", "img"),
-      px("font-src 'self' data:", "font"),
-      "style-src 'self' 'unsafe-inline'",
+      px(`font-src 'self' data:${fonts ? " https://fonts.gstatic.com" : ""}`, "font"),
+      `style-src 'self' 'unsafe-inline'${fonts ? " https://fonts.googleapis.com" : ""}`,
       // www.google.com / www.gstatic.com (script, frame, connect, img): caixinha
       // "Nao sou um robo" (reCAPTCHA v2) dos checkouts publicos.
       px("script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.mercadopago.com https://www.mercadopago.com https://va.vercel-scripts.com https://www.google.com https://www.gstatic.com", "script"),
@@ -97,12 +99,29 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "i.ytimg.com" },
     ],
   },
+  // Relatos de parceiros: HTML estatico em public/relatos/index.html, servido
+  // como veio do design (animacoes e scripts proprios). Imagens e audios moram
+  // em public/relatos/assets/ — embutidos em data: a CSP bloqueava o audio.
+  async rewrites() {
+    return [{ source: "/relatos", destination: "/relatos/index.html" }];
+  },
   async headers() {
     return [
       {
         // Headers de seguranca aplicados a tudo
         source: "/:path*",
-        headers: SECURITY_HEADERS,
+        headers: securityHeaders(),
+      },
+      {
+        // Mesma chave declarada depois sobrescreve a de cima.
+        source: "/relatos/:path*",
+        headers: securityHeaders(true),
+      },
+      {
+        source: "/relatos/assets/(.*)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=604800" },
+        ],
       },
       {
         // O service worker precisa revalidar sempre — caso contrario

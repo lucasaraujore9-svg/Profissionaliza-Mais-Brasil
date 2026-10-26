@@ -310,14 +310,8 @@ export function PlacarClient({
           </div>
           {showMeta && (
             <p className="mt-2 text-sm text-white/60 sm:text-base">
-              {restantes > 0 ? (
-                <>
-                  Faltam{" "}
-                  <strong className="text-white">{restantes}</strong> para a meta
-                </>
-              ) : (
-                <strong className="text-emerald-300">🎉 Meta batida!</strong>
-              )}
+              {/* A meta escalona (metaAtual): sempre ha um proximo degrau. */}
+              Faltam <strong className="text-white">{restantes}</strong> para a meta
             </p>
           )}
         </div>

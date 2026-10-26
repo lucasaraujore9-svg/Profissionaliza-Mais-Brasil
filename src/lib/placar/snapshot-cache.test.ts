@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma"
 import {
   getActiveTenantsCached,
   getReferralActiveTenantsCached,
+  metaAtual,
 } from "./snapshot"
 
 const getJsonMock = getJson as unknown as ReturnType<typeof vi.fn>
@@ -51,5 +52,19 @@ describe("getReferralActiveTenantsCached (PERF-011)", () => {
     expect(out).toEqual([{ id: "r1", name: "Ind" }])
     expect(getJsonMock).toHaveBeenCalledWith("placar:ref:active:ref-42")
     expect(p.tenant.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("metaAtual (meta escalonada)", () => {
+  it("fica na meta inicial ate bate-la", () => {
+    expect(metaAtual(0, 150)).toBe(150)
+    expect(metaAtual(149, 150)).toBe(150)
+  })
+
+  it("bateu a meta, sobe 50: 150 -> 200, 200 -> 250", () => {
+    expect(metaAtual(150, 150)).toBe(200)
+    expect(metaAtual(199, 150)).toBe(200)
+    expect(metaAtual(200, 150)).toBe(250)
+    expect(metaAtual(260, 100)).toBe(300)
   })
 })
