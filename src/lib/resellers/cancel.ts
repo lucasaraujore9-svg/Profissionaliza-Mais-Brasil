@@ -12,6 +12,7 @@
  * continua sendo cobrada é o pior dos dois estados possíveis.
  */
 import { prisma } from "@/lib/prisma"
+import { appendNote } from "@/lib/tenant-billing/change-log"
 import { cancelSubscription, deletePayment, AsaasApiError } from "@/lib/asaas/client"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { blockTenantStudents } from "@/lib/auto-block"
@@ -108,9 +109,21 @@ export async function cancelTenant(
   if (options.deleteOpenCharges) {
     const openCharges = await prisma.tenantPayment.findMany({
       where: { tenantId: tenant.id, status: { in: ["PENDING", "OVERDUE"] } },
-      select: { id: true, asaasPaymentId: true },
+      select: { id: true, asaasPaymentId: true, status: true, notes: true },
     })
     for (const charge of openCharges) {
+      // DELETING + nota ANTES de apagar no Asaas: o PAYMENT_DELETED pode chegar
+      // antes desta linha terminar, e sem a marca ele registraria "cancelada
+      // direto no Asaas" numa fatura que o PMB cancelou.
+      await prisma.tenantPayment
+        .update({
+          where: { id: charge.id },
+          data: {
+            status: "DELETING",
+            notes: appendNote(charge.notes, "Cancelada no PMB (cancelamento da unidade)."),
+          },
+        })
+        .catch(swallow("resellers.cancel"))
       try {
         await deletePayment(charge.asaasPaymentId)
       } catch (error) {
@@ -120,12 +133,16 @@ export async function cancelTenant(
               error instanceof Error ? error.message : "falha ao apagar no Asaas"
             }`,
           )
+          // Segue viva no Asaas: devolve o estado de antes.
+          await prisma.tenantPayment
+            .update({
+              where: { id: charge.id },
+              data: { status: charge.status, notes: charge.notes },
+            })
+            .catch(swallow("resellers.cancel"))
           continue
         }
       }
-      await prisma.tenantPayment
-        .update({ where: { id: charge.id }, data: { status: "DELETING" } })
-        .catch(swallow("resellers.cancel"))
       deletedCharges += 1
     }
   }

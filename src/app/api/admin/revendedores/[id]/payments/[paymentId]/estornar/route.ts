@@ -6,10 +6,12 @@ import { withRequestContextParams } from "@/lib/observability/with-request-conte
 import { requireAdmin } from "@/lib/auth/admin-guard"
 import { logAudit } from "@/lib/audit"
 import { swallow } from "@/lib/errors"
+import { contextLogger } from "@/lib/logger"
 import { createNotification } from "@/lib/notifications"
 import { flagMonthlyCommissionForRefund } from "@/lib/referrals/monthly"
 import { janelaEstorno, podeEstornar } from "@/lib/tenant-billing/refund"
 import { emitUnidadePagamento } from "@/lib/webhooks-saida/unidade"
+import { resolveTenantPayment } from "@/lib/tenant-billing/resolve-payment"
 
 const MAX_BYTES = 8 * 1024 * 1024 // 8MB
 const ALLOWED_TYPES = new Set([
@@ -81,16 +83,36 @@ export const POST = withRequestContextParams<{ id: string; paymentId: string }>(
         name: true,
         accountManagerId: true,
         salesUserId: true,
+        asaasCustomerId: true,
+        asaasSubscriptionId: true,
       },
     })
     if (!tenant || !(await ctx.canAccessTenant(tenant))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    let localId: string | null
+    try {
+      // Aceita o id do banco OU o do Asaas (fatura ainda sem espelho local).
+      localId = (await resolveTenantPayment(tenant, paymentId))?.id ?? null
+    } catch (error) {
+      contextLogger().error(
+        { err: error, event: "admin.tenant_payment.resolve_failed", tenantId: id, paymentId },
+        "falha ao consultar o Asaas para achar a fatura",
+      )
+      return NextResponse.json(
+        { error: "Não foi possível consultar o Asaas agora. Tente novamente em instantes." },
+        { status: 503 },
+      )
+    }
+    if (!localId) {
+      return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
+    }
+
     const payment = await prisma.tenantPayment.findFirst({
       // `tenantId` no where e o que impede estornar a cobranca de OUTRA unidade
       // passando um paymentId qualquer na URL.
-      where: { id: paymentId, tenantId: id },
+      where: { id: localId, tenantId: id },
       select: {
         id: true,
         asaasPaymentId: true,
@@ -181,14 +203,14 @@ export const POST = withRequestContextParams<{ id: string; paymentId: string }>(
 
     // Bucket privado compartilhado com o comprovante de saque; o prefixo separa
     // os dois. `refundProofUrl` guarda o PATH, nunca URL publica.
-    const path = `estornos/${paymentId}/${crypto.randomUUID()}.${extensionFor(file.type)}`
+    const path = `estornos/${localId}/${crypto.randomUUID()}.${extensionFor(file.type)}`
     await uploadPayoutProof(path, bytes, file.type)
 
     const agora = new Date()
     const atualizado = await prisma.tenantPayment.updateMany({
       // CAS: `refundedAt: null` faz o segundo clique virar no-op em vez de um
       // segundo estorno na trilha e um segundo clawback sobre a mesma comissao.
-      where: { id: paymentId, tenantId: id, refundedAt: null },
+      where: { id: localId, tenantId: id, refundedAt: null },
       data: {
         status: "REFUNDED",
         refundedAt: agora,
@@ -207,14 +229,14 @@ export const POST = withRequestContextParams<{ id: string; paymentId: string }>(
 
     // A comissao da competencia pode ja ter sido apurada — e ate paga.
     await flagMonthlyCommissionForRefund(
-      paymentId,
+      localId,
       `Mensalidade estornada: ${motivo}`,
     ).catch(swallow("admin.revendedores.estornar_pagamento"))
 
     await logAudit({
       action: "tenant_payment.refund",
       resource: "tenant_payment",
-      resourceId: paymentId,
+      resourceId: localId,
       actorUserId: ctx.userId,
       actorRole: ctx.role,
       actorEmail: ctx.email,

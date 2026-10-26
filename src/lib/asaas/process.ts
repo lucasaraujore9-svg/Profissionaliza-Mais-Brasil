@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { appendNote } from "@/lib/tenant-billing/change-log"
 import { resolveOverdueRuler, overdueDays } from "@/lib/tenants/overdue-policy"
 import { getPayment as getAsaasPayment, AsaasApiError } from "./client"
 import { isPixRecebidoSemCobranca } from "./charge-status"
@@ -208,7 +209,7 @@ async function handlePaymentDeleted(
 
   const existing = await prisma.tenantPayment.findUnique({
     where: { asaasPaymentId: paymentId },
-    select: { id: true, tenantId: true, paidAt: true, markedPaidAt: true },
+    select: { id: true, tenantId: true, paidAt: true, markedPaidAt: true, status: true, notes: true },
   })
   if (!existing) {
     await markLog(logId, true, `PAYMENT_DELETED: ${paymentId} sem TenantPayment correspondente`)
@@ -231,9 +232,16 @@ async function handlePaymentDeleted(
     return
   }
 
+  // Nunca apaga a linha: a fatura cancelada segue no historico. DELETING =
+  // cancelada pelo PMB (quem cancelou ja anotou); o resto foi direto no Asaas.
   await prisma.tenantPayment.update({
     where: { asaasPaymentId: paymentId },
-    data: { status: "DELETED" },
+    data: {
+      status: "DELETED",
+      ...(existing.status === "DELETING"
+        ? {}
+        : { notes: appendNote(existing.notes, "Cancelada direto no Asaas.") }),
+    },
   })
 
   await prisma.webhookLog

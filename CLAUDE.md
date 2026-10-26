@@ -2615,6 +2615,37 @@ faziam isso; o que fugia era o carne.
 - Fora: a venda de 21/10 da eadcenatep (carne PENDING) ficou como estava, por
   decisao do dono.
 
+### Fatura da unidade nunca some do PMB (2026-10-26)
+
+Chamado PraxisPb: "Dar baixa" respondia 404 "Cobranca nao encontrada". A fatura
+(criada pela reativacao da unidade) existia so no Asaas: a tela leu a lista de
+la antes de o webhook espelhar, a linha saiu com o id `pay_...` e a baixa busca
+pelo id do banco. O fix de 23/10 (`519a3369`) so cobria fatura ja espelhada.
+
+- **Toda acao do admin sobre fatura** (baixa, estorno, cancelar, editar) passa
+  por `resolveTenantPayment` (`lib/tenant-billing/resolve-payment.ts`): aceita
+  id do banco OU do Asaas e, sem espelho, reconcilia a unidade com o Asaas e
+  cria o vinculo antes de agir. Asaas fora = 503, nunca 404.
+- **O GET do detalhe espelha** tudo o que o Asaas lista (`mirrorAsaasPayments`
+  em `lib/asaas/reconcile.ts`, o mesmo do cron): toda linha da tela tem id do
+  banco.
+- **Regra do dono: nada e excluido do PMB.** Fatura cancelada (DELETED) aparece
+  na lista com o historico; antes o select a escondia. Fatura em aberto SEM par
+  no Asaas nao aparece (lista paginada nao prova o cancelamento, e ela
+  ofereceria "Dar baixa" numa fatura que pode nao existir).
+- **Historico em `TenantPayment.notes`** (`lib/tenant-billing/change-log.ts`,
+  PURO): "Cancelada/Baixa/Estornada/Valor/Vencimento ... direto no Asaas" (pelo
+  espelho e pelo webhook PAYMENT_DELETED) e "Cancelada/Editada no PMB por X".
+  As acoes do PMB gravam DELETING/nota ANTES de chamar o Asaas e desfazem se ele
+  recusar — senao o webhook ou um espelho no meio registraria "direto no Asaas".
+- **Bug corrigido:** o espelho regravava o status do Asaas por cima de baixa
+  manual/estorno do PMB (cancelamento no Asaas falhou = fatura voltava a "em
+  aberto"). Linha com `markedPaidAt`/`refundedAt` agora e `locked`.
+- Data civil (00:00 UTC) era formatada no fuso do navegador: vencimento 26/10
+  aparecia como 25/10. Historico e dialogo usam `timeZone: "UTC"`.
+- **Limite:** `PAYMENT_UPDATED` segue ignorado no webhook; edicao feita no Asaas
+  so entra quando alguem abre a unidade ou no cron de reconciliacao.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

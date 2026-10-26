@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import {
-  competenciaPagamento,
-  dataPagamentoCliente,
-} from "@/lib/asaas/competencia"
+import { dataPagamentoCliente } from "@/lib/asaas/competencia"
 import { isManualPayment } from "@/lib/tenant-billing/manual-payment"
 import {
   describeEffectiveCommission,
@@ -20,7 +17,8 @@ import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
 import { cancelTenant, CANCELABLE_TENANT_SELECT } from "@/lib/resellers/cancel"
-import { emitUnidadeStatus, emitUnidadePagamento } from "@/lib/webhooks-saida/unidade"
+import { emitUnidadeStatus } from "@/lib/webhooks-saida/unidade"
+import { mirrorAsaasPayments, markRemovedInAsaas } from "@/lib/asaas/reconcile"
 
 // Escopo de acesso a uma unidade já carregada: ver canAccessTenantScope em
 // @/lib/auth/scope (mesma regra de tenantScopeWhere).
@@ -41,10 +39,10 @@ export const GET = withRequestContextParams<{ id: string }>(
       accountManager: { select: { id: true, name: true } },
       referrer: { select: { id: true, name: true, slug: true } },
       tenantPayments: {
-        // DELETED = cobrança cancelada/removida no Asaas; não deve aparecer.
-        where: { status: { not: "DELETED" } },
+        // Inclui as CANCELADAS (DELETED): fatura nunca some do PMB — aparece
+        // marcada, com o historico do que aconteceu com ela.
         orderBy: { dueDate: "desc" },
-        take: 24,
+        take: 36,
       },
       _count: { select: { students: true } },
     },
@@ -203,6 +201,8 @@ export const GET = withRequestContextParams<{ id: string }>(
     hasRefundProof: boolean
     invoiceUrl: string | null
     bankSlipUrl: string | null
+    /** Historico da fatura (quem cancelou/editou/deu baixa, aqui ou no Asaas). */
+    history: string | null
   }
   let payments: PaymentRow[] = tenant.tenantPayments.map((p) => ({
     id: p.id,
@@ -218,6 +218,7 @@ export const GET = withRequestContextParams<{ id: string }>(
     hasRefundProof: Boolean(p.refundProofUrl),
     invoiceUrl: p.invoiceUrl ?? null,
     bankSlipUrl: p.bankSlipUrl ?? null,
+    history: p.notes ?? null,
   }))
 
   if (tenant.asaasSubscriptionId) {
@@ -243,71 +244,74 @@ export const GET = withRequestContextParams<{ id: string }>(
       asaasSubscriptionStatus = sub.status ?? null
       asaasSubscriptionValue = sub.value ?? null
 
-      // `id` e o da LINHA DO BANCO: baixa manual e estorno buscam por ele.
-      // Com o id do Asaas aqui, os dois botoes respondiam 404 em toda unidade
-      // com assinatura. Cobranca que so existe no Asaas fica com o id de la.
-      const localIdByAsaas = new Map(
-        payments.map((p) => [p.asaasPaymentId, p.id]),
-      )
-      const fromAsaas = asaasPayments.data.map((p) => ({
-        id: localIdByAsaas.get(p.id) ?? p.id,
-        asaasPaymentId: p.id,
-        amount: p.value,
-        billingType: p.billingType,
-        status: p.status,
-        dueDate: new Date(p.dueDate).toISOString(),
-        paidAt: p.paymentDate ? new Date(p.paymentDate).toISOString() : null,
-        clientPaidAt: dataPagamentoCliente(p)?.toISOString() ?? null,
-        // A visao do Asaas nao conhece o estorno REGISTRADO aqui; a linha do
-        // banco (abaixo, em `fromDb`) e que o carrega.
-        refundedAt: null,
-        refundReason: null,
-        hasRefundProof: false,
-        invoiceUrl: p.invoiceUrl ?? null,
-        bankSlipUrl: p.bankSlipUrl ?? null,
-      }))
+      // Espelha no banco tudo o que o Asaas listou: a linha da tela passa a
+      // ter SEMPRE o id do banco (baixa, estorno, cancelar e editar agem sobre
+      // ele), e o que mudou direto no Asaas vira historico na propria fatura.
+      const { rows: mirrored } = await mirrorAsaasPayments(id, asaasPayments.data, "admin")
+      const localByAsaas = new Map(payments.map((p) => [p.asaasPaymentId, p]))
 
-      const asaasIds = new Set(fromAsaas.map((p) => p.asaasPaymentId))
+      // Fatura com baixa manual/estorno registrado no PMB vem do BANCO: o
+      // Asaas pode ainda lista-la em aberto (cancelamento falhou), e mostrar o
+      // status de la ofereceria "Dar baixa" de novo numa fatura ja quitada.
+      const fromAsaas = asaasPayments.data
+        .filter((p) => !mirrored.get(p.id)?.locked)
+        .map((p) => ({
+          id: mirrored.get(p.id)?.id ?? localByAsaas.get(p.id)?.id ?? p.id,
+          asaasPaymentId: p.id,
+          amount: p.value,
+          billingType: p.billingType,
+          status: p.status,
+          dueDate: new Date(p.dueDate).toISOString(),
+          paidAt: p.paymentDate ? new Date(p.paymentDate).toISOString() : null,
+          clientPaidAt: dataPagamentoCliente(p)?.toISOString() ?? null,
+          // A visao do Asaas nao conhece o estorno REGISTRADO aqui; a linha do
+          // banco (abaixo, em `fromDb`) e que o carrega.
+          refundedAt: null,
+          refundReason: null,
+          hasRefundProof: false,
+          invoiceUrl: p.invoiceUrl ?? null,
+          bankSlipUrl: p.bankSlipUrl ?? null,
+          history: mirrored.get(p.id)?.notes ?? localByAsaas.get(p.id)?.history ?? null,
+        }))
 
-      // Reconciliação: cobranças PENDING/OVERDUE no banco que NÃO aparecem na
-      // conta Asaas (e a lista veio completa, sem paginação) já foram
-      // canceladas/removidas lá — tipicamente assinaturas recriadas por mudança
-      // de valor/vencimento, ou cancelamento manual que não sincronizou o banco.
-      // Marca-as DELETED para não reaparecerem como duplicatas no painel. Só
-      // mexe quando temos a visão completa (`!hasMore`) e nunca em cobranças
-      // pagas/estornadas (essas são preservadas mesmo fora da janela).
-      // DELETING entra aqui como fallback do webhook PAYMENT_DELETED: se a
-      // cobrança já sumiu do Asaas, confirma o cancelamento (→ DELETED) mesmo
-      // que o webhook não tenha chegado.
-      const stale = !asaasPayments.hasMore
-        ? payments.filter(
-            (p) =>
-              !asaasIds.has(p.asaasPaymentId) &&
-              // Baixa manual nao existe no Asaas por definicao: ausencia na
-              // lista e o esperado, nao prova de cancelamento.
-              !isManualPayment(p.asaasPaymentId) &&
-              (p.status === "PENDING" ||
-                p.status === "OVERDUE" ||
-                p.status === "DELETING"),
-          )
-        : []
-      if (stale.length > 0) {
-        await prisma.tenantPayment
-          .updateMany({
-            where: {
-              tenantId: id,
-              asaasPaymentId: { in: stale.map((p) => p.asaasPaymentId) },
-            },
-            data: { status: "DELETED" },
-          })
-          .catch(swallow("admin.revendedores"))
+      const asaasIds = new Set(asaasPayments.data.map((p) => p.id))
+      const shownFromAsaas = new Set(fromAsaas.map((p) => p.asaasPaymentId))
+
+      // Reconciliação: cobranças PENDING/OVERDUE/DELETING no banco que NÃO
+      // aparecem na conta Asaas (lista completa, sem paginação) já foram
+      // canceladas lá. Viram DELETED com historico — nunca somem do PMB. Só
+      // age com a visão completa (`!hasMore`) e nunca em pagas/estornadas.
+      if (!asaasPayments.hasMore) {
+        const stale = payments.filter(
+          (p) =>
+            !asaasIds.has(p.asaasPaymentId) &&
+            // Baixa manual nao existe no Asaas por definicao: ausencia na
+            // lista e o esperado, nao prova de cancelamento.
+            !isManualPayment(p.asaasPaymentId) &&
+            ["PENDING", "OVERDUE", "DELETING"].includes(p.status),
+        )
+        const notes = await markRemovedInAsaas(
+          stale.map((p) => ({ id: p.id, status: p.status, notes: p.history })),
+        ).catch(() => new Map<string, string | null>())
+        for (const p of stale) {
+          if (!notes.has(p.id)) continue
+          p.status = "DELETED"
+          p.history = notes.get(p.id) ?? null
+        }
       }
 
-      // Complementa com registros do banco que não apareceram no Asaas e que
-      // NÃO são órfãos pendentes (ex.: pagos antigos fora da janela de 24).
-      const staleIds = new Set(stale.map((p) => p.asaasPaymentId))
+      // Historico do banco que nao veio do Asaas: pagas antigas (fora da janela
+      // de 24), baixas manuais, estornos, CANCELADAS. Fatura em aberto sem par
+      // no Asaas nao entra: com a lista paginada nao da para provar que foi
+      // cancelada, e mostra-la ofereceria "Dar baixa" numa fatura que pode nao
+      // existir mais.
       const fromDb = payments.filter(
-        (p) => !asaasIds.has(p.asaasPaymentId) && !staleIds.has(p.asaasPaymentId),
+        (p) =>
+          !shownFromAsaas.has(p.asaasPaymentId) &&
+          !(
+            !asaasIds.has(p.asaasPaymentId) &&
+            (p.status === "PENDING" || p.status === "OVERDUE")
+          ),
       )
 
       payments = [...fromAsaas, ...fromDb].sort((a, b) => {
@@ -336,37 +340,7 @@ export const GET = withRequestContextParams<{ id: string }>(
           customDomain: tenant.customDomain,
         }).catch(swallow("admin.revendedores"))
 
-        // Upsert dos TenantPayment confirmados para manter o banco consistente
-        for (const p of asaasPayments.data) {
-          if (p.status !== "RECEIVED" && p.status !== "CONFIRMED") continue
-          await prisma.tenantPayment.upsert({
-            where: { asaasPaymentId: p.id },
-            update: {
-              status: p.status,
-              paidAt: p.paymentDate ? new Date(p.paymentDate) : null,
-              // Sem estas duas a cobranca importada por aqui fica invisivel
-              // para o motor de comissao, que varre por `competenceAt`.
-              clientPaidAt: dataPagamentoCliente(p),
-              competenceAt: competenciaPagamento(p),
-              ...(p.invoiceUrl ? { invoiceUrl: p.invoiceUrl } : {}),
-              ...(p.bankSlipUrl ? { bankSlipUrl: p.bankSlipUrl } : {}),
-            },
-            create: {
-              tenantId: tenant.id,
-              asaasPaymentId: p.id,
-              amount: p.value,
-              billingType: p.billingType,
-              status: p.status,
-              dueDate: new Date(p.dueDate),
-              paidAt: p.paymentDate ? new Date(p.paymentDate) : null,
-              clientPaidAt: dataPagamentoCliente(p),
-              competenceAt: competenciaPagamento(p),
-              invoiceUrl: p.invoiceUrl ?? null,
-              bankSlipUrl: p.bankSlipUrl ?? null,
-            },
-          }).catch(swallow("admin.revendedores"))
-          await emitUnidadePagamento("unidade.pagamento.confirmado", p.id, "admin")
-        }
+        // As cobranças confirmadas já foram espelhadas acima.
       }
     } catch (error) {
       contextLogger().warn(

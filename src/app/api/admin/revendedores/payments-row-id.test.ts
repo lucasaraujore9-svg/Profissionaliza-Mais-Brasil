@@ -34,6 +34,13 @@ vi.mock("@/lib/referrals/effective-rule", () => ({
 }))
 vi.mock("@/lib/tenant/checkout-mode", () => ({ tenantCheckoutMode: () => "NONE" }))
 vi.mock("@/lib/redis/tenant-cache", () => ({ invalidateTenant: vi.fn() }))
+// O espelho real tem teste proprio (lib/asaas/mirror.test.ts); aqui ele devolve
+// o id do banco que gravou para cada cobranca do Asaas.
+const mirror = vi.hoisted(() => ({
+  mirrorAsaasPayments: vi.fn(),
+  markRemovedInAsaas: vi.fn(async () => new Map()),
+}))
+vi.mock("@/lib/asaas/reconcile", () => mirror)
 vi.mock("@/lib/webhooks-saida/unidade", () => ({
   emitUnidadeStatus: vi.fn(),
   emitUnidadePagamento: vi.fn(),
@@ -86,6 +93,13 @@ beforeEach(() => {
   ]) {
     agg.mockResolvedValue({ _sum: { amount: null } })
   }
+  mirror.mirrorAsaasPayments.mockResolvedValue({
+    imported: 2,
+    rows: new Map([
+      ["pay_1", { id: "local-1", notes: null, locked: false }],
+      ["pay_so_asaas", { id: "novo-espelho", notes: null, locked: false }],
+    ]),
+  })
   asaas.getSubscription.mockResolvedValue({ status: "ACTIVE", value: 239 })
   asaas.listPayments.mockResolvedValue({
     hasMore: false,
@@ -97,7 +111,7 @@ beforeEach(() => {
 })
 
 describe("GET /api/admin/revendedores/[id] — id das cobrancas", () => {
-  it("linha vinda do Asaas carrega o id do banco; so-Asaas fica com o id de la", async () => {
+  it("toda linha vinda do Asaas carrega o id do banco (espelhada na hora)", async () => {
     const res = await GET(new Request("http://x/api/admin/revendedores/t1"), {
       params: Promise.resolve({ id: "t1" }),
     })
@@ -106,6 +120,56 @@ describe("GET /api/admin/revendedores/[id] — id das cobrancas", () => {
     const byAsaas = Object.fromEntries(
       data.payments.map((p: { asaasPaymentId: string; id: string }) => [p.asaasPaymentId, p.id]),
     )
-    expect(byAsaas).toEqual({ pay_1: "local-1", pay_so_asaas: "pay_so_asaas" })
+    expect(byAsaas).toEqual({ pay_1: "local-1", pay_so_asaas: "novo-espelho" })
+  })
+
+  it("nada some: cancelada aparece com historico; so a aberta SEM par no Asaas fica fora", async () => {
+    const base = {
+      amount: 239, billingType: "PIX", paidAt: null, clientPaidAt: null,
+      refundedAt: null, refundReason: null, refundProofUrl: null,
+      invoiceUrl: null, bankSlipUrl: null, dueDate: due, notes: null,
+    }
+    db.tenant.findUnique.mockResolvedValue({
+      id: "t1", status: "ACTIVE", planValue: 239, createdAt: due,
+      asaasCustomerId: "cus_1", asaasSubscriptionId: "sub_1", tecnicaCourses: [],
+      tenantPayments: [
+        { ...base, id: "fantasma", asaasPaymentId: "pay_morta", status: "OVERDUE" },
+        { ...base, id: "excluida", asaasPaymentId: "pay_excluida", status: "DELETED", notes: "[x] Cancelada direto no Asaas." },
+        { ...base, id: "antiga", asaasPaymentId: "pay_antiga", status: "RECEIVED", paidAt: due },
+        // Baixa manual cujo cancelamento no Asaas falhou: o Asaas ainda a lista
+        // em aberto, mas a tela mostra o BANCO (paga), nunca "Dar baixa" de novo.
+        { ...base, id: "baixada", asaasPaymentId: "pay_baixada", status: "RECEIVED", paidAt: due, markedPaidAt: due },
+      ],
+    })
+    mirror.mirrorAsaasPayments.mockResolvedValue({
+      imported: 1,
+      rows: new Map([
+        ["pay_viva", { id: "viva", notes: null, locked: false }],
+        ["pay_baixada", { id: "baixada", notes: null, locked: true }],
+      ]),
+    })
+    // `hasMore`: sem visao completa nao ha reconciliacao, e mesmo assim a
+    // fatura em aberto sem par no Asaas nao pode virar linha com "Dar baixa".
+    asaas.listPayments.mockResolvedValue({
+      hasMore: true,
+      data: [
+        { id: "pay_viva", value: 239, billingType: "PIX", status: "PENDING", dueDate: "2026-10-26" },
+        { id: "pay_baixada", value: 239, billingType: "PIX", status: "PENDING", dueDate: "2026-10-23" },
+      ],
+    })
+    const res = await GET(new Request("http://x/api/admin/revendedores/t1"), {
+      params: Promise.resolve({ id: "t1" }),
+    })
+    const { data } = await res.json()
+    const byAsaas = Object.fromEntries(
+      data.payments.map((p: { asaasPaymentId: string; status: string; history: string | null }) => [
+        p.asaasPaymentId,
+        p,
+      ]),
+    )
+    expect(Object.keys(byAsaas).sort()).toEqual(["pay_antiga", "pay_baixada", "pay_excluida", "pay_viva"])
+    expect(byAsaas.pay_excluida.status).toBe("DELETED")
+    expect(byAsaas.pay_excluida.history).toContain("Cancelada direto no Asaas")
+    expect(byAsaas.pay_baixada.status).toBe("RECEIVED")
   })
 })

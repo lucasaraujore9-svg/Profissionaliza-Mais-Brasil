@@ -19,9 +19,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const db = vi.hoisted(() => ({
   tenant: { findUnique: vi.fn(), update: vi.fn() },
-  // `findFirst` prova a posse da cobrança (`assertPaymentInScope`); `updateMany`
-  // espelha a edição no banco.
-  tenantPayment: { findFirst: vi.fn(), updateMany: vi.fn() },
+  // `findFirst` prova a posse da cobrança (`assertPaymentInScope`); `findUnique`
+  // + `update` gravam a edição e o historico no banco (desfeitos se o Asaas
+  // recusar).
+  tenantPayment: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
 }))
 vi.mock("@/lib/prisma", () => ({ prisma: db }))
 
@@ -183,8 +184,16 @@ beforeEach(() => {
   vi.clearAllMocks()
   comCortesia()
   db.tenant.update.mockResolvedValue({})
-  db.tenantPayment.findFirst.mockResolvedValue({ id: "tp1" })
+  // Espelho local da cobranca pedida na URL (aceita id do banco ou do Asaas).
+  db.tenantPayment.findFirst.mockImplementation(
+    async (args: { where: { OR: [{ id: string }, { asaasPaymentId: string }] } }) => ({
+      id: "tp1",
+      asaasPaymentId: args.where.OR[1].asaasPaymentId,
+    }),
+  )
   db.tenantPayment.updateMany.mockResolvedValue({ count: 1 })
+  db.tenantPayment.findUnique.mockResolvedValue({ amount: 239, dueDate: new Date(), notes: null })
+  db.tenantPayment.update.mockResolvedValue({})
   getPayment.mockResolvedValue({ status: "PENDING" })
 })
 
@@ -350,6 +359,9 @@ describe("auditoria da concessão", () => {
     expect(logAudit).not.toHaveBeenCalledWith(
       expect.objectContaining({ action: CORTESIA_AUDIT.granted }),
     )
+    // A edicao gravada antes do Asaas e desfeita: o banco volta ao que era.
+    const calls = db.tenantPayment.update.mock.calls as { data: unknown }[][]
+    expect(calls.at(-1)?.[0].data).toEqual({ amount: 239, dueDate: expect.any(Date), notes: null })
   })
 })
 

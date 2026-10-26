@@ -92,7 +92,16 @@ beforeEach(() => {
   vi.clearAllMocks()
   db.webhookLog.update.mockResolvedValue({})
   db.tenantPayment.update.mockResolvedValue({})
-  db.tenantPayment.findUnique.mockResolvedValue({ id: "tp1", tenantId: "t1", paidAt: null, markedPaidAt: null })
+  // Padrao: fatura cancelada PELO PMB (botao/cancelamento deixam DELETING e ja
+  // anotaram) — o webhook so confirma.
+  db.tenantPayment.findUnique.mockResolvedValue({
+    id: "tp1",
+    tenantId: "t1",
+    paidAt: null,
+    markedPaidAt: null,
+    status: "DELETING",
+    notes: "[x] Cancelada no PMB por Admin.",
+  })
 })
 
 describe("PAYMENT_DELETED — a prova de que a cobrança sumiu", () => {
@@ -118,6 +127,24 @@ describe("PAYMENT_DELETED — a prova de que a cobrança sumiu", () => {
       where: { asaasPaymentId: PAYMENT_ID },
       data: { status: "DELETED" },
     })
+  })
+
+  it("cancelada DIRETO no Asaas: marca DELETED (nunca apaga) e anota no historico", async () => {
+    db.tenantPayment.findUnique.mockResolvedValue({
+      id: "tp1",
+      tenantId: "t1",
+      paidAt: null,
+      markedPaidAt: null,
+      status: "PENDING",
+      notes: null,
+    })
+    asaas.getPayment.mockResolvedValue({ id: PAYMENT_ID, status: "PENDING", deleted: true })
+
+    await processAsaasWebhook(LOG_ID, evento())
+
+    const [[arg]] = db.tenantPayment.update.mock.calls as [[{ data: { status: string; notes: string } }]]
+    expect(arg.data.status).toBe("DELETED")
+    expect(arg.data.notes).toContain("Cancelada direto no Asaas.")
   })
 
   it("ignora o evento cuja cobrança NÃO está removida no Asaas", async () => {

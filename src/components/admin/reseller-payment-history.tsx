@@ -16,6 +16,7 @@ import { ResellerManualPaymentDialog } from "./reseller-manual-payment-dialog"
 import { ResellerRefundDialog } from "./reseller-refund-dialog"
 import { ResellerSettleInvoiceDialog } from "./reseller-settle-invoice-dialog"
 import { ResellerStatusBadge } from "./reseller-status"
+import { lastNote } from "@/lib/tenant-billing/change-log"
 import {
   CortesiaReasonDialog,
   type CortesiaPrompt,
@@ -37,6 +38,8 @@ export interface ResellerPayment {
   refundReason: string | null
   invoiceUrl: string | null
   bankSlipUrl: string | null
+  /** Historico da fatura (cancelada/editada/baixa, no PMB ou no Asaas). */
+  history?: string | null
 }
 
 interface ResellerPaymentHistoryProps {
@@ -61,7 +64,9 @@ const INPUT_CLS =
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString("pt-BR")
+    // Data civil gravada a 00:00 UTC: no fuso do navegador (BRT) cairia no
+    // dia anterior — vencimento 26/10 aparecia como 25/10.
+    return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "UTC" })
   } catch {
     return iso
   }
@@ -103,13 +108,18 @@ export function ResellerPaymentHistory({
   // foi excluída do GET) ou o servidor já a marcou DELETED, tira de "apagando".
   useEffect(() => {
     setDeletingIds((prev) => {
-      const present = new Set(payments.map((p) => p.asaasPaymentId))
+      // Cancelada (DELETED) nao some mais da lista: fica com o historico.
+      const present = new Set(
+        payments
+          .filter((p) => p.status.toUpperCase() !== "DELETED")
+          .map((p) => p.asaasPaymentId),
+      )
       const serverDeleting = payments
         .filter((p) => p.status.toUpperCase() === "DELETING")
         .map((p) => p.asaasPaymentId)
       const next = new Set<string>()
-      // Otimistas que ainda aparecem na lista = cancelamento não confirmado.
-      // Some da lista (virou DELETED, excluído do GET) = confirmado → cai fora.
+      // Otimistas ainda em aberto na lista = cancelamento não confirmado.
+      // Virou DELETED (ou saiu da lista) = confirmado → cai fora.
       for (const id of prev) if (present.has(id)) next.add(id)
       // DELETING vindos do servidor (ex.: outro admin cancelou) também entram.
       for (const id of serverDeleting) next.add(id)
@@ -342,6 +352,14 @@ export function ResellerPaymentHistory({
                           </span>
                         )}
                       </span>
+                      {lastNote(p.history ?? null) && (
+                        <p
+                          title={p.history ?? undefined}
+                          className="mt-1 max-w-[18rem] text-[11px] leading-snug text-gray-500"
+                        >
+                          {lastNote(p.history ?? null)}
+                        </p>
+                      )}
                     </td>
 
                     {/* Link */}

@@ -11,6 +11,7 @@ import { contextLogger } from "@/lib/logger"
 import { resolverCompetencia } from "@/lib/asaas/competencia"
 import { existeNoGateway } from "@/lib/tenant-billing/manual-payment"
 import { emitUnidadePagamento } from "@/lib/webhooks-saida/unidade"
+import { resolveTenantPayment } from "@/lib/tenant-billing/resolve-payment"
 
 const bodySchema = z.object({
   /** Quando a unidade pagou (AAAA-MM-DD). Ausente = hoje. */
@@ -72,16 +73,36 @@ export const POST = withRequestContextParams<{ id: string; paymentId: string }>(
         name: true,
         accountManagerId: true,
         salesUserId: true,
+        asaasCustomerId: true,
+        asaasSubscriptionId: true,
       },
     })
     if (!tenant || !(await ctx.canAccessTenant(tenant))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    let localId: string | null
+    try {
+      // Aceita o id do banco OU o do Asaas (fatura ainda sem espelho local).
+      localId = (await resolveTenantPayment(tenant, paymentId))?.id ?? null
+    } catch (error) {
+      contextLogger().error(
+        { err: error, event: "admin.tenant_payment.resolve_failed", tenantId: id, paymentId },
+        "falha ao consultar o Asaas para achar a fatura",
+      )
+      return NextResponse.json(
+        { error: "Não foi possível consultar o Asaas agora. Tente novamente em instantes." },
+        { status: 503 },
+      )
+    }
+    if (!localId) {
+      return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
+    }
+
     const payment = await prisma.tenantPayment.findFirst({
       // `tenantId` no where impede quitar a fatura de OUTRA unidade passando um
       // paymentId qualquer na URL.
-      where: { id: paymentId, tenantId: id },
+      where: { id: localId, tenantId: id },
       select: {
         id: true,
         asaasPaymentId: true,
@@ -129,7 +150,7 @@ export const POST = withRequestContextParams<{ id: string; paymentId: string }>(
     const atualizado = await prisma.tenantPayment.updateMany({
       // CAS: so quita o que ainda esta em aberto — dois cliques nao viram duas
       // baixas nem duas tentativas de cancelamento.
-      where: { id: paymentId, tenantId: id, paidAt: null, markedPaidAt: null },
+      where: { id: localId, tenantId: id, paidAt: null, markedPaidAt: null },
       data: {
         status: "RECEIVED",
         paidAt: pagoEm,
@@ -173,7 +194,7 @@ export const POST = withRequestContextParams<{ id: string; paymentId: string }>(
     await logAudit({
       action: "tenant_payment.manual_settle",
       resource: "tenant_payment",
-      resourceId: paymentId,
+      resourceId: localId,
       actorUserId: ctx.userId,
       actorRole: ctx.role,
       actorEmail: ctx.email,

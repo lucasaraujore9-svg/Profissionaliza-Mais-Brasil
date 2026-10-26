@@ -12,6 +12,8 @@ import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin, type AdminContext } from "@/lib/auth/admin-guard"
 import { logAudit } from "@/lib/audit"
+import { resolveTenantPayment } from "@/lib/tenant-billing/resolve-payment"
+import { appendNote } from "@/lib/tenant-billing/change-log"
 import {
   loadTenantLifecycle,
   assertCortesiaExcepcional,
@@ -54,50 +56,46 @@ async function assertPaymentInScope(
   ctx: AdminContext,
   tenantId: string,
   paymentId: string,
-): Promise<Response | null> {
+): Promise<{ response: Response } | { asaasPaymentId: string; localId: string }> {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: {
+      id: true,
       accountManagerId: true,
       salesUserId: true,
       asaasCustomerId: true,
+      asaasSubscriptionId: true,
     },
   })
-  if (!(await ctx.canAccessTenant(tenant))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!tenant || !(await ctx.canAccessTenant(tenant))) {
+    return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
   }
 
-  const local = await prisma.tenantPayment.findFirst({
-    where: { asaasPaymentId: paymentId, tenantId },
-    select: { id: true },
-  })
-  if (local) return null
-
-  // Sem espelho local: a posse é confirmada no próprio Asaas.
-  if (!tenant?.asaasCustomerId) {
-    return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
-  }
   try {
-    const remote = await getPayment(paymentId)
-    if (remote.customer !== tenant.asaasCustomerId) {
-      // 404, não 403: não revela que a cobrança existe em outra unidade.
-      return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
+    // Sem espelho local, le as cobrancas da unidade no Asaas e cria o vinculo.
+    // A reconciliacao so importa cobranca do cliente Asaas DESTA unidade: um
+    // `pay_` de outra unidade continua sem linha e responde 404 — nao revela
+    // que a cobranca existe em outro lugar.
+    const found = await resolveTenantPayment(tenant, paymentId)
+    if (!found) {
+      return {
+        response: NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 }),
+      }
     }
+    return { asaasPaymentId: found.asaasPaymentId, localId: found.id }
   } catch (error) {
-    if (error instanceof AsaasApiError && error.statusCode === 404) {
-      return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
-    }
     contextLogger().error(
       { event: "payment.scope_check_failed", tenantId, paymentId, err: error },
       "falha ao confirmar a posse da cobrança no Asaas",
     )
     // Indisponibilidade do Asaas NÃO pode virar autorização.
-    return NextResponse.json(
-      { error: "Não foi possível confirmar a cobrança no Asaas. Tente novamente." },
-      { status: 503 },
-    )
+    return {
+      response: NextResponse.json(
+        { error: "Não foi possível confirmar a cobrança no Asaas. Tente novamente." },
+        { status: 503 },
+      ),
+    }
   }
-  return null
 }
 
 export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>(
@@ -106,9 +104,11 @@ export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>
   const guard = await requireAdmin("unidades.billing")
   if (!guard.ok) return guard.response
 
-  const { id: tenantId, paymentId } = await ctx.params
-  const denied = await assertPaymentInScope(guard.ctx, tenantId, paymentId)
-  if (denied) return denied
+  const { id: tenantId, paymentId: rawId } = await ctx.params
+  const scope = await assertPaymentInScope(guard.ctx, tenantId, rawId)
+  if ("response" in scope) return scope.response
+  // A tela pode mandar o id do banco ou o do Asaas; daqui em diante, o do Asaas.
+  const paymentId = scope.asaasPaymentId
 
   let body: unknown
   try {
@@ -213,13 +213,42 @@ export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>
     if (verdict.overridden) cortesiaConcedida = verdict.reason
   }
 
-  // Atualiza no Asaas
+  // Banco e historico ANTES do Asaas, desfeitos se ele recusar: um espelho
+  // rodando entre as duas escritas registraria a edicao como feita "direto no
+  // Asaas".
+  const autor = guard.ctx.name ?? guard.ctx.email ?? "Admin"
+  const antes = await prisma.tenantPayment.findUnique({
+    where: { id: scope.localId },
+    select: { amount: true, dueDate: true, notes: true },
+  })
+  const mudancas = [
+    parsed.data.dueDate && antes
+      ? `vencimento ${antes.dueDate.toLocaleDateString("pt-BR", { timeZone: "UTC" })} → ${new Date(`${parsed.data.dueDate}T00:00:00.000Z`).toLocaleDateString("pt-BR", { timeZone: "UTC" })}`
+      : null,
+    parsed.data.value !== undefined && antes
+      ? `valor R$ ${Number(antes.amount).toFixed(2).replace(".", ",")} → R$ ${parsed.data.value.toFixed(2).replace(".", ",")}`
+      : null,
+  ].filter(Boolean)
+  await prisma.tenantPayment.update({
+    where: { id: scope.localId },
+    data: {
+      ...(parsed.data.dueDate ? { dueDate: new Date(`${parsed.data.dueDate}T00:00:00.000Z`) } : {}),
+      ...(parsed.data.value !== undefined ? { amount: parsed.data.value } : {}),
+      notes: appendNote(antes?.notes ?? null, `Editada no PMB por ${autor}: ${mudancas.join("; ")}.`),
+    },
+  })
+
   try {
     await updatePayment(paymentId, {
       ...(parsed.data.dueDate ? { dueDate: parsed.data.dueDate } : {}),
       ...(parsed.data.value !== undefined ? { value: parsed.data.value } : {}),
     })
   } catch (error) {
+    if (antes) {
+      await prisma.tenantPayment
+        .update({ where: { id: scope.localId }, data: antes })
+        .catch(swallow("admin.revendedores.payments"))
+    }
     const message =
       error instanceof AsaasApiError ? error.message : "Falha ao atualizar cobrança no Asaas"
     return NextResponse.json({ error: message }, { status: 502 })
@@ -246,17 +275,6 @@ export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>
     })
   }
 
-  // Sincroniza no banco (best-effort)
-  await prisma.tenantPayment
-    .updateMany({
-      where: { asaasPaymentId: paymentId, tenantId },
-      data: {
-        ...(parsed.data.dueDate ? { dueDate: new Date(parsed.data.dueDate) } : {}),
-        ...(parsed.data.value !== undefined ? { amount: parsed.data.value } : {}),
-      },
-    })
-    .catch(swallow("admin.revendedores.payments"))
-
   return NextResponse.json({ data: { ok: true } })
   },
 )
@@ -267,33 +285,47 @@ export const DELETE = withRequestContextParams<{ id: string; paymentId: string }
   const guard = await requireAdmin("unidades.billing")
   if (!guard.ok) return guard.response
 
-  const { id: tenantId, paymentId } = await ctx.params
-  const denied = await assertPaymentInScope(guard.ctx, tenantId, paymentId)
-  if (denied) return denied
+  const { id: tenantId, paymentId: rawId } = await ctx.params
+  const scope = await assertPaymentInScope(guard.ctx, tenantId, rawId)
+  if ("response" in scope) return scope.response
+  // A tela pode mandar o id do banco ou o do Asaas; daqui em diante, o do Asaas.
+  const paymentId = scope.asaasPaymentId
+
+  // DELETING + historico ANTES de apagar no Asaas: o webhook PAYMENT_DELETED
+  // pode chegar antes desta rota terminar, e sem a marca registraria
+  // "cancelada direto no Asaas". A linha nunca e apagada — a fatura cancelada
+  // segue no historico (o webhook confirma DELETED; a reconciliacao do GET e o
+  // fallback).
+  const autor = guard.ctx.name ?? guard.ctx.email ?? "Admin"
+  const antes = await prisma.tenantPayment.findUnique({
+    where: { id: scope.localId },
+    select: { status: true, notes: true },
+  })
+  await prisma.tenantPayment.update({
+    where: { id: scope.localId },
+    data: {
+      status: "DELETING",
+      notes: appendNote(antes?.notes ?? null, `Cancelada no PMB por ${autor}.`),
+    },
+  })
 
   try {
     await deletePayment(paymentId)
   } catch (error) {
     // 404 = a cobrança já não existe no Asaas (cancelada por fora, ou
-    // assinatura recriada). Não é erro: seguimos para sincronizar o banco e
-    // tirar o registro órfão do painel. Demais erros impedem a sincronização.
+    // assinatura recriada). Não é erro: o estado desejado. Demais erros: a
+    // cobrança segue viva, e a linha volta ao que era.
     if (!(error instanceof AsaasApiError && error.statusCode === 404)) {
+      if (antes) {
+        await prisma.tenantPayment
+          .update({ where: { id: scope.localId }, data: antes })
+          .catch(swallow("admin.revendedores.payments"))
+      }
       const message =
         error instanceof AsaasApiError ? error.message : "Falha ao cancelar cobrança no Asaas"
       return NextResponse.json({ error: message }, { status: 502 })
     }
   }
-
-  // Estado intermediário: a cobrança foi mandada apagar no Asaas, mas a
-  // confirmação real vem pelo webhook PAYMENT_DELETED (que valida o 404 da
-  // cobrança e marca DELETED). Até lá o painel mostra "Apagando cobrança…".
-  // A reconciliação do GET do detalhe é o fallback caso o webhook não chegue.
-  await prisma.tenantPayment
-    .updateMany({
-      where: { asaasPaymentId: paymentId, tenantId },
-      data: { status: "DELETING" },
-    })
-    .catch(swallow("admin.revendedores.payments"))
 
   return NextResponse.json({ data: { ok: true } })
   },

@@ -113,7 +113,7 @@ export function ResellerSettleInvoiceDialog({
                 style: "currency",
                 currency: "BRL",
               })}{" "}
-              com vencimento em {new Date(dueDate).toLocaleDateString("pt-BR")}.
+              com vencimento em {new Date(dueDate).toLocaleDateString("pt-BR", { timeZone: "UTC" })}.
               Use quando o pagamento veio por fora (PIX direto, transferência,
               dinheiro). <strong>A cobrança é cancelada no Asaas</strong> para a
               unidade não pagar de novo, e o valor passa a contar na comissão de
