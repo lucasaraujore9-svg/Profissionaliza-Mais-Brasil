@@ -11,7 +11,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { tenantStatusLabel } from "@/lib/labels"
-import { MOTIVO_LABEL } from "@/lib/referrals/relatorio-motivo"
 import {
   proximaDirecao,
   type DirecaoOrdem,
@@ -227,7 +226,7 @@ export function ReferralCarteiraTable({
                     ) : (
                       <span className="text-gray-500">
                         Não
-                        {u.motivoFora ? ` · ${MOTIVO_LABEL[u.motivoFora]}` : ""}
+                        {u.motivoForaLabel ? ` · ${u.motivoForaLabel}` : ""}
                       </span>
                     )}
                   </TableCell>

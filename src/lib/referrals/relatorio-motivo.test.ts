@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   motivoForaDaConta,
+  motivoLabel,
   monthIndex,
   periodMonthIndex,
   type UnidadeFatos,
@@ -105,6 +106,47 @@ describe("motivoForaDaConta", () => {
         false,
       ),
     ).toBe("FORA_DA_BASE")
+  })
+})
+
+describe("motivoForaDaConta — mínimo de indicações do indicador", () => {
+  const abaixo = { abaixoDoMinimo: true }
+
+  it("indicador abaixo do mínimo: a unidade que pagou não é 'fora da base'", () => {
+    // Caso N1/Alfatech (09/2026): 1 indicada ativa, mínimo global 3. O motor
+    // retém a competência inteira antes de olhar a unidade.
+    expect(motivoForaDaConta(fatos(), AGOSTO, false, abaixo)).toBe(
+      "ABAIXO_DO_MINIMO",
+    )
+  })
+
+  it("motivos de universo vêm antes do mínimo (o motor os aplica antes)", () => {
+    expect(motivoForaDaConta(fatos({ planValue: 0 }), AGOSTO, false, abaixo)).toBe(
+      "CORTESIA",
+    )
+    expect(motivoForaDaConta(fatos({ everPaid: false }), AGOSTO, false, abaixo)).toBe(
+      "NUNCA_PAGOU",
+    )
+  })
+
+  it("mínimo vem antes dos motivos por unidade", () => {
+    expect(
+      motivoForaDaConta(fatos({ paidInPeriod: false }), AGOSTO, false, abaixo),
+    ).toBe("ABAIXO_DO_MINIMO")
+  })
+
+  it("quem está na conta continua sem motivo", () => {
+    expect(motivoForaDaConta(fatos(), AGOSTO, true, abaixo)).toBeNull()
+  })
+
+  it("rótulo leva o número do mínimo, com singular", () => {
+    expect(motivoLabel("ABAIXO_DO_MINIMO", 3)).toBe(
+      "Indicador abaixo do mínimo de 3 indicações ativas",
+    )
+    expect(motivoLabel("ABAIXO_DO_MINIMO", 1)).toBe(
+      "Indicador abaixo do mínimo de 1 indicação ativa",
+    )
+    expect(motivoLabel("FORA_DA_BASE", 3)).toBe("Fora da base de pagamento da regra")
   })
 })
 

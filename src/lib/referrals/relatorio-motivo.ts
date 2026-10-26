@@ -23,6 +23,7 @@ export type MotivoForaDaConta =
   | "CORTESIA"
   | "CANCELADA"
   | "NUNCA_PAGOU"
+  | "ABAIXO_DO_MINIMO"
   | "ENTROU_DEPOIS"
   | "SEM_PAGAMENTO_NO_MES"
   | "FORA_DA_BASE"
@@ -31,6 +32,7 @@ export const MOTIVO_LABEL: Record<MotivoForaDaConta, string> = {
   CORTESIA: "Cortesia (mensalidade R$ 0)",
   CANCELADA: "Contrato cancelado",
   NUNCA_PAGOU: "Nunca pagou nenhuma mensalidade",
+  ABAIXO_DO_MINIMO: "Indicador abaixo do mínimo de indicações ativas",
   ENTROU_DEPOIS: "Entrou depois desta competência",
   SEM_PAGAMENTO_NO_MES: "Sem pagamento no mês",
   FORA_DA_BASE: "Fora da base de pagamento da regra",
@@ -52,6 +54,29 @@ export interface UnidadeFatos {
   entryMonthIndex: number
 }
 
+/** Fatos do INDICADOR, nao da unidade — barram a carteira inteira de uma vez. */
+export interface IndicadorFatos {
+  /**
+   * O motor reteve a competencia pelo minimo de indicacoes ativas
+   * (`minReferrals` em ./monthly.ts): nenhuma unidade entra, por melhor que
+   * esteja. So pode ser true quando nao ha comissao gravada no mes.
+   */
+  abaixoDoMinimo: boolean
+}
+
+/** Rotulo da tela. O do minimo leva o numero: e o que o indicador precisa saber. */
+export function motivoLabel(
+  motivo: MotivoForaDaConta,
+  minReferrals: number,
+): string {
+  if (motivo === "ABAIXO_DO_MINIMO") {
+    return `Indicador abaixo do mínimo de ${minReferrals} ${
+      minReferrals === 1 ? "indicação ativa" : "indicações ativas"
+    }`
+  }
+  return MOTIVO_LABEL[motivo]
+}
+
 /**
  * `null` quando a unidade ESTA na conta (nada a explicar) ou quando nenhuma das
  * condicoes conhecidas a barra — nesse caso o relatorio mostra "—" em vez de
@@ -61,11 +86,16 @@ export function motivoForaDaConta(
   fatos: UnidadeFatos,
   periodMonthIndex: number,
   naConta: boolean,
+  indicador: IndicadorFatos = { abaixoDoMinimo: false },
 ): MotivoForaDaConta | null {
   if (naConta) return null
   if (fatos.planValue <= 0) return "CORTESIA"
   if (fatos.status === "CANCELLED") return "CANCELADA"
   if (!fatos.everPaid) return "NUNCA_PAGOU"
+  // No motor o minimo e checado DEPOIS de montar o universo (que ja exclui
+  // cortesia e quem nunca pagou) e ANTES do laco por unidade — por isso fica
+  // aqui, entre os motivos de universo e os de unidade.
+  if (indicador.abaixoDoMinimo) return "ABAIXO_DO_MINIMO"
   if (fatos.entryMonthIndex > periodMonthIndex) return "ENTROU_DEPOIS"
   // Desde 09/09/2026 a comissao e proporcional ao caixa DO MES, entao unidade
   // sem pagamento na competencia nao entra — mesmo ATIVA. Passou a ser o motivo

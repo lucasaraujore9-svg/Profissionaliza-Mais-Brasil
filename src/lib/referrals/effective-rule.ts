@@ -114,6 +114,21 @@ function readPercent(value: unknown, fallback: number): number {
 }
 
 /**
+ * Minimo de indicacoes ATIVAS para o indicador comecar a receber. Exportado
+ * para o relatorio explicar a retencao com o MESMO numero que o motor aplicou.
+ */
+export function resolveMinReferrals(
+  referrer: Pick<ReferrerCommissionInput, "referralMinReferrals"> | null,
+  global: Pick<GlobalCommissionInput, "defaultReferralMinReferrals"> | null,
+): number {
+  return (
+    referrer?.referralMinReferrals ??
+    global?.defaultReferralMinReferrals ??
+    FALLBACK_MIN_REFERRALS
+  );
+}
+
+/**
  * Resolve a regra efetiva de um INDICADOR.
  *
  * Precedencia: plano da unidade -> faixas da unidade -> plano global -> faixas
@@ -131,10 +146,7 @@ export function resolveEffectiveCommission(
     g.defaultReferralPercent,
     FALLBACK_PERCENT,
   );
-  const minReferrals =
-    referrer?.referralMinReferrals ??
-    g.defaultReferralMinReferrals ??
-    FALLBACK_MIN_REFERRALS;
+  const minReferrals = resolveMinReferrals(referrer, g);
 
   const rawOverridePlan = referrer?.commissionPlan;
   const overridePlan = referrer ? parsePlan(rawOverridePlan) : [];

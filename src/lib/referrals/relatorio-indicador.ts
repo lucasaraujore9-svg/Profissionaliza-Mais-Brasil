@@ -23,9 +23,11 @@ import { parseLinesSnapshot } from "@/lib/referrals/lines-snapshot"
 import {
   monthIndex,
   motivoForaDaConta,
+  motivoLabel,
   periodMonthIndex,
   type MotivoForaDaConta,
 } from "@/lib/referrals/relatorio-motivo"
+import { resolveMinReferrals } from "@/lib/referrals/effective-rule"
 
 export interface LinhaCarteira {
   id: string
@@ -54,6 +56,8 @@ export interface LinhaCarteira {
   /** Quanto esta unidade valeu na comissao do mes. */
   valorNaConta: number
   motivoFora: MotivoForaDaConta | null
+  /** Texto do motivo pronto para a tela (o do minimo leva o numero). */
+  motivoForaLabel: string | null
 }
 
 export interface RelatorioIndicador {
@@ -114,11 +118,11 @@ export async function loadRelatorioIndicador(
 
   const referrer = await prisma.tenant.findUnique({
     where: { id: referrerId },
-    select: { id: true, name: true, slug: true },
+    select: { id: true, name: true, slug: true, referralMinReferrals: true },
   })
   if (!referrer) return null
 
-  const [comissao, competencias, unidades, jaPagaram, recebidos] =
+  const [comissao, competencias, unidades, jaPagaram, recebidos, settings] =
     await Promise.all([
       prisma.referralMonthlyCommission.findUnique({
         where: { referrerTenantId_period: { referrerTenantId: referrerId, period } },
@@ -184,7 +188,13 @@ export async function loadRelatorioIndicador(
         },
         orderBy: { competenceAt: "asc" },
       }),
+      // Mesma linha que o motor le (`id: "default"` em ./monthly.ts).
+      prisma.systemSettings.findUnique({
+        where: { id: "default" },
+        select: { defaultReferralMinReferrals: true },
+      }),
     ])
+  const minReferrals = resolveMinReferrals(referrer, settings)
 
   const everPaidSet = new Set(jaPagaram.map((t) => t.id))
   const recebidoMap = new Map<string, number>()
@@ -210,6 +220,19 @@ export async function loadRelatorioIndicador(
   const linhas = parseLinesSnapshot(comissao?.linesSnapshot)
   const naContaMap = new Map(linhas.map((l) => [l.tenantId, l.amount]))
 
+  // Mesma contagem do portao de minimo do motor (`activeTotalCount`): ATIVAS
+  // hoje mais quem pagou na competencia e caiu depois, sempre com plano pago e
+  // ja tendo pago alguma vez. So vale quando NAO ha comissao gravada — se ha,
+  // o portao passou e a explicacao nao pode contradizer o motor.
+  const ativasParaMinimo = unidades.filter(
+    (u) =>
+      Number(u.planValue) > 0 &&
+      everPaidSet.has(u.id) &&
+      (u.status === "ACTIVE" || (recebidoMap.get(u.id) ?? 0) > 0),
+  ).length
+  const abaixoDoMinimo =
+    comissao === null && minReferrals > 0 && ativasParaMinimo < minReferrals
+
   const carteira: LinhaCarteira[] = unidades.map((u) => {
     const entrouEm = u.commissionPlanStartedAt ?? u.activatedAt ?? u.createdAt
     const planValue = Number(u.planValue)
@@ -227,6 +250,19 @@ export async function loadRelatorioIndicador(
       ancoraAtivacao !== null &&
       monthIndex(ancoraAtivacao) === pIndex
 
+    const motivoFora = motivoForaDaConta(
+      {
+        planValue,
+        status: u.status,
+        everPaid,
+        paidInPeriod: recebidoNoMes > 0,
+        entryMonthIndex: monthIndex(entrouEm),
+      },
+      pIndex,
+      naConta,
+      { abaixoDoMinimo },
+    )
+
     return {
       id: u.id,
       name: u.name,
@@ -241,17 +277,8 @@ export async function loadRelatorioIndicador(
       ativouNoMes,
       naConta,
       valorNaConta: naContaMap.get(u.id) ?? 0,
-      motivoFora: motivoForaDaConta(
-        {
-          planValue,
-          status: u.status,
-          everPaid,
-          paidInPeriod: recebidoNoMes > 0,
-          entryMonthIndex: monthIndex(entrouEm),
-        },
-        pIndex,
-        naConta,
-      ),
+      motivoFora,
+      motivoForaLabel: motivoFora ? motivoLabel(motivoFora, minReferrals) : null,
     }
   })
 
@@ -267,7 +294,7 @@ export async function loadRelatorioIndicador(
   if (!periodos.includes(period)) periodos.unshift(period)
 
   return {
-    referrer,
+    referrer: { id: referrer.id, name: referrer.name, slug: referrer.slug },
     period,
     periodosDisponiveis: periodos,
     comissao: comissao
