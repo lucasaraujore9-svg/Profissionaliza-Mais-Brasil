@@ -2681,6 +2681,31 @@ aluno faz na página da loja. Desenho em
   parcelada de assinatura em cada gateway, conferindo UM período concedido e a
   receita somada uma vez.
 
+### Venda direta com valor zero vira bolsa (2026-10-28)
+
+Chamado Convicta: a unidade zerava o valor com desconto manual de 100% e a
+venda seguia o caminho paralelo de "desconto integral" (`releaseFreeEnrollment`),
+que libera o curso mas, ao contrario da bolsa, nao marca `Student.bolsista`, nao
+cancela a compra PENDENTE substituida e barra em 409 quem tem pendente. A
+unidade nao sabia qual dos dois tinha usado e acabou cancelando e refazendo
+vendas (o aluno ficou horas com o curso "Cancelado").
+
+- `manualDiscountZeroesPrice` (`lib/checkout/free-enrollment.ts`): desconto
+  MANUAL que zera o preco (100% ou percentual que arredonda a R$ 0,00) e
+  convertido para o ramo da bolsa em `/api/painel/vendas` e `/api/admin/vendas`.
+- **O teto do vendedor e conferido NA conversao**: o ramo da bolsa nao passa
+  pelo bloco do desconto manual, entao sem isso o consultor com teto de 30%
+  viraria bolsista mandando 100%. No /admin nao se exige tambem `vendas.bolsa`:
+  quem tem teto de 100% ja da o curso de graca.
+- No painel a conversao vem ANTES do gate de rateio (`freeGrant`). No /admin ela
+  vem depois do preco e antes da duplicidade; o gate de rateio ja roda depois.
+- Cupom de 100% NAO vira bolsa (cupom promocional nao e bolsa institucional) e
+  segue em `releaseFreeEnrollment`.
+- Tela do painel marca "Bolsista" sozinha quando o desconto zera o total. A do
+  /admin nao (la a caixa exige `vendas.bolsa`); o servidor converte do mesmo jeito.
+- Testes verificados POR MUTACAO: tirar a conversao ou a checagem do teto
+  derruba o teste correspondente em `painel/vendas/route.test.ts`.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

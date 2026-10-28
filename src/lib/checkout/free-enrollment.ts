@@ -4,6 +4,7 @@ import {
   type TenantContext,
 } from "@/lib/enrollment/fulfill"
 import { markLeadAsWon } from "@/lib/automation/leads"
+import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { swallow } from "@/lib/errors"
 
 /**
@@ -30,6 +31,33 @@ export function isFreeAmount(
   amount: number | string | Prisma.Decimal,
 ): boolean {
   return Number(amount) <= 0
+}
+
+/**
+ * Desconto MANUAL da venda direta que zera o valor (100%, ou um percentual que
+ * arredonda o preço a R$ 0,00).
+ *
+ * Venda direta com valor zero É bolsa: as rotas de venda (/painel e /admin)
+ * convertem para o ramo da bolsa, que marca `Student.bolsista`, cancela a
+ * compra PENDENTE que ela substitui e registra a matrícula como bolsa. Antes o
+ * valor zero seguia um caminho paralelo ("desconto integral") que divergia da
+ * bolsa nesses três pontos — e a unidade não sabia qual dos dois tinha usado.
+ *
+ * Cupom de 100% NÃO passa por aqui de propósito: cupom promocional não é bolsa
+ * institucional (decisão de 2026-07-21) e segue em `releaseFreeEnrollment`.
+ */
+export function manualDiscountZeroesPrice(
+  basePrice: number,
+  manualDiscountPercent: number | undefined,
+): boolean {
+  if (!manualDiscountPercent) return false
+  return isFreeAmount(
+    applyCouponDiscount({
+      basePrice,
+      discountType: "PERCENTAGE",
+      discountValue: manualDiscountPercent,
+    }).finalAmount,
+  )
 }
 
 /** Contexto de fulfillment de uma unidade (revenda). */

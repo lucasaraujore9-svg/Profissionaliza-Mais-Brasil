@@ -23,6 +23,7 @@ import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { markLeadAsWon } from "@/lib/automation/leads"
 import {
   isFreeAmount,
+  manualDiscountZeroesPrice,
   pmbTenantContext,
   releaseFreeEnrollment,
   resellerTenantContext,
@@ -40,6 +41,21 @@ beforeEach(() => {
   // clearAllMocks zera as implementações padrão dos mocks acima.
   vi.mocked(markLeadAsWon).mockResolvedValue(undefined)
   vi.mocked(fulfillScholarshipEnrollment).mockResolvedValue(undefined)
+})
+
+describe("manualDiscountZeroesPrice", () => {
+  it("100% zera o valor", () => {
+    expect(manualDiscountZeroesPrice(199.9, 100)).toBe(true)
+  })
+
+  it("percentual que arredonda o preço a R$ 0,00 também zera", () => {
+    expect(manualDiscountZeroesPrice(0.01, 99.99)).toBe(true)
+  })
+
+  it("desconto parcial e ausência de desconto NÃO zeram", () => {
+    expect(manualDiscountZeroesPrice(199.9, 99)).toBe(false)
+    expect(manualDiscountZeroesPrice(199.9, undefined)).toBe(false)
+  })
 })
 
 describe("isFreeAmount", () => {

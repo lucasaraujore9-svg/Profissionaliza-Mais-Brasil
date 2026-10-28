@@ -322,6 +322,42 @@ describe("venda direta herda o gateway da unidade", () => {
     )
   })
 
+  // Chamado Convicta (28/10): a unidade zerava o valor com desconto manual de
+  // 100% e a venda seguia um caminho paralelo ao da bolsa (sem marcar o aluno
+  // como bolsista e sem cancelar a pendente). Valor zero agora É bolsa.
+  it("desconto manual de 100% vira bolsa (marca o aluno e matricula com valor 0)", async () => {
+    mockSellableCourse()
+    mockStudent()
+    p.student.update.mockResolvedValue({ id: "s1" })
+
+    const res = await POST(bodyExistingStudent({ manualDiscountPercent: 100 }))
+    expect(res.status).toBe(200)
+    expect(p.student.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { bolsista: true } }),
+    )
+    expect(cancelPendingSupersededByScholarship).toHaveBeenCalledTimes(1)
+    const created = p.enrollment.create.mock.calls[0][0] as {
+      data: { finalAmount: number; discountAmount: number }
+    }
+    expect(created.data.finalAmount).toBe(0)
+    expect(created.data.discountAmount).toBe(100)
+  })
+
+  it("consultor sem teto para 100% não vira bolsista mandando o percentual cheio", async () => {
+    mockSellableCourse()
+    mockStudent()
+    p.tenantMember.findFirst.mockResolvedValue({
+      maxDiscount: 30,
+      role: "consultant",
+      status: "ATIVO",
+    })
+
+    const res = await POST(bodyExistingStudent({ manualDiscountPercent: 100 }))
+    expect(res.status).toBe(403)
+    expect(p.student.update).not.toHaveBeenCalled()
+    expect(p.enrollment.create).not.toHaveBeenCalled()
+  })
+
   it("venda COBRADA continua barrada por compra pendente, e não cancela nada", async () => {
     mockSellableCourse()
     mockStudent()

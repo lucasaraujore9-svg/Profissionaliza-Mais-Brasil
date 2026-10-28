@@ -35,6 +35,7 @@ import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { cancelPendingSupersededByScholarship } from "@/lib/enrollment/cancel"
 import {
   isFreeAmount,
+  manualDiscountZeroesPrice,
   releaseFreeEnrollment,
   resellerTenantContext,
 } from "@/lib/checkout/free-enrollment"
@@ -327,7 +328,9 @@ export const POST = withRequestContext(
       )
     }
     const data = parsed.data
-    const isBolsista = data.bolsista === true
+    // `let`: desconto manual que zera o valor vira bolsa mais abaixo, depois
+    // que o preço e o teto do vendedor são conhecidos.
+    let isBolsista = data.bolsista === true
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },
@@ -589,6 +592,26 @@ export const POST = withRequestContext(
       )
     }
     const cap = isOwner ? 100 : (member?.maxDiscount ?? 0)
+
+    // Valor zero por desconto manual É bolsa (ver `manualDiscountZeroesPrice`).
+    // Converte ANTES do gate de rateio para ele avaliar a concessão gratuita
+    // (`freeGrant`). O teto é conferido aqui porque o ramo da bolsa não passa
+    // pelo bloco do desconto manual — sem isto o consultor com teto de 30%
+    // concederia 100% mandando o percentual cheio.
+    if (
+      !isBolsista &&
+      !data.planId &&
+      !isCourseInstallment &&
+      manualDiscountZeroesPrice(basePrice, data.manualDiscountPercent)
+    ) {
+      if (data.manualDiscountPercent! > cap + 0.01) {
+        return NextResponse.json(
+          { error: `Desconto excede seu cap (${cap}%)` },
+          { status: 403 },
+        )
+      }
+      isBolsista = true
+    }
 
     // Gate de rateio (curso produzido por outra unidade). Antes do cupom pelo
     // mesmo motivo das demais portas: recusar depois de `tryConsumeCoupon`

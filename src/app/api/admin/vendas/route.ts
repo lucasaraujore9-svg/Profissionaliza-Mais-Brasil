@@ -21,6 +21,7 @@ import { resolveSaleSplit } from "@/lib/course-authoring/split-server"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import {
   isFreeAmount,
+  manualDiscountZeroesPrice,
   pmbTenantContext,
   releaseFreeEnrollment,
 } from "@/lib/checkout/free-enrollment"
@@ -233,7 +234,9 @@ export const POST = withRequestContext(
   // Bolsa entrega o curso por R$ 0. Sem permissao propria era o caminho aberto
   // para furar o teto de desconto: quem tomava 403 num desconto de 11% marcava
   // "Bolsa de estudo" e concedia 100%.
-  const isBolsista = parsed.data.bolsista === true
+  // `let`: desconto manual que zera o valor vira bolsa mais abaixo, depois que
+  // o preço é conhecido.
+  let isBolsista = parsed.data.bolsista === true
   if (isBolsista && !guard.ctx.can("vendas.bolsa")) {
     return NextResponse.json(
       { error: "Sem permissão para matricular como bolsista" },
@@ -421,6 +424,25 @@ export const POST = withRequestContext(
     rawPaymentType = primary.paymentTypeMain
     monthlyMonthsMain = primary.monthlyMonthsMain
     saleCourseIds = courses.map((c) => c.id)
+  }
+
+  // Valor zero por desconto manual É bolsa (ver `manualDiscountZeroesPrice`).
+  // O teto é conferido aqui porque o ramo da bolsa não passa pelo bloco do
+  // desconto manual. Quem tem teto para dar 100% já concede o curso de graça,
+  // então não se exige também `vendas.bolsa`: muda o registro, não o poder.
+  if (
+    !isBolsista &&
+    !parsed.data.planId &&
+    manualDiscountZeroesPrice(basePrice, parsed.data.manualDiscountPercent)
+  ) {
+    const cap = await effectiveSalesCap(guard.ctx)
+    if (parsed.data.manualDiscountPercent! > cap + 0.01) {
+      return NextResponse.json(
+        { error: `Desconto excede seu cap (${cap}%)` },
+        { status: 403 },
+      )
+    }
+    isBolsista = true
   }
 
   // Na bolsa o fulfillScholarshipEnrollment cuida da senha do painel + email de

@@ -404,6 +404,15 @@ export function PainelNovaVendaClient({
     }
   }, [bolsista])
 
+  // Desconto manual que zera o valor É bolsa — o servidor converte do mesmo
+  // jeito. Marcar a caixa aqui evita que a tela prometa um link de pagamento
+  // que não vai existir.
+  useEffect(() => {
+    if (!isPlan && !isCourseCarne && manualDiscountAmount > 0 && manualDiscountAmount >= basePrice) {
+      setBolsista(true)
+    }
+  }, [isPlan, isCourseCarne, manualDiscountAmount, basePrice])
+
   // Escolher uma assinatura desliga a bolsa e o cupom. Os controles somem da
   // tela, mas o ESTADO ficaria — e um `bolsista` verdadeiro invisível mostraria
   // "Total R$ 0" num resumo de venda que vai cobrar o valor cheio. O carnê volta
