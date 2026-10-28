@@ -8,6 +8,7 @@ import {
   validateSalePriceForCourse,
 } from "@/lib/course-authoring/split-server"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { invalidateHomeCache } from "@/lib/home/cache"
 import { contextLogger } from "@/lib/logger"
 import { runInChunks } from "@/lib/concurrency"
 import {
@@ -242,6 +243,8 @@ export const PUT = withRequestContext(
         "falha ao salvar curso na edição em massa da revenda",
       )
     })
+
+    if (updated > 0) await invalidateHomeCache(ctx.tenantId)
 
     // Nada gravou: devolve erro com o detalhe da 1ª falha (endpoint autenticado).
     if (updated === 0 && failed.length > 0) {

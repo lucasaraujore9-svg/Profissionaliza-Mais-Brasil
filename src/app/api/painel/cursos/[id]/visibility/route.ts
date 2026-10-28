@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { invalidateHomeCache } from "@/lib/home/cache"
 
 const toggleSchema = z.object({
   isVisible: z.boolean(),
@@ -43,6 +44,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       data: { isVisible: nextValue },
       select: { id: true, isVisible: true },
     })
+    await invalidateHomeCache(ctx.tenantId)
 
     return NextResponse.json({ data: updated })
   },

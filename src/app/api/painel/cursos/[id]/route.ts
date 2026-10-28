@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { validateTenantCoursePrice } from "@/lib/course-authoring/split-server"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { invalidateHomeCache } from "@/lib/home/cache"
 import { monthlyActive } from "@/lib/tenant/monthly-policy"
 import {
   APRENDIZADO_MAX_ITEMS,
@@ -213,6 +214,9 @@ export const PUT = withRequestContextParams<{ id: string }>(
         ...(parsed.data.customOrder !== undefined && { customOrder: parsed.data.customOrder }),
       },
     })
+    // Os cards do hero da home ficam 60s no Redis com o preco: sem isto a
+    // vitrine mostra o preco antigo logo depois de a unidade salvar.
+    await invalidateHomeCache(ctx.tenantId)
 
     return NextResponse.json({
       data: {
