@@ -48,6 +48,7 @@ export const POST = withRequestContext(
         asaasWebhookToken: true,
         mpAccessToken: true,
         mpPublicKey: true,
+        interestFreeInstallments: true,
       },
     })
     if (!tenant) {

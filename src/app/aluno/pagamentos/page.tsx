@@ -1,4 +1,5 @@
 import { CheckCircle2, Clock, CreditCard, FileText, XCircle } from "lucide-react"
+import { CARD_INSTALLMENT_METHOD } from "@/lib/subscriptions/carne-schedule"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { PaymentCheckButton } from "@/components/aluno/payment-check-button"
@@ -166,7 +167,9 @@ export default async function StudentPaymentsPage() {
   // Só o carnê de BOLETO: no PIX não há boleto a listar (o QR é gerado na hora,
   // em /aluno/assinatura) e a linha ficaria em "Gerando boleto…" para sempre.
   const subscriptionCarnes = carneSubscriptions
-    .filter((sub) => sub.billingType !== "PIX")
+    // Cartão parcelado também fica de fora: não há boleto, o período se paga
+    // pela página da assinatura.
+    .filter((sub) => sub.billingType !== "PIX" && sub.billingType !== CARD_INSTALLMENT_METHOD)
     .map((sub) =>
       subscriptionCarneView({ id: sub.id, planName: sub.plan.name }, sub.payments, now),
     )

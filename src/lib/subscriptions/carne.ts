@@ -45,6 +45,7 @@ import {
 import { asaasWebhookUrl, mpWebhookUrl } from "@/lib/tenant/urls"
 import { asaasPixAutomaticFrequencyFor, isRecurringInterval } from "./interval"
 import {
+  CARD_INSTALLMENT_METHOD,
   CARNE_OPEN_STATUSES,
   CARNE_STATUS,
   MP_CARNE_REF_PREFIX,
@@ -484,7 +485,15 @@ export async function emitCarneRow(rowId: string): Promise<EmitCarneResult> {
       where: { id: rowId },
       select: ROW_SELECT,
     })) as CarneRow | null
-    if (!row || row.number === null || row.paidAt || row.status === CARNE_STATUS.CANCELLED) {
+    // Cartão parcelado: a cobrança nasce quando o ALUNO paga — sem o cartão
+    // dele não há o que emitir.
+    if (
+      !row ||
+      row.number === null ||
+      row.paidAt ||
+      row.status === CARNE_STATUS.CANCELLED ||
+      row.billingType === CARD_INSTALLMENT_METHOD
+    ) {
       result = { status: "skipped" }
       return
     }

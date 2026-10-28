@@ -9,7 +9,7 @@ import {
 import { SUBSCRIPTION_GRACE_DAYS } from "./access"
 import { cancelSubscriptionAccess } from "./cancel"
 import { emitCarneRow } from "./carne"
-import { CARNE_STATUS, carneRowsToAppend } from "./carne-schedule"
+import { CARD_INSTALLMENT_METHOD, CARNE_STATUS, carneRowsToAppend } from "./carne-schedule"
 
 /**
  * Varredura diária da assinatura NO BOLETO — roda no mesmo cron do carnê de
@@ -134,8 +134,12 @@ export async function runSubscriptionCarneSweep(
             amount: s.priceAtPurchase,
             gateway: s.gateway,
             status: CARNE_STATUS.SCHEDULED,
-            // O meio do carnê: a renovação segue no boleto ou no PIX.
-            billingType: s.billingType === "PIX" ? "PIX" : "BOLETO",
+            // O meio do carnê: a renovação segue no boleto, no PIX ou no
+            // cartão parcelado.
+            billingType:
+              s.billingType === "PIX" || s.billingType === CARD_INSTALLMENT_METHOD
+                ? s.billingType
+                : "BOLETO",
             dueDate: n.dueDate,
           },
         })
@@ -157,6 +161,8 @@ export async function runSubscriptionCarneSweep(
       number: { not: null },
       paidAt: null,
       status: { in: [CARNE_STATUS.SCHEDULED, CARNE_STATUS.OVERDUE] },
+      // Cartão parcelado nunca é emitido pela plataforma: quem cobra é o aluno.
+      billingType: { not: CARD_INSTALLMENT_METHOD },
       asaasPaymentId: null,
       mpPaymentId: null,
       dueDate: { lte: horizon },
@@ -208,6 +214,36 @@ export async function runSubscriptionCarneSweep(
         "boleto da assinatura não foi emitido — nova tentativa amanhã",
       )
     }
+  }
+
+  // ── C2. Aviso de renovação do cartão parcelado ─────────────────────────────
+  // Ninguém paga pelo aluno (não há débito nem boleto emitido): sem o aviso ele
+  // perderia o acesso sem saber que tinha o próximo período a pagar. Sai uma
+  // vez, no dia em que o período entra na janela de 7 dias.
+  // ponytail: marcado pela data, não por coluna — um dia sem cron perde o aviso
+  // (a área do aluno ainda mostra o "renovar"); coluna de aviso se isso doer.
+  const renewalDue = await prisma.subscriptionPayment.findMany({
+    where: {
+      number: { gt: 1 },
+      paidAt: null,
+      billingType: CARD_INSTALLMENT_METHOD,
+      status: CARNE_STATUS.SCHEDULED,
+      dueDate: { gt: new Date(horizon.getTime() - DAY_MS), lte: horizon },
+      subscription: { boletoCarne: true, status: { in: ["ACTIVE", "PAST_DUE"] } },
+    },
+    select: { subscription: { select: { studentId: true, plan: { select: { name: true } } } } },
+    take: BATCH,
+  })
+  for (const row of renewalDue) {
+    await createNotification({
+      audience: "STUDENT",
+      studentId: row.subscription.studentId,
+      level: "INFO",
+      title: "Renove sua assinatura",
+      body: `O próximo período da sua assinatura ${row.subscription.plan.name} já pode ser pago no cartão, à vista ou parcelado. Pague até o fim do período atual para manter o acesso aos cursos.`,
+      category: "student-billing",
+      href: "/aluno/assinatura",
+    }).catch(swallow("subscription.carne.notify_card"))
   }
 
   // ── D. Atraso ─────────────────────────────────────────────────────────────

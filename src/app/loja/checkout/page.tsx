@@ -2,6 +2,7 @@ import Link from "next/link"
 import { CheckoutPanel } from "@/components/loja/checkout-panel"
 import { CheckoutInquiryForm } from "@/components/loja/checkout-inquiry-form"
 import { getCurrentTenant } from "@/lib/tenant/current"
+import { subscriptionCardInstallmentsCap } from "@/lib/subscriptions/carne-schedule"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { prisma } from "@/lib/prisma"
 import { visibilityFilter } from "@/lib/tenant/courses"
@@ -140,6 +141,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         asaasWebhookToken: true,
         mpAccessToken: true,
         mpPublicKey: true,
+        interestFreeInstallments: true,
       },
     })
     // Qual gateway a unidade usa decide os MEIOS oferecidos: a recorrência do
@@ -179,6 +181,12 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       )
     }
 
+    const installmentsCap = subscriptionCardInstallmentsCap(
+      planGateway,
+      plan.price,
+      planTenant?.interestFreeInstallments,
+    )
+
     return (
       <section className="bg-[#FAFAFA] py-10 md:py-16">
         <div className="mx-auto max-w-6xl px-4 md:px-6">
@@ -201,6 +209,12 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
                 endpoint="/api/loja/checkout/assinatura"
                 gateway={planGateway}
                 mpPublicKey={planTenant?.mpPublicKey ?? null}
+                maxInstallments={installmentsCap}
+                interestFreeInstallments={
+                  planGateway === "ASAAS"
+                    ? installmentsCap
+                    : (planTenant?.interestFreeInstallments ?? 1)
+                }
               />
             </div>
 

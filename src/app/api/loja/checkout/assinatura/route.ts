@@ -20,6 +20,7 @@ import {
   startSelfServiceCarne,
 } from "@/lib/subscriptions/carne"
 import { usesPlatformCycles } from "@/lib/subscriptions/carne-schedule"
+import { chargeSubscriptionCardInstallments } from "@/lib/subscriptions/card-installments"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { decryptTenantAsaasKey } from "@/lib/asaas/client"
@@ -80,6 +81,7 @@ export const POST = withRequestContext(
         mpAccessToken: true,
         mpPublicKey: true,
         plataformaVendedorId: true,
+        interestFreeInstallments: true,
       },
     })
     if (!tenant) {
@@ -254,6 +256,59 @@ export const POST = withRequestContext(
       },
       select: { id: true },
     })
+
+    // Cartão em 2x ou mais: o período é uma compra parcelada no cartão (a
+    // recorrência do gateway só cobra à vista).
+    if (data.paymentMethod === "CREDIT_CARD" && (data.installments ?? 1) > 1) {
+      try {
+        const result = await chargeSubscriptionCardInstallments({
+          subscriptionId: subscription.id,
+          installments: data.installments!,
+          gateway,
+          tenant: {
+            slug: tenant.slug,
+            interestFreeInstallments: tenant.interestFreeInstallments,
+            asaasApiKey: tenant.asaasApiKey ? decryptTenantAsaasKey(tenant.asaasApiKey) : undefined,
+            mpAccessToken: tenant.mpAccessToken
+              ? decryptTenantMpToken(tenant.mpAccessToken)
+              : undefined,
+          },
+          payer: { nome: payer.nome, cpf: payer.cpf, email: payer.email, phone: payer.fone },
+          card: data,
+          remoteIp: clientIp(request),
+        })
+        if ("rejectedMessage" in result) {
+          // Recusa não deixa linha: senão o gate "já iniciou uma assinatura"
+          // travaria a nova tentativa com outro cartão.
+          await discardSubscriptionCarne(subscription.id)
+          return NextResponse.json(
+            { error: result.rejectedMessage, code: "PAYMENT_REJECTED" },
+            { status: 400 },
+          )
+        }
+        return NextResponse.json({
+          data: { subscriptionId: subscription.id, authorized: result.authorized },
+        })
+      } catch (err) {
+        if (err instanceof CarneInputError) {
+          await discardSubscriptionCarne(subscription.id)
+          return NextResponse.json({ error: err.message, code: "INSTALLMENTS_INVALID" }, { status: 400 })
+        }
+        // NÃO apaga: o parcelamento pode ter sido criado no gateway, e é por
+        // esta assinatura que o webhook libera o acesso.
+        contextLogger().error(
+          { err, event: "loja.assinatura.card_installments_failed", tenantId: tenant.id, planId: plan.id },
+          "falha ao cobrar a assinatura parcelada no cartão",
+        )
+        return NextResponse.json(
+          {
+            error:
+              "Não foi possível confirmar o pagamento agora. Se o cartão foi cobrado, o acesso é liberado em instantes — confira seu e-mail.",
+          },
+          { status: 502 },
+        )
+      }
+    }
 
     if (usesPlatformCycles(data.paymentMethod, plan.interval)) {
       try {

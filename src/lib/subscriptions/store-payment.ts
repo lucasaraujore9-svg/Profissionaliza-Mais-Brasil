@@ -36,7 +36,13 @@ import {
   openCarnePix,
   startSelfServiceCarne,
 } from "./carne"
-import { CARNE_OPEN_STATUSES, usesPlatformCycles, type CarneMethod } from "./carne-schedule"
+import {
+  CARD_INSTALLMENT_METHOD,
+  CARNE_OPEN_STATUSES,
+  usesPlatformCycles,
+  type CarneMethod,
+} from "./carne-schedule"
+import { chargeSubscriptionCardInstallments } from "./card-installments"
 
 /**
  * PAGAMENTO de uma assinatura na página da PLATAFORMA (`/pagar/assinatura/<id>`)
@@ -68,6 +74,8 @@ export interface StorePaymentTenant {
   asaasWebhookToken: string | null
   mpAccessToken: string | null
   mpPublicKey: string | null
+  /** Nº de parcelas sem juros da loja: o teto do cartão parcelado. */
+  interestFreeInstallments?: number | null
 }
 
 export type StorePaymentResult =
@@ -140,6 +148,8 @@ interface ResolvedAccount {
   asaasApiKey?: string
   /** Repassada a `createSubscriptionAtGateway`; `{}` na PMB libera o assert. */
   account: SubscriptionGatewayAccount
+  /** Teto do cartão parcelado; `null` na vitrine PMB, que não parcela. */
+  interestFreeInstallments: number | null
 }
 
 function resolveAccount(tenant: StorePaymentTenant | null): ResolvedAccount | null {
@@ -147,7 +157,12 @@ function resolveAccount(tenant: StorePaymentTenant | null): ResolvedAccount | nu
     // A vitrine PMB assina SEMPRE pelo Asaas da conta-mãe (ver
     // /api/checkout/assinatura): a recorrência do MP não emite PIX/boleto.
     try {
-      return { gateway: "ASAAS", asaasApiKey: motherAsaasKey(), account: {} }
+      return {
+        gateway: "ASAAS",
+        asaasApiKey: motherAsaasKey(),
+        account: {},
+        interestFreeInstallments: null,
+      }
     } catch {
       return null
     }
@@ -167,6 +182,7 @@ function resolveAccount(tenant: StorePaymentTenant | null): ResolvedAccount | nu
   return {
     gateway,
     asaasApiKey,
+    interestFreeInstallments: tenant.interestFreeInstallments ?? null,
     // A CONTA da unidade — nunca a conta-mãe.
     account: {
       asaasApiKey,
@@ -327,6 +343,16 @@ async function payUnderLock(
   payer: PayerData,
   remoteIp: string | undefined,
 ): Promise<StorePaymentResult> {
+  // ── Assinatura parcelada no cartão: o aluno compra o período em aberto ───
+  // Antes de qualquer outro ramo do carnê: a troca "carnê não pago → cartão"
+  // abaixo desfaria uma compra parcelada ainda em análise.
+  if (sub.boletoCarne && sub.billingType === CARD_INSTALLMENT_METHOD) {
+    if (data.paymentMethod !== "CREDIT_CARD") {
+      return fail(400, "METHOD_NOT_SUPPORTED", "Esta assinatura é paga no cartão.")
+    }
+    return payCardInstallments(sub, data, resolved, payer, remoteIp)
+  }
+
   // ── Assinatura no boleto: paga o boleto em aberto ────────────────────────
   if (sub.boletoCarne) {
     // Carnê do Asaas que nunca foi pago e o aluno escolheu CARTÃO: vira
@@ -392,6 +418,12 @@ async function payUnderLock(
 
   const cardCheck = checkCard(data, resolved.gateway)
   if (cardCheck) return cardCheck
+
+  // Cartão em 2x ou mais: o período é uma compra parcelada, não a recorrência
+  // do gateway (que só cobra à vista).
+  if (data.paymentMethod === "CREDIT_CARD" && (data.installments ?? 1) > 1) {
+    return payCardInstallments(sub, data, resolved, payer, remoteIp)
+  }
 
   const charged = await createSubscriptionAtGateway(
     {
@@ -607,6 +639,46 @@ async function payCarneBoleto(
     ok: true,
     authorized: false,
     boleto: { url: open.bankSlipUrl, digitableLine: open.digitableLine ?? undefined },
+  }
+}
+
+/**
+ * Compra parcelada no cartão do período em aberto (1ª ou renovação). O teto
+ * de parcelas é o da loja; a vitrine PMB não parcela assinatura.
+ */
+async function payCardInstallments(
+  sub: PayableSubscription,
+  data: StoreSubscriptionPaymentInput,
+  resolved: ResolvedAccount,
+  payer: PayerData,
+  remoteIp: string | undefined,
+): Promise<StorePaymentResult> {
+  if (!resolved.account.tenantSlug) {
+    return fail(400, "INSTALLMENTS_NOT_ALLOWED", "Esta assinatura não pode ser parcelada no cartão.")
+  }
+  const cardCheck = checkCard(data, resolved.gateway)
+  if (cardCheck) return cardCheck
+  try {
+    const result = await chargeSubscriptionCardInstallments({
+      subscriptionId: sub.id,
+      installments: data.installments ?? 1,
+      gateway: resolved.gateway,
+      tenant: {
+        slug: resolved.account.tenantSlug,
+        interestFreeInstallments: resolved.interestFreeInstallments,
+        asaasApiKey: resolved.account.asaasApiKey,
+        mpAccessToken: resolved.account.mpAccessToken,
+      },
+      payer,
+      card: data,
+      remoteIp,
+    })
+    return "rejectedMessage" in result
+      ? fail(400, "PAYMENT_REJECTED", result.rejectedMessage)
+      : { ok: true, authorized: result.authorized }
+  } catch (err) {
+    if (err instanceof CarneInputError) return fail(400, "INSTALLMENTS_INVALID", err.message)
+    throw err
   }
 }
 

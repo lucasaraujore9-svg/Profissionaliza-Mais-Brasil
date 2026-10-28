@@ -14,6 +14,7 @@ import {
 } from "@/lib/subscriptions/interval"
 import { SUBSCRIPTION_METHODS } from "@/components/loja/subscription-pay-form"
 import { carneBoletoNotice, carnePixNotice } from "@/lib/subscriptions/carne-schedule"
+import { SubscriptionInstallmentsSelect } from "@/components/loja/subscription-installments-select"
 import {
   BoletoAddressFields,
   EMPTY_BOLETO_ADDRESS,
@@ -55,6 +56,13 @@ interface Props {
   gateway?: "MP" | "ASAAS"
   /** Public key da conta MP da unidade — necessaria para tokenizar. */
   mpPublicKey?: string | null
+  /**
+   * Teto de parcelas no cartão (`subscriptionCardInstallmentsCap`). Abaixo de 2
+   * não há seletor. 2x ou mais compra o período parcelado.
+   */
+  maxInstallments?: number
+  /** Parcelas sem juros da loja, para o rótulo das opções. */
+  interestFreeInstallments?: number
 }
 
 function money(v: number): string {
@@ -69,10 +77,13 @@ export function SubscriptionCheckout({
   endpoint = "/api/checkout/assinatura",
   gateway = "ASAAS",
   mpPublicKey = null,
+  maxInstallments = 1,
+  interestFreeInstallments = 1,
 }: Props) {
   const recurring = isRecurringInterval(interval)
   const methods = SUBSCRIPTION_METHODS
   const [method, setMethod] = useState<Method>(methods[0])
+  const [installments, setInstallments] = useState(1)
   const [address, setAddress] = useState(EMPTY_BOLETO_ADDRESS)
   // O boleto do Mercado Pago exige o endereço completo do pagador.
   const needsAddress = gateway === "MP" && method === "BOLETO"
@@ -177,6 +188,7 @@ export function SubscriptionCheckout({
               }
             : {}),
           ...(needsAddress ? { enderecoBoleto: address } : {}),
+          ...(method === "CREDIT_CARD" && installments > 1 ? { installments } : {}),
           ...(method === "CREDIT_CARD" && gateway === "ASAAS"
             ? {
                 creditCard: {
@@ -373,6 +385,15 @@ export function SubscriptionCheckout({
 
         {method === "CREDIT_CARD" && (
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <SubscriptionInstallmentsSelect
+              price={price}
+              max={maxInstallments}
+              interestFree={interestFreeInstallments}
+              value={installments}
+              onChange={setInstallments}
+              className={field}
+              renewalHint={recurring}
+            />
             <label className="text-sm sm:col-span-2">
               Nome impresso no cartão
               <input required value={f.holderName} onChange={(e) => set("holderName", e.target.value)} className={field} />

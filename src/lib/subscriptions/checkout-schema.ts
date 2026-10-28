@@ -73,6 +73,12 @@ export const boletoAddressSchema = z.object({
 const mpCardShape = {
   mpPaymentMethodId: z.string().trim().min(1).max(40).optional(),
   mpIssuerId: z.string().trim().min(1).max(40).optional(),
+  /**
+   * Parcelas no cartão. 1 (ou ausente) = cartão de hoje (recorrência do
+   * gateway); 2..12 = assinatura parcelada no cartão (`card-installments.ts`).
+   * O teto da loja é conferido no servidor.
+   */
+  installments: z.number().int().min(1).max(12).optional(),
 }
 
 /**

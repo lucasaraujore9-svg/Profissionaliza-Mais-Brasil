@@ -8,6 +8,7 @@ import { SubscriptionSlotsPanel } from "@/components/aluno/subscription-slots-pa
 import { CancelSubscriptionButton } from "@/components/aluno/subscription-actions"
 import { InstallmentsSection } from "@/components/aluno/installments-section"
 import { subscriptionCarneView } from "@/lib/subscriptions/carne-view"
+import { CARD_INSTALLMENT_METHOD } from "@/lib/subscriptions/carne-schedule"
 import { isWithinRevealWindow } from "@/lib/installments/schedule"
 import {
   loadSubscriptionCatalog,
@@ -117,14 +118,17 @@ export default async function AssinaturaPage({
       })
     : []
   const pixCarne = subscription.boletoCarne && subscription.billingType === "PIX"
+  // Cartão parcelado: como no PIX, sem lista — o aviso do período a pagar.
+  const cardCarne =
+    subscription.boletoCarne && subscription.billingType === CARD_INSTALLMENT_METHOD
   const carne =
-    subscription.boletoCarne && !pixCarne
+    subscription.boletoCarne && !pixCarne && !cardCarne
       ? subscriptionCarneView(
           { id: subscription.id, planName: subscription.plan.name },
           carneRows,
         )
       : null
-  const pixDue = pixCarne
+  const pixDue = pixCarne || cardCarne
     ? carneRows.find(
         (r) =>
           !r.paidAt &&
@@ -241,10 +245,14 @@ export default async function AssinaturaPage({
           <Clock className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
           <div className="text-sm text-emerald-900">
             <p className="font-semibold">
-              PIX da assinatura vence em {formatDate(pixDue.dueDate)}
+              {cardCarne
+                ? `Renove sua assinatura até ${formatDate(pixDue.dueDate)}`
+                : `PIX da assinatura vence em ${formatDate(pixDue.dueDate)}`}
             </p>
             <p className="mt-0.5 text-xs">
-              {subscription.pixAutomaticAuthorizationId
+              {cardCarne
+                ? "A renovação não é automática: pague o próximo período no cartão, à vista ou parcelado, para manter o acesso aos cursos."
+                : subscription.pixAutomaticAuthorizationId
                 ? "Com o Pix Automático autorizado no seu banco, ele é debitado sozinho no vencimento. Se não, pague por aqui para manter o acesso."
                 : "Pague até o vencimento para manter o acesso aos cursos."}
             </p>

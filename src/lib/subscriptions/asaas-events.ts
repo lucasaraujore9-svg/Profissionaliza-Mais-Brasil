@@ -7,6 +7,7 @@ import {
   settleSubscriptionCycle,
 } from "./renew"
 import { CARNE_STATUS } from "./carne-schedule"
+import { applyAsaasCardInstallmentEvent } from "./card-installments"
 
 /**
  * Evento de cobranca do Asaas numa ASSINATURA DE ALUNO — a MESMA decisao para a
@@ -25,7 +26,8 @@ import { CARNE_STATUS } from "./carne-schedule"
 type AsaasEventPayment = Pick<
   AsaasPayment,
   "id" | "value" | "paymentDate" | "dueDate" | "billingType" | "invoiceUrl" | "bankSlipUrl"
->
+> &
+  Partial<Pick<AsaasPayment, "installment" | "installmentNumber">>
 
 export async function applyAsaasSubscriptionEvent(
   subscription: { id: string; boletoCarne: boolean },
@@ -33,6 +35,14 @@ export async function applyAsaasSubscriptionEvent(
   payment: AsaasEventPayment,
 ): Promise<string> {
   const subscriptionId = subscription.id
+
+  // PARCELA de compra parcelada no cartão: o carnê da assinatura só cria
+  // cobranças avulsas, então `installment` preenchido numa assinatura de aluno
+  // é sempre o cartão parcelado — e só a 1ª parcela vale como período.
+  if (payment.installment && subscription.boletoCarne) {
+    return applyAsaasCardInstallmentEvent(subscriptionId, event, payment)
+  }
+
   const charge = {
     gateway: "ASAAS" as const,
     externalPaymentId: payment.id,

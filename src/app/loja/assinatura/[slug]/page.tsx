@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { interestFreeInstallmentText } from "@/lib/mercadopago/installments"
 import { notFound } from "next/navigation"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { prisma } from "@/lib/prisma"
@@ -49,6 +50,7 @@ export default async function LojaPlanoPage({ params }: Props) {
       asaasWebhookToken: true,
       mpAccessToken: true,
       mpPublicKey: true,
+      interestFreeInstallments: true,
     },
   })
   const gateway = tenantCheckoutMode({
@@ -73,6 +75,9 @@ export default async function LojaPlanoPage({ params }: Props) {
       backHref="/assinaturas"
       backLabel="Voltar para os planos"
       allCoursesHref="/cursos"
+      installmentText={
+        semCobranca ? null : interestFreeInstallmentText(plan.price, row?.interestFreeInstallments)
+      }
     />
   )
 }

@@ -82,7 +82,7 @@ export async function handleMpCarnePayment(
       amount: payment.transaction_amount,
       paidAt: payment.date_approved ? new Date(payment.date_approved) : new Date(),
       dueDate: row.dueDate,
-      billingType: row.billingType === "PIX" ? "PIX" : "BOLETO",
+      billingType: row.billingType ?? "BOLETO",
     })
     return { ok: true, note: settled ? `${label} pago` : `${label} ja registrado` }
   }

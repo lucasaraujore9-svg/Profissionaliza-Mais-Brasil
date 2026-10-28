@@ -16,6 +16,7 @@ import {
   BoletoInstrumentResult,
   PixInstrumentResult,
 } from "@/components/loja/payment-instrument-result"
+import { SubscriptionInstallmentsSelect } from "@/components/loja/subscription-installments-select"
 import {
   BoletoAddressFields,
   EMPTY_BOLETO_ADDRESS,
@@ -40,6 +41,13 @@ interface Props {
   gateway: "MP" | "ASAAS"
   /** Public key da conta MP da loja — necessaria para tokenizar. */
   mpPublicKey: string | null
+  /**
+   * Teto de parcelas no cartão (`subscriptionCardInstallmentsCap`). Abaixo de 2
+   * não há seletor. 2x ou mais compra o período parcelado.
+   */
+  maxInstallments?: number
+  /** Parcelas sem juros da loja, para o rótulo das opções. */
+  interestFreeInstallments?: number
   /** Rota de pagamento: a da loja da unidade ou a da vitrine PMB. */
   endpoint: string
   /** Renovação/ciclo em aberto (muda só o texto do botão). */
@@ -87,10 +95,13 @@ export function SubscriptionPayForm({
   askBoletoAddress = false,
   carneOpen = false,
   methods: methodsOverride,
+  maxInstallments = 1,
+  interestFreeInstallments = 1,
 }: Props) {
   const recurring = isRecurringInterval(interval)
   const methods = methodsOverride ?? SUBSCRIPTION_METHODS
   const [method, setMethod] = useState<Method>(methods[0])
+  const [installments, setInstallments] = useState(1)
   const [address, setAddress] = useState(EMPTY_BOLETO_ADDRESS)
   const needsAddress = askBoletoAddress && gateway === "MP" && method === "BOLETO"
   const captcha = useRecaptcha(isPublicCheckoutPath(endpoint))
@@ -152,6 +163,7 @@ export function SubscriptionPayForm({
               }
             : {}),
           ...(needsAddress ? { enderecoBoleto: address } : {}),
+          ...(method === "CREDIT_CARD" && installments > 1 ? { installments } : {}),
           ...(isAsaasCard
             ? {
                 creditCard: {
@@ -272,6 +284,15 @@ export function SubscriptionPayForm({
 
         {method === "CREDIT_CARD" && (
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <SubscriptionInstallmentsSelect
+              price={price}
+              max={maxInstallments}
+              interestFree={interestFreeInstallments}
+              value={installments}
+              onChange={setInstallments}
+              className={field}
+              renewalHint={recurring}
+            />
             <label className="text-sm sm:col-span-2">
               Nome impresso no cartão
               <input required value={f.holderName} onChange={(e) => set("holderName", e.target.value)} className={field} />

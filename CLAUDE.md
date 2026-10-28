@@ -2646,6 +2646,41 @@ pelo id do banco. O fix de 23/10 (`519a3369`) so cobria fatura ja espelhada.
 - **Limite:** `PAYMENT_UPDATED` segue ignorado no webhook; edicao feita no Asaas
   so entra quando alguem abre a unidade ou no cron de reconciliacao.
 
+### Assinatura parcelada no cartão (2026-10-28)
+
+Pedido de unidade: vender assinatura (ex.: anual) parcelada no cartão, "como se
+comprasse um curso". Nenhum gateway parcela na recorrência nativa, e o MP não
+cobra cartão salvo sem CVV — então cada PERÍODO é uma compra parcelada que o
+aluno faz na página da loja. Desenho em
+`docs/superpowers/specs/2026-10-28-assinatura-cartao-parcelado-design.md`.
+
+- **Mora no carnê da plataforma** (`boletoCarne` + `billingType =
+  CARD_INSTALLMENT`): agenda, renovação, período pago, carência e cancelamento
+  são os do carnê. A linha NUNCA é emitida pelo cron (`emitCarneRow` pula, fase
+  C filtra); a cobrança nasce quando o aluno paga. Núcleo em
+  `src/lib/subscriptions/card-installments.ts`.
+- **O nº de parcelas decide o modo**: 1x = cartão de hoje (recorrência do
+  gateway); 2x+ = parcelado. Só assinatura NOVA e sem nada no gateway (decisão
+  do dono) — converter uma viva poderia cobrar em dobro. Na renovação de uma
+  parcelada, 1x é compra à vista do período, sem ligar débito automático.
+- **Teto igual ao curso** (`subscriptionCardInstallmentsCap`): Asaas = nº sem
+  juros da unidade (lá não há juros para o aluno); MP = até 12x, juros do
+  aluno acima do sem juros. Piso de R$ 5 por parcela nos dois.
+- **Asaas: só a 1ª parcela vale como período.** O parcelamento vira N cobranças
+  com `pmb_sub_<id>`, confirmadas juntas e entregues em paralelo;
+  `applyAsaasSubscriptionEvent` desvia toda cobrança com `installment` para
+  `applyAsaasCardInstallmentEvent`. Sem isso 12x dariam 12 períodos. Verificado
+  por mutação. O período é liquidado pelo valor CHEIO (receita soma uma vez).
+- **MP: referência por linha (`subbol_<linha>`)**, como o boleto do carnê —
+  `cancelled`/`rejected` só reabre a linha, nunca vira estorno.
+- **Renovação não é automática:** a varredura avisa o aluno uma vez, no dia em
+  que o período entra na janela de 7 dias (fase C2, sem coluna de marca).
+- **Fora:** vitrine PMB (recusa `installments > 1`), `/api/aluno/assinatura`
+  (aluno logado) e o card da lista de planos.
+- **Não validado contra os gateways reais.** Antes de anunciar: uma compra
+  parcelada de assinatura em cada gateway, conferindo UM período concedido e a
+  receita somada uma vez.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

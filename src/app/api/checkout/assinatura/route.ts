@@ -60,6 +60,14 @@ export const POST = withRequestContext(
       )
     }
     const data = parsed.data
+    // Parcelado no cartão é das lojas das unidades; a vitrine PMB não parcela
+    // assinatura. Recusar é melhor que cobrar à vista calado quem pediu 6x.
+    if ((data.installments ?? 1) > 1) {
+      return NextResponse.json(
+        { error: "Esta assinatura não pode ser parcelada no cartão.", code: "INSTALLMENTS_NOT_ALLOWED" },
+        { status: 400 },
+      )
+    }
 
     if (data.paymentMethod === "CREDIT_CARD" && (!data.creditCard || !data.creditCardHolder)) {
       return NextResponse.json(

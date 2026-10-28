@@ -52,6 +52,11 @@ interface PlanDetailViewProps {
   allCoursesHref?: string
   /** Linha abaixo do botao — usada quando a loja nao cobra online. */
   ctaNote?: string
+  /**
+   * "10x de R$ 50,00 sem juros" — a MESMA conta do seletor do checkout
+   * (`interestFreeInstallmentText`). Ausente = a loja nao parcela.
+   */
+  installmentText?: string | null
 }
 
 export function PlanDetailView({
@@ -62,6 +67,7 @@ export function PlanDetailView({
   backLabel,
   allCoursesHref,
   ctaNote,
+  installmentText,
 }: PlanDetailViewProps) {
   const recurring = isRecurringInterval(plan.interval)
   const restantes = plan.courseCount - plan.courses.length
@@ -258,6 +264,11 @@ export function PlanDetailView({
               <p className="mt-1 text-xs text-gray-500">
                 {INTERVAL_CHARGE_LABEL[plan.interval]}
               </p>
+              {installmentText && (
+                <p className="mt-1 text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                  ou {installmentText} no cartão
+                </p>
+              )}
 
               <Link
                 href={ctaHref}

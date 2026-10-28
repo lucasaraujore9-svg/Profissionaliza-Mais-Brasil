@@ -123,12 +123,15 @@ describe("runSubscriptionCarneSweep", () => {
 
     const where = db.subscriptionPayment.findMany.mock.calls[0][0].where
     expect(where.subscription.status.in).toEqual(["PENDING", "ACTIVE", "PAST_DUE"])
+    // Cartão parcelado nunca é emitido: a cobrança nasce quando o aluno paga.
+    expect(where.billingType).toEqual({ not: "CARD_INSTALLMENT" })
     expect(where.dueDate.lte.toISOString()).toBe("2026-11-11T12:00:00.000Z")
   })
 
   it("boleto vencido vira OVERDUE só depois do fim do dia do vencimento", async () => {
     db.subscriptionPayment.findMany
-      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]) // C. emissão
+      .mockResolvedValueOnce([]) // C2. aviso de renovação do cartão
       .mockResolvedValueOnce([
         { id: "venceu_ontem", dueDate: new Date("2026-11-03T12:00:00Z"), status: "PENDING" },
         { id: "vence_hoje", dueDate: new Date("2026-11-04T00:00:00Z"), status: "PENDING" },
@@ -139,5 +142,19 @@ describe("runSubscriptionCarneSweep", () => {
     expect(r.markedOverdue).toBe(1)
     expect(db.subscriptionPayment.updateMany).toHaveBeenCalledTimes(1)
     expect(db.subscriptionPayment.updateMany.mock.calls[0][0].where.id).toBe("venceu_ontem")
+  })
+
+  it("avisa a renovação do cartão parcelado uma vez, no dia em que entra na janela", async () => {
+    db.subscriptionPayment.findMany
+      .mockResolvedValueOnce([]) // C. emissão
+      .mockResolvedValueOnce([
+        { subscription: { studentId: "stu_card", plan: { name: "Anual" } } },
+      ])
+    await runSubscriptionCarneSweep(NOW)
+    const where = db.subscriptionPayment.findMany.mock.calls[1][0].where
+    expect(where.billingType).toBe("CARD_INSTALLMENT")
+    expect(where.dueDate.lte.toISOString()).toBe("2026-11-11T12:00:00.000Z")
+    expect(where.dueDate.gt.toISOString()).toBe("2026-11-10T12:00:00.000Z")
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ studentId: "stu_card", title: "Renove sua assinatura" }))
   })
 })

@@ -10,6 +10,10 @@ import { SUBSCRIPTION_SLOTS_RULE_TEXT } from "@/lib/subscriptions/slots"
 import { hasGatewayCharge } from "@/lib/subscriptions/store-payment"
 import { subscriptionCarneView } from "@/lib/subscriptions/carne-view"
 import { hasCompleteBoletoAddress } from "@/lib/installments/mp-boleto"
+import {
+  CARD_INSTALLMENT_METHOD,
+  subscriptionCardInstallmentsCap,
+} from "@/lib/subscriptions/carne-schedule"
 import { SubscriptionPayForm } from "@/components/loja/subscription-pay-form"
 import { InstallmentsSection } from "@/components/aluno/installments-section"
 import { isWithinRevealWindow } from "@/lib/installments/schedule"
@@ -84,6 +88,7 @@ export async function SubscriptionPaymentPage({
           asaasWebhookToken: true,
           mpAccessToken: true,
           mpPublicKey: true,
+          interestFreeInstallments: true,
         },
       },
       // Ciclo em aberto (1º PIX/boleto emitido ou renovação): é ele que se paga.
@@ -106,6 +111,9 @@ export async function SubscriptionPaymentPage({
     return <Aviso titulo="Cobrança indisponível" texto="Esta cobrança não está mais ativa." />
   }
 
+  if (sub.boletoCarne && sub.billingType === CARD_INSTALLMENT_METHOD) {
+    return <CardInstallmentPayment subscriptionId={subscriptionId} sub={sub} payEndpoint={payEndpoint} />
+  }
   if (sub.boletoCarne) {
     return <CarnePayment subscriptionId={subscriptionId} sub={sub} payEndpoint={payEndpoint} />
   }
@@ -152,6 +160,12 @@ export async function SubscriptionPaymentPage({
 
   const renewal = sub.status !== "PENDING"
   const price = openCycle ? Number(openCycle.amount) : Number(sub.priceAtPurchase)
+  // Parcelar no cartão só na 1ª compra (sem nada no gateway) de uma unidade:
+  // assinatura viva segue no meio que tem, e a vitrine PMB não parcela.
+  const installmentsCap =
+    !charged && sub.tenant
+      ? subscriptionCardInstallmentsCap(gateway, price, sub.tenant.interestFreeInstallments)
+      : 1
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -208,6 +222,10 @@ export async function SubscriptionPaymentPage({
           renewal={renewal}
           defaultHolderName={sub.student.nome ?? ""}
           askBoletoAddress={!hasCompleteBoletoAddress(sub.student)}
+          maxInstallments={installmentsCap}
+          interestFreeInstallments={
+            gateway === "ASAAS" ? installmentsCap : (sub.tenant?.interestFreeInstallments ?? 1)
+          }
         />
       </div>
     </section>
@@ -360,6 +378,109 @@ async function CarnePayment({
             methods={pix ? (firstCycleAsaas ? ["PIX", "CREDIT_CARD"] : ["PIX"]) : undefined}
           />
         )}
+      </div>
+    </section>
+  )
+}
+
+/**
+ * Assinatura PARCELADA NO CARTÃO: o aluno compra o período em aberto (1º ou
+ * renovação) no cartão, de 1x até o teto da loja. A linha só existe em aberto
+ * na janela da renovação; fora dela não há o que pagar.
+ */
+async function CardInstallmentPayment({
+  subscriptionId,
+  sub,
+  payEndpoint,
+}: {
+  subscriptionId: string
+  sub: {
+    status: string
+    interval: SubscriptionInterval
+    gateway: "MP" | "ASAAS"
+    priceAtPurchase: unknown
+    plan: { name: string; description: string | null }
+    student: { nome: string | null }
+    tenant: { mpPublicKey: string | null; interestFreeInstallments: number } | null
+  }
+  payEndpoint: string
+}) {
+  const open = await prisma.subscriptionPayment.findFirst({
+    where: {
+      subscriptionId,
+      number: { not: null },
+      paidAt: null,
+      status: { in: ["SCHEDULED", "PENDING", "OVERDUE"] },
+    },
+    orderBy: { number: "asc" },
+    select: { amount: true, dueDate: true, asaasPaymentId: true, mpPaymentId: true },
+  })
+  if (!open) {
+    return (
+      <Aviso
+        titulo="Assinatura em dia"
+        texto="Não há período a pagar agora. A renovação fica disponível 7 dias antes do fim do período pago."
+      />
+    )
+  }
+  if (open.asaasPaymentId || open.mpPaymentId) {
+    return (
+      <Aviso
+        titulo="Pagamento em processamento"
+        texto="O pagamento deste período já foi feito no cartão e está sendo confirmado. Verifique seu e-mail em instantes."
+      />
+    )
+  }
+  const price = Number(open.amount)
+  const cap = subscriptionCardInstallmentsCap(
+    sub.gateway,
+    price,
+    sub.tenant?.interestFreeInstallments,
+  )
+
+  return (
+    <section className="bg-[#FAFAFA] py-10 md:py-16">
+      <div className="mx-auto max-w-3xl space-y-6 px-4 md:px-6">
+        <header>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
+            {sub.status === "PENDING" ? "Finalizar assinatura" : "Renovar assinatura"}
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Pague o período no cartão, à vista ou parcelado, para manter o acesso aos cursos.
+          </p>
+        </header>
+
+        <PlanCard
+          label="Assinatura no cartão parcelado"
+          planName={sub.plan.name}
+          description={sub.plan.description}
+          studentName={sub.student.nome}
+        >
+          <p className="mt-4">
+            <strong className="text-2xl text-[var(--color-pmb-green-900)]">{money(price)}</strong>
+            <span className="text-sm text-gray-500"> {INTERVAL_PRICE_SUFFIX[sub.interval]}</span>
+          </p>
+          <p className="mt-1 text-sm text-gray-500">
+            Pague até {open.dueDate.toLocaleDateString("pt-BR", { timeZone: "UTC" })} para não perder o acesso.
+          </p>
+        </PlanCard>
+
+        <SubscriptionPayForm
+          subscriptionId={subscriptionId}
+          planName={sub.plan.name}
+          price={price}
+          interval={sub.interval}
+          gateway={sub.gateway}
+          mpPublicKey={sub.tenant?.mpPublicKey ?? null}
+          endpoint={payEndpoint}
+          renewal
+          defaultHolderName={sub.student.nome ?? ""}
+          methods={["CREDIT_CARD"]}
+          maxInstallments={cap}
+          interestFreeInstallments={
+            sub.gateway === "ASAAS" ? cap : (sub.tenant?.interestFreeInstallments ?? 1)
+          }
+        />
       </div>
     </section>
   )

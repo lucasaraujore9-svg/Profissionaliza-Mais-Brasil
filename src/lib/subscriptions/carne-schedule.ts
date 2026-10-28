@@ -4,6 +4,11 @@ import {
   MAX_BOLETO_INSTALLMENTS,
 } from "@/lib/installments/schedule"
 import {
+  MAX_CARD_INSTALLMENTS,
+  MIN_CARD_INSTALLMENT_VALUE,
+  interestFreeInstallmentsFor,
+} from "@/lib/mercadopago/installments"
+import {
   INTERVAL_MONTHS,
   INTERVAL_PERIOD_LABEL,
   addMonths,
@@ -48,6 +53,35 @@ export function usesPlatformCycles(
 ): method is CarneMethod {
   if (method === "BOLETO") return true
   return method === "PIX" && isRecurringInterval(interval)
+}
+
+/**
+ * Meio do carnê PARCELADO NO CARTÃO (2026-10-28): cada período é uma compra
+ * parcelada no cartão, feita pelo aluno na página da loja — "como se comprasse
+ * um curso". Nenhum gateway parcela na recorrência nativa, e o Mercado Pago não
+ * cobra cartão salvo sem o CVV, então a renovação também é o aluno pagando de
+ * novo. A linha NUNCA é emitida pelo cron: sem o cartão não há o que emitir.
+ */
+export const CARD_INSTALLMENT_METHOD = "CARD_INSTALLMENT"
+
+/**
+ * Até quantas parcelas no cartão a assinatura desta loja aceita — a mesma regra
+ * do curso, por gateway:
+ *  - Asaas: não existe juros para o aluno (toda parcela sai do bolso da
+ *    unidade), então o nº SEM JUROS da unidade é o teto.
+ *  - Mercado Pago: até 12x; acima do nº sem juros o aluno paga o juros do
+ *    emissor.
+ * Os dois respeitam a parcela mínima de R$ 5. É a mesma conta da vitrine e do
+ * servidor: anunciar mais do que o checkout aceita é oferta que obriga.
+ */
+export function subscriptionCardInstallmentsCap(
+  gateway: "MP" | "ASAAS",
+  price: number,
+  interestFree: number | null | undefined,
+): number {
+  if (gateway === "ASAAS") return interestFreeInstallmentsFor(price, interestFree) ?? 1
+  if (!Number.isFinite(price) || price <= 0) return 1
+  return Math.max(1, Math.min(MAX_CARD_INSTALLMENTS, Math.floor(price / MIN_CARD_INSTALLMENT_VALUE)))
 }
 
 /** Boletos que o vendedor pode gerar de uma vez na venda direta. */
