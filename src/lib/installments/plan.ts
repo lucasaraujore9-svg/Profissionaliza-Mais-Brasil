@@ -24,6 +24,8 @@ import {
   getCustomer as getAsaasCustomer,
   createInstallmentWithBoleto,
   getInstallmentPayments,
+  deleteInstallment,
+  updatePayment,
   motherAsaasKey,
   AsaasApiError,
 } from "@/lib/asaas/client"
@@ -35,6 +37,7 @@ import {
 } from "@/lib/checkout/payer"
 import {
   buildInstallmentSchedule,
+  isWithinRevealWindow,
   type ScheduledInstallment,
 } from "./schedule"
 import { hasCompleteBoletoAddress, mpBoletoPaymentParams } from "./mp-boleto"
@@ -54,6 +57,19 @@ export interface CreatePlanInput {
   exactTotalValue?: number
   /** Descrição da cobrança no Asaas. Default: `Curso: ${nome do curso}`. */
   description?: string
+  /**
+   * Um valor por parcela (entrada diferente, parcelas com valores próprios).
+   * Ausente = todas valem `installmentValue`. Validado pelo chamador com
+   * `installmentAmountsError`.
+   */
+  amounts?: number[]
+  /**
+   * A 1ª mensalidade foi paga FORA da plataforma (marketplace): ela vira a
+   * parcela 1, já PAGA e sem boleto, e os `count` boletos gerados são as
+   * parcelas 2..count+1. A baixa em si (o `Payment` `ext_`) é do chamador.
+   * Só no Asaas — o MP tem `createMpPlanAfterExternalFirst`.
+   */
+  paidBefore?: { paidAt: Date; amount: number }
 }
 
 export interface CreatePlanResult {
@@ -157,10 +173,14 @@ export async function createBoletoInstallmentPlan(
   if (!ctx.tenant || ctx.tenant.salesGateway === "ASAAS") {
     return createAsaasCarne(ctx, input)
   }
+  if (input.paidBefore) {
+    throw new Error("carnê MP com 1ª paga fora: use createMpPlanAfterExternalFirst")
+  }
   const schedule = buildInstallmentSchedule({
     count: input.count,
     installmentValue: input.installmentValue,
     firstDueDate: input.firstDueDate,
+    amounts: input.amounts,
   })
   return createMpInstallmentPlan(ctx, schedule)
 }
@@ -284,10 +304,54 @@ async function createAsaasCarne(
   // Ordena por vencimento e numera 1..N.
   const ordered = [...payments].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 
+  // Valores por parcela: o parcelamento do Asaas só nasce com valor único, então
+  // as parcelas que diferem são reprecificadas uma a uma logo em seguida. Se
+  // alguma falhar, o carnê inteiro é removido — um carnê com valores errados
+  // cobrando o aluno é pior que nenhum (o chamador desfaz a matrícula).
+  if (input.amounts) {
+    try {
+      for (let i = 0; i < ordered.length; i++) {
+        const want = input.amounts[i]
+        if (want === undefined || want === ordered[i].value) continue
+        const updated = await updatePayment(
+          ordered[i].id,
+          { billingType: "BOLETO", value: want, dueDate: ordered[i].dueDate },
+          apiKey,
+        )
+        ordered[i] = { ...ordered[i], value: updated.value, bankSlipUrl: updated.bankSlipUrl ?? ordered[i].bankSlipUrl }
+      }
+    } catch (err) {
+      await deleteInstallment(installment.id, apiKey).catch((e) =>
+        contextLogger().error(
+          { err: e, event: "installments.custom_amounts.cleanup_failed", installmentId: installment.id },
+          "carnê com valores parciais não pôde ser removido do Asaas",
+        ),
+      )
+      throw err
+    }
+  }
+
   // Escritas SEQUENCIAIS (sem $transaction em lote — o pooler do Supabase derruba
   // o batch em prod). Se algo falhar, o chamador apaga a matrícula e o cascade
   // remove as parcelas já criadas.
   const rows: BoletoInstallment[] = []
+  const offset = input.paidBefore ? 1 : 0
+  if (input.paidBefore) {
+    rows.push(
+      await prisma.boletoInstallment.create({
+        data: {
+          enrollmentId: ctx.enrollment.id,
+          tenantId: ctx.enrollment.tenantId,
+          number: 1,
+          amount: input.paidBefore.amount,
+          dueDate: input.paidBefore.paidAt,
+          status: "PAID",
+          paidAt: input.paidBefore.paidAt,
+          gateway: "ASAAS",
+        },
+      }),
+    )
+  }
   for (let i = 0; i < ordered.length; i++) {
     const p = ordered[i]
     rows.push(
@@ -295,7 +359,7 @@ async function createAsaasCarne(
         data: {
           enrollmentId: ctx.enrollment.id,
           tenantId: ctx.enrollment.tenantId,
-          number: i + 1,
+          number: i + 1 + offset,
           amount: p.value,
           dueDate: new Date(`${p.dueDate}T12:00:00Z`),
           status: "GENERATED",
@@ -317,7 +381,7 @@ async function createAsaasCarne(
     },
   })
 
-  return { installments: rows, firstBoletoUrl: rows[0]?.invoiceUrl ?? null }
+  return { installments: rows, firstBoletoUrl: rows[offset]?.invoiceUrl ?? null }
 }
 
 // ── Mercado Pago: N boletos avulsos ─────────────────────────────────────────
@@ -361,8 +425,70 @@ async function createMpInstallmentPlan(
 }
 
 /**
+ * Carnê MP de um curso mensal cuja 1ª mensalidade foi paga FORA da plataforma
+ * (marketplace): a parcela 1 já nasce PAGA (sem boleto — a baixa é o `Payment`
+ * `ext_` que o chamador grava) e as parcelas 2..N vencem mês a mês a partir de
+ * `nextDueDate`. Emite agora só a que já está na janela de 7 dias; as demais o
+ * cron emite, como em todo carnê MP.
+ */
+export async function createMpPlanAfterExternalFirst(input: {
+  enrollmentId: string
+  count: number
+  installmentValue: number
+  paidAt: Date
+  nextDueDate: Date
+}): Promise<CreatePlanResult> {
+  const ctx = await loadContext(input.enrollmentId)
+  if (!ctx.tenant || ctx.tenant.salesGateway !== "MP" || !ctx.tenant.mpAccessToken) {
+    throw new Error("unidade sem Mercado Pago conectado — não é possível gerar o carnê")
+  }
+  const rows: BoletoInstallment[] = [
+    await prisma.boletoInstallment.create({
+      data: {
+        enrollmentId: ctx.enrollment.id,
+        tenantId: ctx.enrollment.tenantId,
+        number: 1,
+        amount: input.installmentValue,
+        dueDate: input.paidAt,
+        status: "PAID",
+        paidAt: input.paidAt,
+        gateway: "MP",
+      },
+    }),
+  ]
+  const rest = buildInstallmentSchedule({
+    count: input.count - 1,
+    installmentValue: input.installmentValue,
+    firstDueDate: input.nextDueDate,
+  })
+  for (const s of rest) {
+    rows.push(
+      await prisma.boletoInstallment.create({
+        data: {
+          enrollmentId: ctx.enrollment.id,
+          tenantId: ctx.enrollment.tenantId,
+          number: s.number + 1,
+          amount: s.amount,
+          dueDate: s.dueDate,
+          status: "SCHEDULED",
+          gateway: "MP",
+        },
+      }),
+    )
+  }
+  let firstBoletoUrl: string | null = null
+  const next = rows[1]
+  if (next && isWithinRevealWindow(next)) {
+    const emitted = await emitMpBoletoForRow(next, ctx)
+    rows[1] = emitted
+    firstBoletoUrl = emitted.invoiceUrl
+  }
+  return { installments: rows, firstBoletoUrl }
+}
+
+/**
  * Emite um boleto MP para UMA parcela SCHEDULED e atualiza a linha para GENERATED.
- * Idempotente via X-Idempotency-Key = parc_<id> (o MP devolve o mesmo pagamento).
+ * Idempotente via X-Idempotency-Key = parc_<id>:<updatedAt> (o MP devolve o mesmo pagamento).
  * Exige o endereço do aluno (o MP exige endereço do pagador no boleto).
  */
 async function emitMpBoletoForRow(
@@ -399,7 +525,15 @@ async function emitMpBoletoForRow(
     address: s,
   })
 
-  const payment = await createMpPayment(accessToken, params, externalReference)
+  // A chave leva o `updatedAt` da linha: retentativas da MESMA emissão repetem a
+  // chave, mas a reemissão depois de editar a parcela (a linha foi gravada de
+  // novo) ganha chave nova — com `parc_<id>` puro o MP devolveria o boleto
+  // antigo, cancelado, com o valor velho.
+  const payment = await createMpPayment(
+    accessToken,
+    params,
+    `${externalReference}:${row.updatedAt.getTime()}`,
+  )
 
   const invoiceUrl = payment.transaction_details?.external_resource_url ?? null
   const digitableLine = payment.transaction_details?.digitable_line ?? null

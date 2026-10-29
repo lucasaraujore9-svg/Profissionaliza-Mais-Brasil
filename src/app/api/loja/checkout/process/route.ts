@@ -1,3 +1,5 @@
+import { recurringStart } from "@/lib/enrollment/external-first-payment"
+import { externalPaidAt } from "@/lib/enrollment/external-first-payment-server"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
@@ -73,6 +75,7 @@ export const POST = withRequestContext(
           paymentType: true,
           finalAmount: true,
           installmentsTotal: true,
+          installmentsPaid: true,
           externalReference: true,
           asaasCustomerId: true,
           asaasPaymentId: true,
@@ -166,10 +169,23 @@ export const POST = withRequestContext(
       const isExistingAsaasInstallment =
         enrollment.gateway === "ASAAS" && !!openInstallment
 
+      // Curso mensal com a 1ª paga fora (marketplace): a matrícula já está
+      // ACTIVE e o aluno volta aqui só para cadastrar a assinatura das próximas.
+      const recurring =
+        enrollment.status === "ACTIVE" &&
+        enrollment.paymentType === "MONTHLY" &&
+        enrollment.gateway === "ASAAS"
+          ? recurringStart({
+              ...enrollment,
+              finalAmount: Number(enrollment.finalAmount),
+              externalPaidAt: await externalPaidAt(enrollment.id),
+            })
+          : null
+
       // Uma matrícula de carnê fica ACTIVE após a 1ª parcela, mas as seguintes
       // continuam pagáveis pelo mesmo checkout. Para os demais tipos, mantém o
       // gate histórico: só PENDING chega ao processador.
-      if (!isExistingAsaasInstallment) {
+      if (!isExistingAsaasInstallment && !recurring) {
         if (
           enrollment.status === "ACTIVE" ||
           enrollment.status === "COMPLETED"
@@ -259,6 +275,7 @@ export const POST = withRequestContext(
           asaasCustomerId: enrollment.asaasCustomerId,
           asaasPaymentId: enrollment.asaasPaymentId,
           asaasSubscriptionId: enrollment.asaasSubscriptionId,
+          recurringStart: recurring,
         }
         const asaasCtx = {
           apiKey: decryptTenantAsaasKey(tenant.asaasApiKey),

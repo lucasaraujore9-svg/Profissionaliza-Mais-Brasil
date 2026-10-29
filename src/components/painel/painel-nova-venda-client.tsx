@@ -28,6 +28,15 @@ import {
 } from "@/components/ui/select"
 import { MAX_SALE_COURSES } from "@/lib/enrollment/multi-course"
 import {
+  InstallmentAmountsField,
+  effectiveInstallmentAmounts,
+} from "@/components/shared/installment-amounts-field"
+import {
+  ExternalFirstPaymentField,
+  ExternalFirstResult,
+  type ExternalFirstSummary,
+} from "@/components/shared/external-first-payment-field"
+import {
   INTERVAL_LABEL,
   INTERVAL_PERIOD_LABEL,
   INTERVAL_PRICE_SUFFIX,
@@ -139,7 +148,11 @@ interface CreatedVenda {
     count: number
     installmentValue: number
     total: number
+    /** Valores por parcela, quando personalizados na venda. */
+    amounts: number[] | null
   }
+  /** Curso mensal com a 1ª mensalidade paga fora (marketplace). */
+  externalFirst?: ExternalFirstSummary
   /** Presente quando a venda é uma assinatura no boleto. */
   carne?: {
     count: number
@@ -322,6 +335,11 @@ export function PainelNovaVendaClient({
   // ── Forma de pagamento: link normal vs carnê (parcelado no boleto) ──
   const [paymentMode, setPaymentMode] = useState<"normal" | "installment">("normal")
   const [inst, setInst] = useState({ count: 2, value: "", firstDueDate: isoDatePlusDays(7) })
+  // Curso mensal com a 1ª mensalidade paga no marketplace: data do pagamento.
+  // null = venda normal.
+  const [externalPaidAt, setExternalPaidAt] = useState<string | null>(null)
+  // Valores por parcela (entrada diferente). null = todas valem `inst.value`.
+  const [customAmounts, setCustomAmounts] = useState<string[] | null>(null)
   const [addr, setAddr] = useState({ cep: "", rua: "", numero: "", bairro: "", cidade: "", estado: "" })
 
   // ── Submit / resultado ──
@@ -343,9 +361,14 @@ export function PainelNovaVendaClient({
   const isPlanCarne = isInstallment && isPlan
   const isCourseCarne = isInstallment && !isPlan
   const carneGateway = isPlan ? gateway : installmentConfig?.gateway
-  const needsAddress = isInstallment && carneGateway === "MP"
+  const isExternalFirst =
+    hasMonthly && externalPaidAt !== null && !bolsista && !isPlan && !isInstallment
+  const needsAddress =
+    (isInstallment && carneGateway === "MP") || (isExternalFirst && gateway === "MP")
   const installmentValueNum = Number(inst.value.replace(",", ".")) || 0
-  const installmentTotal = Math.round(installmentValueNum * inst.count * 100) / 100
+  const installmentAmounts = effectiveInstallmentAmounts(inst.count, inst.value, customAmounts)
+  const installmentTotal =
+    installmentAmounts.reduce((acc, v) => acc + Math.round(v * 100), 0) / 100
 
   // Desconto manual derivado do input (aceita vírgula BR). Válido quando está
   // entre 0 (exclusivo) e o cap do vendedor; acima do cap o form bloqueia.
@@ -475,6 +498,8 @@ export function PainelNovaVendaClient({
     setManualPct("")
     setPaymentMode("normal")
     setInst({ count: 2, value: "", firstDueDate: isoDatePlusDays(7) })
+    setCustomAmounts(null)
+    setExternalPaidAt(null)
     setAddr({ cep: "", rua: "", numero: "", bairro: "", cidade: "", estado: "" })
     setError(null)
     setFieldErrors({})
@@ -525,12 +550,17 @@ export function PainelNovaVendaClient({
           boletoInstallment: isCourseCarne
             ? {
                 count: inst.count,
-                installmentValue: installmentValueNum,
+                ...(customAmounts
+                  ? { amounts: installmentAmounts }
+                  : { installmentValue: installmentValueNum }),
                 firstDueDate: inst.firstDueDate,
               }
             : isPlanCarne
               ? { count: inst.count, firstDueDate: inst.firstDueDate }
               : undefined,
+          primeiraMensalidadeExterna: isExternalFirst
+            ? { paidAt: externalPaidAt! }
+            : undefined,
           endereco: needsAddress
             ? {
                 cep: addr.cep.replace(/\D/g, ""),
@@ -600,8 +630,10 @@ export function PainelNovaVendaClient({
         ) : created.installment ? (
           <div className="rounded-2xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-6 text-[var(--color-pmb-green-900)]">
             <h2 className="text-base font-bold">
-              Carnê gerado — {created.installment.count}x de{" "}
-              {fmt(created.installment.installmentValue)}
+              Carnê gerado — {created.installment.count}x
+              {created.installment.amounts
+                ? ` · entrada de ${fmt(created.installment.amounts[0])}`
+                : ` de ${fmt(created.installment.installmentValue)}`}
             </h2>
             <p className="mt-2 text-sm">
               O aluno acessa cada boleto na área dele. A <strong>1ª parcela</strong>{" "}
@@ -612,7 +644,10 @@ export function PainelNovaVendaClient({
 
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
               <Mini label="Parcelas" value={`${created.installment.count}x`} />
-              <Mini label="Cada parcela" value={fmt(created.installment.installmentValue)} />
+              <Mini
+                label={created.installment.amounts ? "1ª parcela" : "Cada parcela"}
+                value={fmt(created.installment.amounts?.[0] ?? created.installment.installmentValue)}
+              />
               <Mini label="Total" value={fmt(created.installment.total)} accent />
             </div>
 
@@ -634,6 +669,31 @@ export function PainelNovaVendaClient({
                 >
                   <Copy className="h-3.5 w-3.5" />
                   {copied ? "Link copiado" : "Copiar link de pagamento"}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : created.externalFirst ? (
+          <div className="space-y-3">
+            <ExternalFirstResult summary={created.externalFirst} />
+            {created.paymentUrl && (
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href={created.paymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
+                >
+                  Abrir página de pagamento
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)]/30 bg-white px-4 py-2.5 text-xs font-bold text-[var(--color-pmb-green-700)] hover:bg-[var(--color-pmb-green)]/5"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied ? "Link copiado" : "Copiar link"}
                 </button>
               </div>
             )}
@@ -1167,12 +1227,23 @@ export function PainelNovaVendaClient({
           title="3. Pagamento"
           done={
             isCourseCarne
-              ? installmentValueNum > 0
+              ? installmentAmounts.every((v) => v > 0)
               : isPlanCarne || !!couponCode.trim() || manualValid
           }
         >
+          {hasMonthly && !isPlan && (
+            <ExternalFirstPaymentField
+              gateway={gateway}
+              paidAt={externalPaidAt}
+              onChange={(v) => {
+                setExternalPaidAt(v)
+                if (v !== null) setPaymentMode("normal")
+              }}
+            />
+          )}
+
           {/* Forma de pagamento (só quando a unidade tem carnê liberado) */}
-          {installmentAvailable && (
+          {installmentAvailable && !isExternalFirst && (
             <div className="mb-4">
               <span className="text-xs font-semibold text-gray-600">Forma de pagamento</span>
               <div className="mt-1.5 inline-flex rounded-lg border border-gray-200 p-0.5">
@@ -1261,6 +1332,17 @@ export function PainelNovaVendaClient({
                   </p>
                 )}
               </div>
+              <InstallmentAmountsField
+                count={inst.count}
+                defaultValue={inst.value}
+                custom={customAmounts}
+                onChange={setCustomAmounts}
+              />
+              {fieldErrors["boletoInstallment.amounts"] && (
+                <p className="text-xs text-rose-600 sm:col-span-3">
+                  {fieldErrors["boletoInstallment.amounts"]}
+                </p>
+              )}
               <p className="text-xs text-gray-600 sm:col-span-3">
                 A 1ª parcela fica disponível na hora; as próximas, 7 dias antes de cada
                 vencimento, na área do aluno. O acesso é liberado quando a 1ª parcela for paga.
@@ -1497,7 +1579,14 @@ export function PainelNovaVendaClient({
               ))}
               {isCourseCarne ? (
                 <>
-                  <Row label="Parcelas" value={`${inst.count}x de ${fmt(installmentValueNum)}`} />
+                  <Row
+                    label="Parcelas"
+                    value={
+                      customAmounts
+                        ? `${inst.count}x · entrada de ${fmt(installmentAmounts[0])}`
+                        : `${inst.count}x de ${fmt(installmentValueNum)}`
+                    }
+                  />
                   <Row label="Total do carnê" value={fmt(installmentTotal)} bold />
                   <Row label="Cobrança" value={`Carnê (boleto ${gateway === "ASAAS" ? "Asaas" : "Mercado Pago"})`} />
                 </>

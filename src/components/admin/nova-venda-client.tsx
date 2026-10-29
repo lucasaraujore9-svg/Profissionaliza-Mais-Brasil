@@ -31,6 +31,15 @@ import {
   SUBSCRIPTION_CARNE_MIN_COUNT,
   defaultCarneCount,
 } from "@/lib/subscriptions/carne-schedule"
+import {
+  InstallmentAmountsField,
+  effectiveInstallmentAmounts,
+} from "@/components/shared/installment-amounts-field"
+import {
+  ExternalFirstPaymentField,
+  ExternalFirstResult,
+  type ExternalFirstSummary,
+} from "@/components/shared/external-first-payment-field"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -274,6 +283,26 @@ export function NovaVendaClient({
   const [carneMode, setCarneMode] = useState(false)
   const [carne, setCarne] = useState({ count: 12, firstDueDate: isoDatePlusDays(7) })
   const isCarne = carneAvailable && carneMode
+  // Curso/pacote no carnê (boleto parcelado no Asaas da PMB): valor por parcela
+  // digitado pelo vendedor, sem cupom nem desconto — o total É o preço.
+  const [courseCarne, setCourseCarne] = useState({
+    count: 2,
+    value: "",
+    firstDueDate: isoDatePlusDays(7),
+  })
+  const [customAmounts, setCustomAmounts] = useState<string[] | null>(null)
+  // Curso mensal com a 1ª mensalidade paga no marketplace. null = venda normal.
+  const [externalPaidAt, setExternalPaidAt] = useState<string | null>(null)
+  const isExternalFirst = hasMonthly && externalPaidAt !== null && !bolsista && !isPlan
+  const courseCarneAvailable = !isPlan && hasSelection && !bolsista && !isExternalFirst
+  const isCourseCarne = courseCarneAvailable && carneMode
+  const courseCarneAmounts = effectiveInstallmentAmounts(
+    courseCarne.count,
+    courseCarne.value,
+    customAmounts,
+  )
+  const courseCarneTotal =
+    courseCarneAmounts.reduce((acc, v) => acc + Math.round(v * 100), 0) / 100
 
 
   // Step 4 — Link
@@ -286,6 +315,10 @@ export function NovaVendaClient({
     scholarship?: boolean
     /** Assinatura no boleto. */
     carne?: { count: number; amount: number; firstDueDate: string }
+    /** Curso/pacote no carnê. */
+    installment?: { count: number; amounts: number[]; total: number }
+    /** Curso mensal com a 1ª mensalidade paga fora. */
+    externalFirst?: ExternalFirstSummary
   } | null>(null)
 
   // Search students (debounced)
@@ -468,12 +501,22 @@ export function NovaVendaClient({
           // Assinatura recusa cupom e bolsa no servidor — não mandar aqui evita
           // um 400 que o vendedor não teria como interpretar.
           couponCode:
-            isPlan || bolsista || !couponResult ? undefined : couponCode.trim(),
+            isPlan || bolsista || isCourseCarne || !couponResult
+              ? undefined
+              : couponCode.trim(),
           manualDiscountPercent:
-            bolsista || couponResult || !manualValid ? undefined : manualPctNumber,
+            bolsista || isCourseCarne || couponResult || !manualValid
+              ? undefined
+              : manualPctNumber,
           bolsista: isPlan ? undefined : bolsista || undefined,
           boletoCarne: isCarne
             ? { count: carne.count, firstDueDate: carne.firstDueDate }
+            : undefined,
+          primeiraMensalidadeExterna: isExternalFirst
+            ? { paidAt: externalPaidAt! }
+            : undefined,
+          carneCurso: isCourseCarne
+            ? { amounts: courseCarneAmounts, firstDueDate: courseCarne.firstDueDate }
             : undefined,
         }),
       })
@@ -488,7 +531,9 @@ export function NovaVendaClient({
           ? "Bolsa concedida! Aluno matriculado na plataforma de aulas."
           : body.data?.carne
             ? "Boletos da assinatura gerados!"
-            : "Link de pagamento gerado!",
+            : body.data?.installment
+              ? "Carnê gerado!"
+              : "Link de pagamento gerado!",
       )
     } catch {
       toast.error("Erro de rede ao gerar link")
@@ -818,7 +863,7 @@ export function NovaVendaClient({
       {/* ── 3. Desconto ──────────────────────────────────────────────────── */}
       {/* Desconto manual (%) na hora, limitado ao cap do vendedor, OU cupom.
           Cupom só para curso: a validação (preview) usa courseId. */}
-      {!bolsista && (
+      {!bolsista && !isCourseCarne && (
       <Section title="3. Desconto (opcional)" done={!!couponResult || manualValid}>
         {couponResult ? (
           <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
@@ -938,7 +983,17 @@ export function NovaVendaClient({
                 </a>
               </div>
             )}
-            {carneAvailable && !linkResult && (
+            {hasMonthly && !isPlan && !bolsista && !linkResult && (
+              <ExternalFirstPaymentField
+                gateway={gateway}
+                paidAt={externalPaidAt}
+                onChange={(v) => {
+                  setExternalPaidAt(v)
+                  if (v !== null) setCarneMode(false)
+                }}
+              />
+            )}
+            {(carneAvailable || courseCarneAvailable) && !linkResult && (
               <div className="space-y-3">
                 <div>
                   <span className="text-xs font-semibold text-gray-600">Forma de pagamento</span>
@@ -963,11 +1018,72 @@ export function NovaVendaClient({
                           : "text-gray-600 hover:bg-gray-50"
                       }`}
                     >
-                      Assinatura no boleto (carnê)
+                      {isPlan ? "Assinatura no boleto (carnê)" : "Parcelado no boleto (carnê)"}
                     </button>
                   </div>
                 </div>
-                {carneMode && (
+                {isCourseCarne && (
+                  <div className="grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-3">
+                    <div>
+                      <Label htmlFor="a-parcelas">Nº de parcelas</Label>
+                      <Select
+                        value={String(courseCarne.count)}
+                        onValueChange={(v) =>
+                          setCourseCarne({ ...courseCarne, count: Number(v) || 2 })
+                        }
+                      >
+                        <SelectTrigger id="a-parcelas" className="mt-1.5 h-10 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 23 }, (_, i) => i + 2).map((n) => (
+                            <SelectItem key={n} value={String(n)}>
+                              {n}x
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="a-parcela-valor">Valor de cada parcela</Label>
+                      <Input
+                        id="a-parcela-valor"
+                        inputMode="decimal"
+                        value={courseCarne.value}
+                        onChange={(e) =>
+                          setCourseCarne({ ...courseCarne, value: e.target.value })
+                        }
+                        placeholder="Ex: 89,90"
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="a-parcela-venc">1º vencimento</Label>
+                      <Input
+                        id="a-parcela-venc"
+                        type="date"
+                        value={courseCarne.firstDueDate}
+                        min={isoDatePlusDays(0)}
+                        onChange={(e) =>
+                          setCourseCarne({ ...courseCarne, firstDueDate: e.target.value })
+                        }
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <InstallmentAmountsField
+                      count={courseCarne.count}
+                      defaultValue={courseCarne.value}
+                      custom={customAmounts}
+                      onChange={setCustomAmounts}
+                    />
+                    <p className="text-xs text-gray-600 sm:col-span-3">
+                      Boletos no Asaas da PMB, vencendo todo mês a partir do 1º. O
+                      acesso é liberado quando a 1ª parcela for paga. Total abaixo do
+                      preço conta como desconto e respeita seu cap ({cap}%).
+                    </p>
+                  </div>
+                )}
+                {carneMode && isPlan && (
                   <div className="grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-2">
                     <div>
                       <Label htmlFor="a-boletos">Boletos gerados agora</Label>
@@ -1041,6 +1157,12 @@ export function NovaVendaClient({
               ) : manualValid ? (
                 <Row label={`Desconto (${manualPctNumber}%)`} value={`− ${fmt(manualDiscountAmount)}`} className="text-emerald-600" />
               ) : null}
+              {isCourseCarne && (
+                <Row
+                  label="Parcelas"
+                  value={`${courseCarne.count}x · entrada de ${fmt(courseCarneAmounts[0])} · 1º vence em ${courseCarne.firstDueDate ? fmtYmd(courseCarne.firstDueDate) : "—"}`}
+                />
+              )}
               {isCarne && (
                 <Row
                   label="Boletos agora"
@@ -1053,9 +1175,11 @@ export function NovaVendaClient({
                     ? "Cada boleto"
                     : planItem && isRecurringInterval(planItem.interval ?? "MONTHLY")
                       ? "Valor por cobrança"
-                      : "Total"
+                      : isCourseCarne
+                        ? "Total do carnê"
+                        : "Total"
                 }
-                value={fmt(finalPrice)}
+                value={fmt(isCourseCarne ? courseCarneTotal : finalPrice)}
                 bold
               />
               {planItem && (
@@ -1073,7 +1197,7 @@ export function NovaVendaClient({
                   }
                 />
               )}
-              <Row label={bolsista ? "Cobrança" : "Gateway"} value={bolsista ? "Nenhuma (bolsa)" : gateway === "ASAAS" ? "Asaas" : "Mercado Pago"} />
+              <Row label={bolsista ? "Cobrança" : "Gateway"} value={bolsista ? "Nenhuma (bolsa)" : isCourseCarne || gateway === "ASAAS" ? "Asaas" : "Mercado Pago"} />
             </div>
 
             {!linkResult ? (
@@ -1081,7 +1205,11 @@ export function NovaVendaClient({
                 onClick={generateLink}
                 // A API recusa com GUARDIAN_REQUIRED; desabilitar aqui evita
                 // que o vendedor descubra a regra só depois de clicar.
-                disabled={generatingLink || !!selectedStudent?.guardianMissing}
+                disabled={
+                  generatingLink ||
+                  !!selectedStudent?.guardianMissing ||
+                  (isCourseCarne && !courseCarneAmounts.every((v) => v > 0))
+                }
                 className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
               >
                 {generatingLink
@@ -1090,7 +1218,9 @@ export function NovaVendaClient({
                     ? "Conceder bolsa de estudo"
                     : isCarne
                       ? "Gerar boletos da assinatura"
-                      : "Gerar link de pagamento"}
+                      : isCourseCarne
+                        ? "Gerar carnê"
+                        : "Gerar link de pagamento"}
               </Button>
             ) : linkResult.scholarship ? (
               <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -1113,6 +1243,7 @@ export function NovaVendaClient({
                     setCouponCode("")
                     setManualPct("")
                     setLinkResult(null)
+                    setExternalPaidAt(null)
                     setBolsista(false)
                     setNewStudent({ nome: "", email: "", cpf: "", fone: "" })
                   }}
@@ -1126,8 +1257,15 @@ export function NovaVendaClient({
                   <CheckCircle2 className="h-4 w-4" />{" "}
                   {linkResult.carne
                     ? `Assinatura no boleto criada — ${linkResult.carne.count} ${linkResult.carne.count === 1 ? "boleto" : "boletos"} de ${fmt(linkResult.carne.amount)}`
-                    : "Link gerado com sucesso"}
+                    : linkResult.installment
+                      ? `Carnê gerado — ${linkResult.installment.count}x, total ${fmt(linkResult.installment.total)}`
+                      : linkResult.externalFirst
+                        ? "Venda registrada"
+                        : "Link gerado com sucesso"}
                 </div>
+                {linkResult.externalFirst && (
+                  <ExternalFirstResult summary={linkResult.externalFirst} />
+                )}
                 {linkResult.carne && (
                   <p className="text-sm text-emerald-800">
                     O 1º boleto vence em {fmtYmd(linkResult.carne.firstDueDate)}. Envie o
@@ -1161,6 +1299,7 @@ export function NovaVendaClient({
                     setCouponCode("")
                     setManualPct("")
                     setLinkResult(null)
+                    setExternalPaidAt(null)
                     setNewStudent({ nome: "", email: "", cpf: "", fone: "" })
                   }}
                 >

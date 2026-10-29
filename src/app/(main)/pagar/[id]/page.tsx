@@ -1,5 +1,7 @@
 import Link from "next/link"
 import { headers } from "next/headers"
+import { recurringStart } from "@/lib/enrollment/external-first-payment"
+import { externalPaidAt } from "@/lib/enrollment/external-first-payment-server"
 import { prisma } from "@/lib/prisma"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { OrderSummary } from "@/components/loja/order-summary"
@@ -68,6 +70,8 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
       gateway: true,
       paymentType: true,
       installmentsTotal: true,
+      installmentsPaid: true,
+      asaasSubscriptionId: true,
       finalAmount: true,
       originalAmount: true,
       discountAmount: true,
@@ -206,7 +210,20 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
     )
   }
 
-  if (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED") {
+  // 1ª mensalidade paga fora (marketplace): o curso já está liberado e esta
+  // página serve para o aluno cadastrar o pagamento das próximas.
+  const recurring =
+    enrollment.status === "ACTIVE" &&
+    enrollment.paymentType === "MONTHLY" &&
+    enrollment.gateway === "ASAAS"
+      ? recurringStart({
+          ...enrollment,
+          finalAmount: Number(enrollment.finalAmount),
+          externalPaidAt: await externalPaidAt(enrollment.id),
+        })
+      : null
+
+  if (!recurring && (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED")) {
     return (
       <Aviso
         titulo="Pagamento já confirmado"
@@ -214,7 +231,7 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
       />
     )
   }
-  if (enrollment.status !== "PENDING") {
+  if (!recurring && enrollment.status !== "PENDING") {
     return <Aviso titulo="Cobrança indisponível" texto="Esta cobrança não está mais ativa." />
   }
 
@@ -244,7 +261,9 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
             Finalizar pagamento
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Escolha a forma de pagamento. É seguro e processado aqui mesmo.
+            {recurring
+              ? `A 1ª mensalidade já está paga e seu curso está liberado. Escolha como pagar as ${recurring.remaining} mensalidades seguintes — a próxima vence em ${recurring.nextDueDate.split("-").reverse().join("/")}.`
+              : "Escolha a forma de pagamento. É seguro e processado aqui mesmo."}
           </p>
         </header>
 

@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest"
 import {
   buildInstallmentSchedule,
+  installmentAmountsError,
   isWithinRevealWindow,
   isOverdue,
+  sumAmounts,
 } from "./schedule"
 
 // Núcleo puro do carnê: agenda de parcelas + janela de disponibilidade (7 dias
@@ -31,6 +33,29 @@ describe("buildInstallmentSchedule", () => {
     })
     expect(rows[1].dueDate.getUTCMonth()).toBe(1) // fevereiro
     expect(rows[1].dueDate.getUTCDate()).toBeLessThanOrEqual(28)
+  })
+})
+
+describe("valores por parcela", () => {
+  it("entrada diferente: cada parcela leva o próprio valor", () => {
+    const rows = buildInstallmentSchedule({
+      count: 3,
+      installmentValue: 100,
+      amounts: [250, 100, 80],
+      firstDueDate: new Date("2026-08-10T12:00:00Z"),
+    })
+    expect(rows.map((r) => r.amount)).toEqual([250, 100, 80])
+  })
+
+  it("recusa lista de tamanho errado, centavo quebrado e parcela abaixo do piso", () => {
+    expect(installmentAmountsError([100, 100], 3)).toMatch(/3 parcelas/)
+    expect(installmentAmountsError([100, 10.005], 2)).toMatch(/parcela 2/)
+    expect(installmentAmountsError([4.99, 100], 2)).toMatch(/parcela 1/)
+    expect(installmentAmountsError([19.99, 5], 2)).toBeNull()
+  })
+
+  it("soma em centavos", () => {
+    expect(sumAmounts([0.1, 0.2, 19.99])).toBe(20.29)
   })
 })
 

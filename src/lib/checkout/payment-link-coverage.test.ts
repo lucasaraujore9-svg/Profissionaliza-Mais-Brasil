@@ -109,6 +109,8 @@ describe("link de pagamento de loja nunca é a página do gateway", () => {
       "components/aluno/installments-section.tsx",
       "components/loja/pmb-checkout-form.tsx",
       "lib/installments/plan.ts",
+      // Renegociação da parcela: regrava a coluna com o `bankSlipUrl` novo.
+      "lib/installments/edit.ts",
       // ── Mesma view (`InstallmentView.invoiceUrl`) para a assinatura no boleto:
       //    preenchida com `bankSlipUrl`, o PDF do boleto — nunca a fatura.
       "lib/subscriptions/carne-view.ts",

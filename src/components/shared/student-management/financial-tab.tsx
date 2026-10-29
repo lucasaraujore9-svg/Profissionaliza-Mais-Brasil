@@ -8,6 +8,7 @@ import type { ManagementScope, StudentData } from "./types"
 import { apiBase } from "./types"
 import { CheckoutLink } from "@/components/shared/checkout-link"
 import { ReleaseRuleCell } from "./release-rule-cell"
+import { InstallmentsButton } from "./installments-dialog"
 import { VerifyPaymentButton } from "@/components/shared/verify-payment-button"
 import { Button } from "@/components/ui/button"
 import {
@@ -261,8 +262,7 @@ export function FinancialTab({
                         {e.paymentType === "BOLETO_INSTALLMENT" &&
                         e.installmentsTotal ? (
                           <div className="mt-0.5 text-[11px] text-gray-500">
-                            {e.installmentsTotal}x de{" "}
-                            {brl(e.finalAmount / e.installmentsTotal)} ·{" "}
+                            {e.installmentsTotal}x · {brl(e.finalAmount)} ·{" "}
                             {e.installmentsPaid}/{e.installmentsTotal} pagas
                           </div>
                         ) : (
@@ -316,8 +316,17 @@ export function FinancialTab({
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {VERIFIABLE.has(e.status) || CANCELLABLE.has(e.status) ? (
+                        {VERIFIABLE.has(e.status) ||
+                        CANCELLABLE.has(e.status) ||
+                        e.paymentType === "BOLETO_INSTALLMENT" ? (
                           <div className="flex flex-wrap items-center gap-2">
+                            {e.paymentType === "BOLETO_INSTALLMENT" && (
+                              <InstallmentsButton
+                                url={`${apiBase(scope, student.id)}/enrollments/${e.id}/parcelas`}
+                                scope={scope}
+                                courseName={displayName}
+                              />
+                            )}
                             {/* Cobrança em aberto: dá para perguntar ao gateway
                                 se já foi paga, sem depender do webhook. */}
                             {VERIFIABLE.has(e.status) && (

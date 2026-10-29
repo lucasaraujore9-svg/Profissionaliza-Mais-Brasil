@@ -639,6 +639,30 @@ describe("retomada da mensal no cartão", () => {
     expect(result).toMatchObject({ kind: "error", code: "PREVIOUS_CHARGE_OPEN" })
     expect(vi.mocked(createSubscription)).not.toHaveBeenCalled()
   })
+
+  it("1ª mensalidade paga fora: assinatura vence no mês seguinte e cobra só as restantes", async () => {
+    vi.mocked(createSubscription).mockResolvedValue({ id: "sub_new" } as never)
+    vi.mocked(listPayments).mockResolvedValue({
+      data: [anterior("CREDIT_CARD", "PENDING")],
+    } as never)
+
+    const result = await processTransparentAsaasPayment(
+      {
+        ...avulsa({ paymentType: "MONTHLY", asaasPaymentId: null, asaasSubscriptionId: null }),
+        installmentsTotal: 12,
+        recurringStart: { nextDueDate: "2026-11-20", remaining: 11 },
+      },
+      card,
+      ctx,
+    )
+
+    expect(vi.mocked(createSubscription)).toHaveBeenCalledWith(
+      expect.objectContaining({ nextDueDate: "2026-11-20", maxPayments: 11 }),
+      "asaas_key",
+    )
+    // Nada é cobrado agora: a etapa termina com o cartão cadastrado.
+    expect(result).toEqual({ kind: "approved", status: "SCHEDULED" })
+  })
 })
 
 // ── Parcelamento no cartão na conta da unidade ────────────────────────────────

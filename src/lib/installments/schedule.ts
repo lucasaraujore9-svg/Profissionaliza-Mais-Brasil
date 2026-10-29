@@ -16,6 +16,9 @@ export const MAX_BOLETO_INSTALLMENTS = 24
 /** Mínimo de parcelas para caracterizar um parcelamento. */
 export const MIN_BOLETO_INSTALLMENTS = 2
 
+/** Menor valor de UMA parcela — piso do boleto no Asaas. */
+export const MIN_INSTALLMENT_AMOUNT = 5
+
 export interface ScheduledInstallment {
   /** 1..N — ordem da parcela. */
   number: number
@@ -28,22 +31,53 @@ export interface ScheduledInstallment {
 /**
  * Monta a agenda: N parcelas de `installmentValue`, a 1ª vencendo em
  * `firstDueDate` e as demais mensais (dia preservado, com clamp de fim de mês).
+ * `amounts` (um valor por parcela) substitui o valor único — é a entrada
+ * diferente / parcelas com valores próprios.
  */
 export function buildInstallmentSchedule(params: {
   count: number
   installmentValue: number
   firstDueDate: Date
+  amounts?: number[]
 }): ScheduledInstallment[] {
-  const { count, installmentValue, firstDueDate } = params
+  const { count, installmentValue, firstDueDate, amounts } = params
   const rows: ScheduledInstallment[] = []
   for (let i = 0; i < count; i++) {
     rows.push({
       number: i + 1,
-      amount: installmentValue,
+      amount: amounts?.[i] ?? installmentValue,
       dueDate: i === 0 ? firstDueDate : addMonthsClamped(firstDueDate, i),
     })
   }
   return rows
+}
+
+/**
+ * Valores por parcela informados pelo vendedor. Devolve a mensagem de erro, ou
+ * null se estão válidos: um por parcela, em centavos, nenhum abaixo do piso.
+ */
+export function installmentAmountsError(
+  amounts: number[],
+  count: number,
+): string | null {
+  if (amounts.length !== count) {
+    return `Informe o valor de cada uma das ${count} parcelas.`
+  }
+  for (let i = 0; i < amounts.length; i++) {
+    const v = amounts[i]
+    if (!Number.isFinite(v) || Math.abs(Math.round(v * 100) - v * 100) > 1e-6) {
+      return `Valor da parcela ${i + 1} inválido.`
+    }
+    if (v < MIN_INSTALLMENT_AMOUNT) {
+      return `A parcela ${i + 1} não pode ser menor que R$ ${MIN_INSTALLMENT_AMOUNT},00.`
+    }
+  }
+  return null
+}
+
+/** Soma em centavos — evita 0,1 + 0,2 no total da venda. */
+export function sumAmounts(amounts: number[]): number {
+  return amounts.reduce((acc, v) => acc + Math.round(v * 100), 0) / 100
 }
 
 /**

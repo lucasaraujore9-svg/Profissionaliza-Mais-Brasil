@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { recurringStart } from "@/lib/enrollment/external-first-payment"
+import { externalPaidAt } from "@/lib/enrollment/external-first-payment-server"
 import { prisma } from "@/lib/prisma"
 import {
   deletePayment as deleteAsaasPayment,
@@ -126,6 +128,7 @@ export const POST = withRequestContextParams<{ id: string }>(
         finalAmount: true,
         paymentType: true,
         installmentsTotal: true,
+        installmentsPaid: true,
         asaasPaymentId: true,
         asaasSubscriptionId: true,
         asaasInstallmentId: true,
@@ -144,13 +147,27 @@ export const POST = withRequestContextParams<{ id: string }>(
         { status: 404 },
       )
     }
-    if (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED") {
+    // Curso mensal com a 1ª paga fora (marketplace): a matrícula já está
+    // ACTIVE e o aluno volta aqui só para escolher como pagar as próximas.
+    const recurring =
+      enrollment.status === "ACTIVE" && enrollment.paymentType === "MONTHLY"
+        ? recurringStart({
+            ...enrollment,
+            gateway: "ASAAS",
+            finalAmount: Number(enrollment.finalAmount),
+            externalPaidAt: await externalPaidAt(enrollment.id),
+          })
+        : null
+    if (
+      !recurring &&
+      (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED")
+    ) {
       return NextResponse.json(
         { error: "Esta matrícula já está paga", code: "ALREADY_PAID" },
         { status: 409 },
       )
     }
-    if (enrollment.status !== "PENDING") {
+    if (!recurring && enrollment.status !== "PENDING") {
       return NextResponse.json(
         { error: "Cobrança indisponível", code: "ENROLLMENT_NOT_PENDING" },
         { status: 409 },
@@ -292,6 +309,7 @@ export const POST = withRequestContextParams<{ id: string }>(
         finalAmount: Number(enrollment.finalAmount),
         isMonthly,
         monthlyMonths,
+        recurringStart: recurring,
         billingType: data.paymentMethod,
         installments: installmentsChosen,
         creditCard: data.creditCard,

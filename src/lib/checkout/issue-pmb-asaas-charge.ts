@@ -67,6 +67,11 @@ export interface IssuePmbAsaasChargeInput {
   isMonthly: boolean
   monthlyMonths: number | null
   /**
+   * 1ª mensalidade paga FORA (marketplace): a assinatura vence a partir do mês
+   * seguinte e cobra só as restantes. Ver `lib/enrollment/external-first-payment.ts`.
+   */
+  recurringStart?: { nextDueDate: string; remaining: number } | null
+  /**
    * O meio escolhido NA TELA. Não existe mais `UNDEFINED` (cobrança em aberto
    * paga na fatura do Asaas): o aluno paga sempre na página da plataforma.
    */
@@ -304,11 +309,13 @@ export async function issuePmbAsaasCharge(
       splits: await asaasSplitsForEnrollment(enrollmentId),
       value: finalAmount,
       // Cartão captura na hora (vence hoje); PIX/boleto vencem em 3 dias.
-      nextDueDate: dueDateInDays(billingType === "CREDIT_CARD" ? 0 : 3),
+      nextDueDate:
+        input.recurringStart?.nextDueDate ??
+        dueDateInDays(billingType === "CREDIT_CARD" ? 0 : 3),
       cycle: "MONTHLY",
       description: `Mensalidade — ${courseNome}`,
       externalReference,
-      maxPayments: monthlyMonths,
+      maxPayments: input.recurringStart?.remaining ?? monthlyMonths,
       notificationUrl: asaasWebhookUrl(),
       ...(monthlyCardPair ?? {}),
     }, motherKey)

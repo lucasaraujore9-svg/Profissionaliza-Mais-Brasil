@@ -398,11 +398,13 @@ export interface AsaasUpdatePaymentParams {
   billingType?: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED"
 }
 
+/** `apiKey`: conta da unidade (revenda); omitido = conta-mãe PMB. */
 export async function updatePayment(
   paymentId: string,
   params: AsaasUpdatePaymentParams,
+  apiKey?: string,
 ): Promise<AsaasPayment> {
-  return request<AsaasPayment>("PUT", `/payments/${paymentId}`, params)
+  return request<AsaasPayment>("PUT", `/payments/${paymentId}`, params, apiKey)
 }
 
 /**

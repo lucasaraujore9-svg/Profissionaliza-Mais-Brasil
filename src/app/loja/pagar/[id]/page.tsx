@@ -1,6 +1,8 @@
 import { headers } from "next/headers"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
+import { recurringStart } from "@/lib/enrollment/external-first-payment"
+import { externalPaidAt } from "@/lib/enrollment/external-first-payment-server"
 import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { AsaasCheckoutForm } from "@/components/loja/asaas-checkout-form"
 import { OrderSummary } from "@/components/loja/order-summary"
@@ -72,6 +74,8 @@ export default async function PagarPage({ params }: PagarPageProps) {
       originalAmount: true,
       discountAmount: true,
       installmentsTotal: true,
+      installmentsPaid: true,
+      asaasSubscriptionId: true,
       coursePackageId: true,
       coursePackage: { select: { name: true, coverImageUrl: true } },
       // Venda direta com mais de um curso: o `course` abaixo é só o principal.
@@ -247,8 +251,22 @@ export default async function PagarPage({ params }: PagarPageProps) {
     )
   }
 
+  // 1ª mensalidade paga fora (marketplace): o curso já está liberado e esta
+  // página serve para o aluno cadastrar o pagamento das próximas.
+  const recurring =
+    enrollment.status === "ACTIVE" &&
+    enrollment.paymentType === "MONTHLY" &&
+    enrollment.gateway === "ASAAS"
+      ? recurringStart({
+          ...enrollment,
+          finalAmount: Number(enrollment.finalAmount),
+          externalPaidAt: await externalPaidAt(enrollment.id),
+        })
+      : null
+
   if (
     !isTransparentInstallment &&
+    !recurring &&
     (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED")
   ) {
     return (
@@ -262,7 +280,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
   if (
     isTransparentInstallment
       ? enrollment.status === "CANCELLED"
-      : enrollment.status !== "PENDING"
+      : !recurring && enrollment.status !== "PENDING"
   ) {
     return <Aviso titulo="Cobrança indisponível" texto="Esta cobrança não está mais ativa." />
   }
@@ -307,7 +325,9 @@ export default async function PagarPage({ params }: PagarPageProps) {
           <p className="mt-1 text-sm text-gray-600">
             {currentInstallment
               ? `Pague a parcela ${currentInstallment.number} de ${installmentCount}. Escolha PIX, cartão ou boleto.`
-              : "Escolha a forma de pagamento. É seguro e processado aqui mesmo."}
+              : recurring
+                ? `A 1ª mensalidade já está paga e seu curso está liberado. Cadastre o cartão para as ${recurring.remaining} mensalidades seguintes — a próxima é cobrada em ${recurring.nextDueDate.split("-").reverse().join("/")}.`
+                : "Escolha a forma de pagamento. É seguro e processado aqui mesmo."}
           </p>
         </header>
 

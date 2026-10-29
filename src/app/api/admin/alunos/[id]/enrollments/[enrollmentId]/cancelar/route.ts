@@ -1,3 +1,4 @@
+import { isExternalPaymentId } from "@/lib/enrollment/external-first-payment"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
@@ -132,6 +133,12 @@ export const POST = withRequestContextParams<{ id: string; enrollmentId: string 
         },
       })
       for (const p of payments) {
+        // Mensalidade paga fora (marketplace): o dinheiro não passou por gateway
+        // nosso — estorno é com o marketplace.
+        if (isExternalPaymentId(p.asaasPaymentId ?? p.mpPaymentId)) {
+          refundErrors.push(`payment ${p.id}: pago fora da plataforma — estorne no marketplace`)
+          continue
+        }
         try {
           if (p.gateway === "ASAAS" && p.asaasPaymentId) {
             if (!keys.asaasApiKey) throw new Error("conta Asaas da venda não disponível")

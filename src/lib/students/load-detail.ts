@@ -1,3 +1,4 @@
+import { isExternalPaymentId, recurringSetupPending } from "@/lib/enrollment/external-first-payment"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
 import { decrypt } from "@/lib/crypto"
@@ -251,7 +252,20 @@ export async function loadStudentDetail(args: {
       // Link para admin/revenda recuperarem o checkout de uma cobranca pendente
       // (venda direta aguardando pagamento ou carrinho abandonado).
       checkoutUrl: buildEnrollmentCheckoutUrl({
-        status: e.status,
+        // 1ª mensalidade paga fora e assinatura das próximas ainda não
+        // cadastrada: o link continua sendo o que falta o aluno fazer.
+        status: recurringSetupPending({
+          ...e,
+          finalAmount: Number(e.finalAmount),
+          externalPaidAt:
+            payments.find(
+              (p) =>
+                p.enrollmentId === e.id &&
+                isExternalPaymentId(p.asaasPaymentId ?? p.mpPaymentId),
+            )?.paidAt ?? null,
+        })
+          ? "PENDING"
+          : e.status,
         enrollmentId: e.id,
         gateway: e.gateway,
         tenant: student.tenant,

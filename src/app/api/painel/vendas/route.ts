@@ -46,9 +46,12 @@ import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { storeBaseUrl } from "@/lib/tenant/urls"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { createBoletoInstallmentPlan } from "@/lib/installments/plan"
+import { sellWithExternalFirstPayment } from "@/lib/enrollment/external-first-payment-server"
 import {
   MIN_BOLETO_INSTALLMENTS,
   MAX_BOLETO_INSTALLMENTS,
+  installmentAmountsError,
+  sumAmounts,
 } from "@/lib/installments/schedule"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import { MAX_SALE_COURSES, dedupeIds } from "@/lib/enrollment/multi-course"
@@ -118,7 +121,23 @@ const createSchema = withGuardianRule(
     .object({
       count: z.number().int().min(1).max(MAX_BOLETO_INSTALLMENTS),
       installmentValue: z.number().positive().optional(),
+      // Um valor por parcela (entrada diferente, parcelas com valores
+      // próprios). Substitui `installmentValue`. Só no carnê de CURSO.
+      amounts: z
+        .array(z.number().positive())
+        .min(MIN_BOLETO_INSTALLMENTS)
+        .max(MAX_BOLETO_INSTALLMENTS)
+        .optional(),
       firstDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+    })
+    .optional(),
+  // Curso MENSAL cuja 1ª mensalidade foi paga FORA da plataforma (marketplace
+  // de cursos): dá baixa nela, libera o curso agora e deixa as próximas
+  // configuradas — Asaas pela assinatura (o aluno cadastra o pagamento no link),
+  // Mercado Pago pelo carnê que o próprio sistema emite mês a mês.
+  primeiraMensalidadeExterna: z
+    .object({
+      paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
     })
     .optional(),
   // Endereço do aluno — exigido pelo Mercado Pago para emitir boleto. Só
@@ -161,11 +180,22 @@ const createSchema = withGuardianRule(
     (v) =>
       !v.boletoInstallment ||
       !!v.planId ||
-      (v.boletoInstallment.installmentValue !== undefined &&
+      ((v.boletoInstallment.installmentValue !== undefined ||
+        v.boletoInstallment.amounts !== undefined) &&
         v.boletoInstallment.count >= MIN_BOLETO_INSTALLMENTS),
     {
       message: `Informe o valor de cada parcela (mínimo de ${MIN_BOLETO_INSTALLMENTS} parcelas).`,
       path: ["boletoInstallment", "installmentValue"],
+    },
+  )
+  .refine(
+    (v) =>
+      !v.primeiraMensalidadeExterna ||
+      (!v.planId && !v.bolsista && !v.boletoInstallment && !v.packageId),
+    {
+      message:
+        "1ª mensalidade paga fora só vale para venda de curso mensal (sem bolsa, carnê ou assinatura).",
+      path: ["primeiraMensalidadeExterna"],
     },
   )
   // Aluno: um aluno existente (studentId) OU os dados completos de um novo
@@ -1013,13 +1043,21 @@ export const POST = withRequestContext(
     // dispara a geração do plano: Asaas gera o carnê nativo; MP emite a 1ª parcela
     // agora e o cron emite as demais ~7 dias antes de cada vencimento.
     if (isCourseInstallment && data.boletoInstallment) {
-      const { count, installmentValue, firstDueDate } = data.boletoInstallment
+      const { count, amounts, firstDueDate } = data.boletoInstallment
+      // Com valores por parcela, o "valor da parcela" de referência é o da
+      // última (as demais são reprecificadas na criação do carnê).
+      const installmentValue =
+        amounts?.[amounts.length - 1] ?? data.boletoInstallment.installmentValue
       // Garantido pelo schema no carnê de curso; o `if` só estreita o tipo.
       if (installmentValue === undefined) {
         return NextResponse.json(
           { error: "Informe o valor de cada parcela." },
           { status: 400 },
         )
+      }
+      const amountsError = amounts && installmentAmountsError(amounts, count)
+      if (amountsError) {
+        return NextResponse.json({ error: amountsError }, { status: 400 })
       }
       if (count > MAX_BOLETO_INSTALLMENTS) {
         return NextResponse.json(
@@ -1063,7 +1101,9 @@ export const POST = withRequestContext(
           .catch(swallow("painel.vendas.carne.address"))
       }
 
-      const total = Math.round(count * installmentValue * 100) / 100
+      const total = amounts
+        ? sumAmounts(amounts)
+        : Math.round(count * installmentValue * 100) / 100
       const enrollment = await prisma.enrollment.create({
         data: {
           tenantId: tenant.id,
@@ -1091,6 +1131,7 @@ export const POST = withRequestContext(
           enrollmentId: enrollment.id,
           count,
           installmentValue,
+          amounts,
           firstDueDate: firstDue,
         })
         return NextResponse.json({
@@ -1102,7 +1143,7 @@ export const POST = withRequestContext(
             // hospedado no gateway. Ela mostra as parcelas do carnê e, no Asaas,
             // deixa pagar a parcela aberta por PIX, cartão ou boleto.
             paymentUrl: `${storeBaseUrl(tenant)}/pagar/${enrollment.id}`,
-            installment: { count, installmentValue, total },
+            installment: { count, installmentValue, total, amounts: amounts ?? null },
           },
         })
       } catch (err) {
@@ -1146,6 +1187,46 @@ export const POST = withRequestContext(
         )
       }
       splitSnapshot = recomputed.value
+    }
+
+    // ── 1ª mensalidade paga fora (marketplace) ──────────────────────────────
+    if (data.primeiraMensalidadeExterna) {
+      const external = await sellWithExternalFirstPayment({
+        tenantId: tenant.id,
+        fulfillTenant: resellerTenantContext(tenant),
+        studentId: student.id,
+        soldByUserId: userId,
+        gateway: gate.forcedGateway ?? tenant.salesGateway,
+        months: monthlyMonths,
+        isMonthly,
+        paidAtYmd: data.primeiraMensalidadeExterna.paidAt,
+        endereco: data.endereco,
+        enrollment: {
+          tenantCourseId: enrollmentTenantCourseId,
+          courseId: enrollmentCourseId,
+          bundleCourseIds,
+          originalAmount: basePrice,
+          discountAmount,
+          finalAmount,
+          couponId,
+          splitSnapshot,
+        },
+      })
+      if (!external.ok) {
+        if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas.externa"))
+        return NextResponse.json({ error: external.error }, { status: external.status })
+      }
+      return NextResponse.json({
+        data: {
+          enrollmentId: external.enrollmentId,
+          studentId: student.id,
+          finalAmount,
+          externalFirst: external.summary,
+          // Asaas: o aluno cadastra ali o pagamento das próximas mensalidades.
+          // MP: ali ele vê os boletos do carnê.
+          paymentUrl: `${storeBaseUrl(tenant)}/pagar/${external.enrollmentId}`,
+        },
+      })
     }
 
     const enrollment = await prisma.enrollment.create({

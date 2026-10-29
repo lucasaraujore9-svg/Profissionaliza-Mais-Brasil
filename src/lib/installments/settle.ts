@@ -85,7 +85,7 @@ export async function settleBoletoInstallment(params: {
  * `wasSuspended` cobre a última parcela: o fulfill já virou COMPLETED, mas o
  * aluno ainda está bloqueado na plataforma — desbloqueia mantendo COMPLETED.
  */
-async function maybeReactivate(
+export async function maybeReactivate(
   enrollmentId: string,
   wasSuspended = false,
 ): Promise<void> {

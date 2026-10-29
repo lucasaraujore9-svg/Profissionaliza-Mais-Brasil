@@ -40,7 +40,14 @@ import { rollbackSaleEnrollment } from "@/lib/enrollment/multi-course-server"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
 import { createDirectSubscriptionSale } from "@/lib/subscriptions/direct-sale"
-import { MAX_BOLETO_INSTALLMENTS } from "@/lib/installments/schedule"
+import {
+  MAX_BOLETO_INSTALLMENTS,
+  MIN_BOLETO_INSTALLMENTS,
+  installmentAmountsError,
+  sumAmounts,
+} from "@/lib/installments/schedule"
+import { createBoletoInstallmentPlan } from "@/lib/installments/plan"
+import { sellWithExternalFirstPayment } from "@/lib/enrollment/external-first-payment-server"
 
 export const GET = withRequestContext(
   { action: "admin.vendas.list", route: "/api/admin/vendas" },
@@ -182,6 +189,25 @@ const createSchema = z
         firstDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
       })
       .optional(),
+    // Curso/pacote NO CARNÊ (boleto parcelado na conta-mãe Asaas): um valor por
+    // parcela — entrada diferente e parcelas com valores próprios — + 1º
+    // vencimento. As demais vencem mensalmente.
+    carneCurso: z
+      .object({
+        amounts: z
+          .array(z.number().positive())
+          .min(MIN_BOLETO_INSTALLMENTS)
+          .max(MAX_BOLETO_INSTALLMENTS),
+        firstDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+      })
+      .optional(),
+    // Curso MENSAL com a 1ª mensalidade paga FORA (marketplace): baixa dela +
+    // assinatura Asaas das próximas, cadastrada pelo aluno no link.
+    primeiraMensalidadeExterna: z
+      .object({
+        paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+      })
+      .optional(),
   })
   // XOR de três: curso(s), pacote OU plano de assinatura — exatamente um.
   .refine(
@@ -205,6 +231,27 @@ const createSchema = z
     message: "Carnê no boleto só vale para assinatura.",
     path: ["boletoCarne"],
   })
+  // Carnê de curso: o valor é o das parcelas, digitado pelo vendedor — cupom,
+  // desconto e bolsa não se somam a ele (mesma regra do /painel/vendas).
+  .refine(
+    (v) =>
+      !v.carneCurso ||
+      (!v.planId && !v.couponCode && !v.manualDiscountPercent && !v.bolsista),
+    {
+      message: "Carnê de curso não aceita assinatura, cupom, desconto nem bolsa.",
+      path: ["carneCurso"],
+    },
+  )
+  .refine(
+    (v) =>
+      !v.primeiraMensalidadeExterna ||
+      (!v.planId && !v.packageId && !v.bolsista && !v.carneCurso),
+    {
+      message:
+        "1ª mensalidade paga fora só vale para venda de curso mensal (sem bolsa, carnê ou assinatura).",
+      path: ["primeiraMensalidadeExterna"],
+    },
+  )
   .refine((v) => !(v.couponCode && v.manualDiscountPercent), {
     message: "Use cupom OU desconto manual, não os dois",
     path: ["manualDiscountPercent"],
@@ -528,6 +575,122 @@ export const POST = withRequestContext(
     )
   }
 
+  // ── Carnê de curso (boleto parcelado) ─────────────────────────────────────
+  // Sempre na conta-mãe Asaas (o MP não tem carnê nativo e a vitrine PMB só
+  // emite carnê pelo Asaas), independente do gateway da venda direta. A página
+  // `/pagar/<id>` mostra as parcelas, como no carnê do checkout da vitrine.
+  if (parsed.data.carneCurso) {
+    const { amounts, firstDueDate } = parsed.data.carneCurso
+    const amountsError = installmentAmountsError(amounts, amounts.length)
+    if (amountsError) {
+      return NextResponse.json({ error: amountsError }, { status: 400 })
+    }
+    const firstDue = new Date(`${firstDueDate}T12:00:00Z`)
+    const todayStart = new Date()
+    todayStart.setUTCHours(0, 0, 0, 0)
+    if (Number.isNaN(firstDue.getTime()) || firstDue < todayStart) {
+      return NextResponse.json(
+        { error: "O 1º vencimento deve ser hoje ou uma data futura." },
+        { status: 400 },
+      )
+    }
+    if (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY) {
+      return NextResponse.json(
+        { error: "Asaas não configurado (ASAAS_API_URL/ASAAS_API_KEY)" },
+        { status: 503 },
+      )
+    }
+    if (!resolvePayer(student).cpf) {
+      return NextResponse.json(
+        { error: "Aluno (ou responsável financeiro) precisa ter CPF para o carnê." },
+        { status: 400 },
+      )
+    }
+
+    const total = sumAmounts(amounts)
+    // Carnê abaixo do preço da vitrine É desconto: passa pelo mesmo teto do
+    // vendedor, senão o carnê viraria o atalho para furar o cap.
+    const carneDiscount = Math.max(0, Math.round((basePrice - total) * 100) / 100)
+    if (carneDiscount > 0) {
+      const cap = await effectiveSalesCap(guard.ctx)
+      if ((carneDiscount / basePrice) * 100 > cap + 0.01) {
+        return NextResponse.json(
+          { error: `O total do carnê dá um desconto acima do seu cap (${cap}%)` },
+          { status: 403 },
+        )
+      }
+    }
+    let carneSplit = gate.split
+    if (carneSplit && carneDiscount > 0) {
+      const recomputed = await resolveSaleSplit({
+        course: saleCourses[0],
+        sellerTenantId: null,
+        listPrice: basePrice,
+        discount: carneDiscount,
+      })
+      if (!recomputed.ok) {
+        return NextResponse.json(
+          { error: recomputed.message, code: recomputed.error },
+          { status: 400 },
+        )
+      }
+      carneSplit = recomputed.value
+    }
+
+    const enrollment = await prisma.enrollment.create({
+      data: {
+        tenantId: null,
+        studentId: student.id,
+        tenantCourseId: null,
+        courseId: enrollmentCourseId,
+        coursePackageId: enrollmentCoursePackageId,
+        packagePrimary: isPackage,
+        bundleCourseIds,
+        soldByUserId: guard.ctx.userId,
+        paymentType: "BOLETO_INSTALLMENT",
+        status: "PENDING",
+        gateway: "ASAAS",
+        originalAmount: basePrice,
+        discountAmount: carneDiscount,
+        finalAmount: total,
+        couponId: null,
+        installmentsTotal: amounts.length,
+        authorSplitSnapshot: carneSplit
+          ? (carneSplit as unknown as Prisma.InputJsonValue)
+          : undefined,
+      },
+      select: { id: true },
+    })
+    try {
+      await createBoletoInstallmentPlan({
+        enrollmentId: enrollment.id,
+        count: amounts.length,
+        installmentValue: amounts[amounts.length - 1],
+        amounts,
+        firstDueDate: firstDue,
+      })
+    } catch (err) {
+      await rollbackSaleEnrollment(enrollment.id).catch(swallow("admin.vendas.carne.rollback"))
+      contextLogger().error(
+        { err, event: "admin.vendas.carne_failed", studentId: student.id },
+        "geracao do carne falhou",
+      )
+      const msg = err instanceof Error ? err.message : "Falha ao gerar o carnê."
+      return NextResponse.json({ error: `Falha ao gerar o carnê: ${msg}` }, { status: 502 })
+    }
+    return NextResponse.json({
+      data: {
+        enrollmentId: enrollment.id,
+        gateway: "ASAAS",
+        mode: "carne",
+        paymentUrl: `${pmbAppUrl()}/pagar/${enrollment.id}`,
+        finalAmount: total,
+        discountAmount: carneDiscount,
+        installment: { count: amounts.length, amounts, total },
+      },
+    })
+  }
+
   // ── Bolsa de estudo ─────────────────────────────────────────────────────
   // Sem cobranca: marca o aluno como bolsista, cria a matricula ja ACTIVE e
   // provisiona o acesso na plataforma de aulas de forma sincrona. Cupom e
@@ -744,6 +907,43 @@ export const POST = withRequestContext(
       )
     }
     splitSnapshot = recomputed.value
+  }
+
+  // ── 1ª mensalidade paga fora (marketplace) ────────────────────────────────
+  if (parsed.data.primeiraMensalidadeExterna) {
+    const external = await sellWithExternalFirstPayment({
+      tenantId: null,
+      fulfillTenant: pmbTenantContext(pmbTenant),
+      studentId: student.id,
+      soldByUserId: guard.ctx.userId,
+      gateway: effectiveGateway,
+      isMonthly,
+      months: monthlyMonths,
+      paidAtYmd: parsed.data.primeiraMensalidadeExterna.paidAt,
+      enrollment: {
+        tenantCourseId: null,
+        courseId: enrollmentCourseId,
+        bundleCourseIds,
+        originalAmount: basePrice,
+        discountAmount,
+        finalAmount,
+        couponId,
+        splitSnapshot,
+      },
+    })
+    if (!external.ok) {
+      if (couponId) await releaseCoupon(couponId).catch(swallow("admin.vendas.externa"))
+      return NextResponse.json({ error: external.error }, { status: external.status })
+    }
+    return NextResponse.json({
+      data: {
+        enrollmentId: external.enrollmentId,
+        gateway: effectiveGateway,
+        finalAmount,
+        externalFirst: external.summary,
+        paymentUrl: `${pmbAppUrl()}/pagar/${external.enrollmentId}`,
+      },
+    })
   }
 
   const enrollment = await prisma.enrollment.create({

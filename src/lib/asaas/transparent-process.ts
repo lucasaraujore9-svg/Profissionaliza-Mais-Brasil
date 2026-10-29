@@ -113,6 +113,12 @@ export interface AsaasTransparentEnrollment {
   asaasPaymentId: string | null
   /** Assinatura (mensal no cartao) criada por uma tentativa anterior. */
   asaasSubscriptionId: string | null
+  /**
+   * 1ª mensalidade paga FORA da plataforma (marketplace): a assinatura nasce
+   * vencendo no mês seguinte e cobra só as que faltam. Ver
+   * `lib/enrollment/external-first-payment.ts`. Ausente = fluxo normal.
+   */
+  recurringStart?: { nextDueDate: string; remaining: number } | null
 }
 
 export interface AsaasTransparentCtx {
@@ -457,7 +463,8 @@ async function chargeUnderLock(
 
     const customerId = await resolveCustomerId(enrollment, apiKey)
     const cardPair = buildCardPair(formData, enrollment)
-    const months = enrollment.installmentsTotal ?? 12
+    const start = enrollment.recurringStart ?? null
+    const months = start ? start.remaining : enrollment.installmentsTotal ?? 12
     try {
       const subscription = await createAsaasSubscription(
         {
@@ -468,7 +475,7 @@ async function chargeUnderLock(
           // venda acontece, o aluno recebe o curso e o produtor nunca e pago.
           splits: await asaasSplitsForEnrollment(enrollment.id),
           value: enrollment.finalAmount,
-          nextDueDate: dueDateInDays(0),
+          nextDueDate: start?.nextDueDate ?? dueDateInDays(0),
           cycle: "MONTHLY",
           description: `Mensalidade — ${description}`,
           externalReference,
@@ -517,6 +524,9 @@ async function chargeUnderLock(
         await fulfillFromAsaasPayment(ctx.fulfillTenant, enrollment.id, firstPayment)
         return { kind: "approved", status: firstPayment.status }
       }
+      // 1ª paga fora: o curso já está liberado e a próxima mensalidade só vence
+      // no mês seguinte — cartão cadastrado é o fim desta etapa, não "aguardando".
+      if (start) return { kind: "approved", status: "SCHEDULED" }
       return { kind: "pending" }
     } catch (err) {
       return asaasErrorToResult(err)
