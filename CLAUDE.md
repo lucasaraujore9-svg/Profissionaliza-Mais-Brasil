@@ -2706,6 +2706,101 @@ vendas (o aluno ficou horas com o curso "Cancelado").
 - Testes verificados POR MUTACAO: tirar a conversao ou a checagem do teto
   derruba o teste correspondente em `painel/vendas/route.test.ts`.
 
+### Carne com valores por parcela + edicao depois da venda (2026-10-29)
+
+O carne de curso nascia com UM valor para todas as parcelas, e parcela criada
+nao mudava mais. Pedido: entrada diferente, parcelas com valores proprios e
+renegociacao depois, "como e feito nas faturas da unidade".
+
+- **Na venda** (`/painel/vendas` e `/admin/vendas`): "Personalizar valores" abre
+  um campo por parcela (`amounts`). O parcelamento nativo do Asaas so nasce com
+  valor unico, entao `createAsaasCarne` cria o carne e REPRECIFICA uma a uma as
+  parcelas que diferem (`PUT /payments/{id}`); se alguma falhar, apaga o carne
+  inteiro no Asaas (carne com valor errado cobrando o aluno e pior que nenhum).
+  Piso de R$ 5 por parcela (`MIN_INSTALLMENT_AMOUNT`, boleto do Asaas).
+- **`/admin/vendas` passou a vender curso/pacote no carne** (antes so assinatura),
+  sempre no Asaas da PMB. Total abaixo do preco da vitrine conta como desconto e
+  passa pelo teto do vendedor (`effectiveSalesCap`) — sem isso o carne seria o
+  atalho para furar o cap. O carne do PAINEL continua sem esse teto (divida).
+- **Depois da venda**: botao "Parcelas" na ficha do aluno (admin e painel,
+  `student-management/installments-dialog.tsx`) edita valor e vencimento de
+  parcela em aberto. Nucleo em `lib/installments/edit.ts`; rotas
+  `.../enrollments/[enrollmentId]/parcelas` (GET lista, PATCH edita).
+  - Gateway ANTES do banco. Antes de alterar, o gateway e consultado: parcela
+    paga la (webhook perdido) e recusada com "use Verificar pagamento".
+  - Asaas: `PUT /payments/{id}` (omitir `split` preserva o rateio).
+  - MP: boleto emitido nao muda de valor — e CANCELADO, a linha volta a
+    SCHEDULED e sai boleto novo na hora se ja esta na janela de 7 dias. A chave
+    de idempotencia do boleto MP passou a levar o `updatedAt` da linha
+    (`parc_<id>:<ts>`): com `parc_<id>` puro o MP devolveria o boleto antigo,
+    cancelado, com o valor velho.
+  - Parcela vencida so e renegociada com vencimento NOVO (boleto nao nasce
+    vencido); ao sair do atraso, `maybeReactivate` devolve o acesso.
+  - `finalAmount` da matricula e recalculado pela soma das parcelas; toda edicao
+    vai para `audit_logs` (`enrollment.installment.edit`, antes/depois).
+  - Permissao: painel exige `alunos.manage` E `vendas.create` (Secretaria cuida
+    de cadastro, nao de preco) + recorte `ctx.scope.alunos`; admin segue a
+    matriz de `verificar-pagamento` (`alunos.*` na PMB, `unidades.*` +
+    `canAccessTenant` na unidade).
+- `edit.ts` entrou na lista fechada de `payment-link-coverage.test.ts`: ele
+  regrava a coluna `invoiceUrl` da parcela com o `bankSlipUrl` (PDF), nunca a
+  fatura hospedada.
+- **Nao validado contra os gateways reais.**
+
+### 1a mensalidade paga fora da plataforma (marketplace) (2026-10-29)
+
+Aluno compra curso MENSAL num marketplace de cursos, a 1a mensalidade vai para
+o marketplace e as seguintes precisam ser cobradas aqui. Opcao "1a mensalidade
+ja paga fora" na venda direta de curso mensal (`/painel/vendas` e
+`/admin/vendas`), com a data do pagamento.
+
+- **A baixa e um `Payment` comum** gravado pelo MESMO `fulfillEnrollment` do
+  webhook (libera o curso, manda o acesso, conta a 1a parcela), com id
+  `ext_<matricula>` e `mpPaymentType = "pagamento_externo"`. Conta como receita
+  da unidade. Nucleo: `lib/enrollment/external-first-payment.ts` (puro) e
+  `-server.ts` (`sellWithExternalFirstPayment`, `registerExternalFirstPayment`).
+- **`ext_` nao existe em gateway nenhum.** O fulfill carimba o id na matricula
+  (`asaasPaymentId`/`mpPaymentId`), que e onde verificacao e cancelamento
+  procuram a cobranca — `registerExternalFirstPayment` limpa isso logo depois.
+  O estorno do cancelamento pula `isExternalPaymentId` ("estorne no
+  marketplace"). Fluxo novo que mande id de pagamento ao gateway tem que pular
+  o `ext_` tambem.
+- **Asaas: a mesma assinatura de quando a 1a e paga na plataforma.** A matricula
+  ja nasce ACTIVE; `/pagar/<id>` (loja e PMB) reabre para ela enquanto
+  `recurringSetupPending` (mensal + Asaas + baixa externa + sem assinatura).
+  A assinatura nasce com o 1o vencimento UM MES depois do pagamento no
+  marketplace (nunca no passado) e `maxPayments` = so as restantes. Ate o aluno
+  cadastrar, nada e cobrado — o link fica na ficha do aluno (`checkoutUrl`).
+  Nao ha alerta para quem nunca cadastra.
+- **MP: carne do sistema** (`createMpPlanAfterExternalFirst`): parcela 1 ja
+  PAGA e sem boleto, parcelas 2..N agendadas; o cron emite cada boleto. Exige
+  endereco do aluno. Vitrine PMB so pelo Asaas.
+- Ordem no MP: o carne e criado ANTES da baixa — liberar o curso sem as
+  cobrancas seguintes e o estado que nao pode existir. Falha desfaz a matricula.
+
+### Carne para matricula liberada sem cobranca (2026-10-29)
+
+Caso Lorena (vitrine PMB): a 1a mensalidade foi paga num marketplace e, sem a
+opcao acima, liberaram o curso com desconto de 100% — matricula ACTIVE de R$ 0,
+sem cobranca nenhuma. Remediacao generica:
+
+- `/api/cron/carne-matricula-liberada?enrollment=&boletos=&valor=&vencimento=&pagaForaEm=`
+  (Bearer CRON_SECRET, dry-run por padrao, `apply=1` executa). So aceita
+  matricula ACTIVE, de valor 0, sem pagamento, carne ou assinatura (senao
+  cobraria em dobro). Converte em carne de boletos no Asaas SEM mexer no
+  acesso, registra a 1a paga fora (opcional), tira a flag de bolsista e audita
+  (`enrollment.carne_from_free`). Falha do Asaas desfaz tudo e apaga o carne
+  orfao. Disparo por `app_internal.run_cron(...)`, resposta em
+  `net._http_response`.
+- `createBoletoInstallmentPlan` ganhou `paidBefore`: a parcela 1 nasce PAGA sem
+  boleto e os boletos do Asaas viram as parcelas 2..N+1.
+- **Aplicado em 29/10** (Lorena, `cmvs5vxvt000208jqjdcyyrwq`): 1a paga em 28/10
+  + 6 boletos de R$ 53,84, todo dia 28 de 28/11/2026 a 28/04/2027 (7
+  mensalidades, R$ 376,88). A venda de 27/10 (assinatura no PIX, cancelada)
+  ficou como estava.
+- O token Asaas local (`~/.asaas_token`) NAO e da conta-mae: correcao que
+  precise do Asaas da PMB passa por rota em producao, nao por chamada local.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
