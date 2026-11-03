@@ -14,7 +14,7 @@ import {
 import { renderCertificateByLayout } from "./templates"
 import { uploadCertificatePdf } from "./storage"
 import { validationUrlFor } from "./urls"
-import { lowerCert, upperCert } from "./text"
+import { lowerCert, pdfSafeText, upperCert } from "./text"
 import { contextLogger } from "@/lib/logger"
 
 async function makeQrDataUrl(text: string): Promise<string | null> {
@@ -79,15 +79,17 @@ export async function renderCertificateBuffer(
   fields: CertificateRenderFields,
 ): Promise<Buffer> {
   // Nomes e parametros do certificado sao sempre exibidos em MAIUSCULO
-  // (regra de negocio). upperCert centraliza a normalizacao.
+  // (regra de negocio). upperCert centraliza a normalizacao; pdfSafeText evita
+  // que letra fora da fonte do PDF suma do documento.
+  const up = (v: string | null | undefined) => pdfSafeText(upperCert(v))
   const placeholders: CertificatePlaceholders = {
-    nome: upperCert(fields.studentName),
-    cpf: upperCert(fields.studentCpf),
-    curso: upperCert(fields.courseName),
-    carga_horaria: upperCert(fields.cargaHoraria),
-    data_conclusao: upperCert(formatCompletionDate(fields.completionDate)),
-    codigo: upperCert(fields.code),
-    unidade: upperCert(fields.unidade),
+    nome: up(fields.studentName),
+    cpf: up(fields.studentCpf),
+    curso: up(fields.courseName),
+    carga_horaria: up(fields.cargaHoraria),
+    data_conclusao: up(formatCompletionDate(fields.completionDate)),
+    codigo: up(fields.code),
+    unidade: up(fields.unidade),
   }
 
   const bodyResolved = applyPlaceholders(template.bodyText, placeholders)
@@ -103,22 +105,22 @@ export async function renderCertificateBuffer(
 
   const element = renderCertificateByLayout(template.layout, {
     template,
-    studentName: upperCert(fields.studentName),
-    studentCpf: fields.studentCpf ? upperCert(fields.studentCpf) : null,
-    courseName: upperCert(fields.courseName),
-    cargaHoraria: fields.cargaHoraria ? upperCert(fields.cargaHoraria) : null,
+    studentName: up(fields.studentName),
+    studentCpf: fields.studentCpf ? up(fields.studentCpf) : null,
+    courseName: up(fields.courseName),
+    cargaHoraria: fields.cargaHoraria ? up(fields.cargaHoraria) : null,
     // Tópicos da matriz mantêm a capitalização original (são frases), ao
     // contrário dos demais campos que vão em MAIÚSCULO.
-    matrizCurricular: fields.matrizCurricular ?? [],
-    completionDateFormatted: upperCert(formatCompletionDate(fields.completionDate)),
-    code: upperCert(fields.code),
-    unidade: upperCert(fields.unidade),
+    matrizCurricular: (fields.matrizCurricular ?? []).map(pdfSafeText),
+    completionDateFormatted: up(formatCompletionDate(fields.completionDate)),
+    code: up(fields.code),
+    unidade: up(fields.unidade),
     // Sem `upperCert`: e frase de rodape, nao um dado do certificado.
-    authorName: fields.authorName ?? null,
+    authorName: fields.authorName ? pdfSafeText(fields.authorName) : null,
     validationUrl,
     qrCodeDataUrl,
-    bodyResolved,
-    footerResolved,
+    bodyResolved: pdfSafeText(bodyResolved),
+    footerResolved: footerResolved ? pdfSafeText(footerResolved) : null,
     groupLogoUrl: template.groupLogoUrl,
     groupName: template.groupName,
   })
