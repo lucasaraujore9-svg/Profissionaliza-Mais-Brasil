@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 import { formatPhone, normalizePhone } from "@/lib/validation/phone"
+import { formatCnpj, isValidCnpj, stripCnpj } from "@/lib/validation/cnpj"
 import type { ConfigData } from "./config-tabs.types"
 
 interface AccountFormProps {
@@ -27,6 +28,8 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
   // renomeia a empresa — a aba vira só os dados pessoais dele.
   const canRenameUnit = data.tenant !== null
   const [companyName, setCompanyName] = useState(data.tenant?.name ?? "")
+  const [cnpj, setCnpj] = useState(data.tenant?.cnpj ? formatCnpj(data.tenant.cnpj) : "")
+  const [razaoSocial, setRazaoSocial] = useState(data.tenant?.razaoSocial ?? "")
   const [status, setStatus] = useState<SubmitStatus>("idle")
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -44,6 +47,17 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
         setStatus("error")
         return
       }
+      if (cnpj.trim() && !isValidCnpj(cnpj)) {
+        setErrors({ cnpj: "CNPJ inválido" })
+        setStatus("error")
+        return
+      }
+    }
+    // Erro comum: digitar o CNPJ no campo de CPF (login de pessoa física).
+    if (stripCnpj(cpf).length === 14) {
+      setErrors({ cpf: "Este campo é o CPF do titular. Informe o CNPJ no campo CNPJ da empresa." })
+      setStatus("error")
+      return
     }
 
     setStatus("submitting")
@@ -52,7 +66,14 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
       const response = await fetch("/api/painel/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, companyName, cpf, phone }),
+        body: JSON.stringify({
+          name,
+          email,
+          companyName,
+          cpf,
+          phone,
+          ...(canRenameUnit ? { cnpj, razaoSocial } : {}),
+        }),
       })
       const json = await response.json()
 
@@ -79,7 +100,16 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
           cpf: cpf.replace(/\D/g, "") || null,
           phone: phone.trim() ? normalizePhone(phone) : null,
         },
-        ...(data.tenant ? { tenant: { ...data.tenant, name: companyName } } : {}),
+        ...(data.tenant
+          ? {
+              tenant: {
+                ...data.tenant,
+                name: companyName,
+                cnpj: stripCnpj(cnpj) || null,
+                razaoSocial: razaoSocial.trim() || null,
+              },
+            }
+          : {}),
       })
       setStatus("success")
     } catch {
@@ -143,7 +173,7 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
           )}
         </div>
         <div>
-          <Label htmlFor="cfg-cpf">CPF</Label>
+          <Label htmlFor="cfg-cpf">CPF do titular</Label>
           <Input
             id="cfg-cpf"
             inputMode="numeric"
@@ -153,7 +183,7 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
             className="mt-1.5"
           />
           <p className="mt-1 text-xs text-gray-500">
-            Com o CPF cadastrado você também pode usá-lo para entrar na conta.
+            CPF de pessoa física. Com ele você também pode entrar na conta.
           </p>
           {errors.cpf && (
             <p className="mt-1 text-xs text-red-600">{errors.cpf}</p>
@@ -172,6 +202,41 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
               <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>
             )}
           </div>
+        )}
+        {canRenameUnit && (
+          <>
+            <div>
+              <Label htmlFor="cfg-cnpj">CNPJ da empresa</Label>
+              <Input
+                id="cfg-cnpj"
+                inputMode="numeric"
+                placeholder="00.000.000/0000-00"
+                value={cnpj}
+                onChange={(e) => setCnpj(e.target.value)}
+                className="mt-1.5"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Aparece no rodapé da sua vitrine e passa a ser o documento da sua mensalidade.
+                Deixe em branco se a unidade não tem CNPJ.
+              </p>
+              {errors.cnpj && (
+                <p className="mt-1 text-xs text-red-600">{errors.cnpj}</p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="cfg-razao">Razão social</Label>
+              <Input
+                id="cfg-razao"
+                placeholder="Ex.: Minha Escola Ltda"
+                value={razaoSocial}
+                onChange={(e) => setRazaoSocial(e.target.value)}
+                className="mt-1.5"
+              />
+              {errors.razaoSocial && (
+                <p className="mt-1 text-xs text-red-600">{errors.razaoSocial}</p>
+              )}
+            </div>
+          </>
         )}
       </div>
 

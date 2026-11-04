@@ -41,6 +41,8 @@ function tenantWith(
     ejaUrl: null,
     ejaLabel: null,
     automationEnabled: false,
+    cnpj: null,
+    razaoSocial: null,
     ...overrides,
   }
 }

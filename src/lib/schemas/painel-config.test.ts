@@ -75,3 +75,25 @@ describe("painelConfigUpdateSchema — phone", () => {
     ).toBe(false)
   })
 })
+
+// CNPJ da empresa (caso Meraki, 2026-11-04): o CNPJ era digitado no campo de
+// CPF e o PUT respondia 400 "CPF inválido". Agora tem campo próprio.
+describe("painelConfigUpdateSchema — cnpj", () => {
+  it("aceita CNPJ com máscara e normaliza para 14 dígitos", () => {
+    const parsed = painelConfigUpdateSchema.parse({ ...base, cnpj: "69.942.034/0001-00" })
+    expect(parsed.cnpj).toBe("69942034000100")
+  })
+
+  it("ausente = não mexe (undefined); vazio = apaga (null)", () => {
+    expect(painelConfigUpdateSchema.parse(base).cnpj).toBeUndefined()
+    expect(painelConfigUpdateSchema.parse({ ...base, cnpj: "" }).cnpj).toBeNull()
+  })
+
+  it("rejeita CNPJ com dígito verificador inválido", () => {
+    expect(painelConfigUpdateSchema.safeParse({ ...base, cnpj: "69.942.034/0001-01" }).success).toBe(false)
+  })
+
+  it("CNPJ continua recusado no campo de CPF (login de pessoa física)", () => {
+    expect(painelConfigUpdateSchema.safeParse({ ...base, cpf: "69.942.034/0001-00" }).success).toBe(false)
+  })
+})

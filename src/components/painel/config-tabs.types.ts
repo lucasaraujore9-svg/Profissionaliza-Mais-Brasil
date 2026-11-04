@@ -25,6 +25,9 @@ export interface ConfigData {
     id: string
     name: string
     slug: string
+    /** CNPJ da empresa, 14 dígitos sem máscara, ou null. */
+    cnpj: string | null
+    razaoSocial: string | null
     billingMode: "AUTO" | "MANUAL"
     status: "PENDING" | "ACTIVE" | "SUSPENDED" | "CANCELLED"
     mpConnected: boolean

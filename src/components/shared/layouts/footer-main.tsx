@@ -1,6 +1,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { MessageCircle, Mail, Clock, Phone } from "lucide-react"
+import { formatCnpj } from "@/lib/validation/cnpj"
 
 // lucide-react 1.x nesta versao nao expoe brand icons (Instagram, Facebook,
 // YouTube). Usamos SVGs inline simples com aria-label apropriado.
@@ -79,6 +80,11 @@ interface FooterMainProps {
   /** Exibe a linha do CNPJ da PMB. A vitrine do revendedor passa `false`. */
   showCnpj?: boolean
   /**
+   * Razão social + CNPJ da UNIDADE (vitrine). Só CNPJ: CPF de pessoa física
+   * nunca vai para página pública.
+   */
+  legal?: { razaoSocial: string | null; cnpj: string | null }
+  /**
    * Sobrescreve o href do link "Seja um Parceiro" do bloco Institucional.
    * A vitrine passa o link de indicacao do tenant (`.../seja-revendedor?ref=CODE`)
    * para que quem se cadastrar a partir daquela unidade gere comissao ao dono.
@@ -120,6 +126,7 @@ export function FooterMain({
   categorias = [],
   social: socialOverride,
   showCnpj = true,
+  legal,
   sejaRevendedorHref,
   hideSejaRevendedor = false,
   brand,
@@ -318,6 +325,9 @@ export function FooterMain({
           <p>
             © {new Date().getFullYear()} {brandName} · Todos os direitos
             reservados
+            {legal?.cnpj
+              ? ` · ${legal.razaoSocial ? `${legal.razaoSocial} · ` : ""}CNPJ ${formatCnpj(legal.cnpj)}`
+              : ""}
           </p>
           <p>
             {showCnpj ? "CNPJ 66.553.170/0001-01 · " : ""}Pagamentos 100% seguros

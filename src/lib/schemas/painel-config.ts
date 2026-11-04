@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
+import { isValidCnpj, stripCnpj } from "@/lib/validation/cnpj"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 
 // Schema do PUT /api/painel/config (aba "Dados da conta" do painel).
@@ -18,6 +19,21 @@ export const painelConfigUpdateSchema = z.object({
     .optional()
     .transform((v) => (v ? stripCpf(v) : null))
     .refine((v) => v === null || isValidCpf(v), "CPF inválido"),
+  // CNPJ da EMPRESA da unidade (Tenant.cnpj) — separado do CPF acima, que e
+  // login de pessoa fisica e nunca aceita CNPJ. Ausente = nao mexe (membro sem
+  // `configuracoes.manage` nem ve o campo); vazio = apaga.
+  cnpj: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v ? stripCnpj(v) : null))
+    .refine((v) => v == null || isValidCnpj(v), "CNPJ inválido"),
+  razaoSocial: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v || null)),
   // Telefone de contato (User.phone) — coletado no cadastro da unidade e, até
   // agora, sem nenhuma tela onde pudesse ser conferido ou corrigido. Opcional e
   // apagável (string vazia → null); normalizado para DDD + número.

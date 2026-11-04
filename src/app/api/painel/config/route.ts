@@ -5,6 +5,9 @@ import { mpWebhookUrl, asaasWebhookUrl } from "@/lib/tenant/urls"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 import { painelConfigUpdateSchema } from "@/lib/schemas/painel-config"
 import { requirePainel } from "@/lib/auth/painel-guard"
+import { AsaasApiError, motherAsaasKey, updateCustomer } from "@/lib/asaas/client"
+import { logAudit } from "@/lib/audit"
+import { contextLogger } from "@/lib/logger"
 
 export const GET = withRequestContext(
   { action: "painel.config.get", route: "/api/painel/config" },
@@ -37,6 +40,8 @@ export const GET = withRequestContext(
         id: true,
         name: true,
         slug: true,
+        cnpj: true,
+        razaoSocial: true,
         billingMode: true,
         status: true,
         mpConnected: true,
@@ -161,6 +166,60 @@ export const PUT = withRequestContext(
       }
     }
 
+    // CNPJ/razao social da empresa: so quem administra a unidade, e so quando o
+    // campo veio (undefined = nao mexe). O cliente Asaas da MENSALIDADE (conta
+    // da PMB) passa a usar o CNPJ — e e atualizado ANTES de qualquer escrita
+    // local: se o Asaas recusar, nada muda e a tela mostra o motivo, em vez de
+    // o PMB dizer CNPJ e o boleto seguir saindo no CPF. Apagar o CNPJ so tira
+    // do PMB/rodape; o Asaas fica como esta.
+    const { cnpj, razaoSocial } = parsed.data
+    let companyChange: {
+      before: { cnpj: string | null; razaoSocial: string | null }
+      after: { cnpj: string | null; razaoSocial: string | null }
+      asaasCustomerId: string | null
+    } | null = null
+    if (canManageUnit && (cnpj !== undefined || razaoSocial !== undefined)) {
+      const before = await prisma.tenant.findUnique({
+        where: { id: ctx.tenantId },
+        select: { cnpj: true, razaoSocial: true, asaasCustomerId: true },
+      })
+      const after = {
+        cnpj: cnpj === undefined ? (before?.cnpj ?? null) : cnpj,
+        razaoSocial: razaoSocial === undefined ? (before?.razaoSocial ?? null) : razaoSocial,
+      }
+      if (before && (after.cnpj !== before.cnpj || after.razaoSocial !== before.razaoSocial)) {
+        companyChange = {
+          before: { cnpj: before.cnpj, razaoSocial: before.razaoSocial },
+          after,
+          asaasCustomerId: before.asaasCustomerId,
+        }
+      }
+    }
+
+    if (companyChange?.after.cnpj && companyChange.asaasCustomerId) {
+      const razao = companyChange.after.razaoSocial
+      try {
+        await updateCustomer(
+          companyChange.asaasCustomerId,
+          { cpfCnpj: companyChange.after.cnpj, ...(razao ? { name: razao, company: razao } : {}) },
+          motherAsaasKey(),
+        )
+      } catch (err) {
+        contextLogger().error(
+          { err, event: "painel.config.cnpj.asaas_failed", tenantId: ctx.tenantId },
+          "atualizar CNPJ do cliente Asaas da mensalidade falhou",
+        )
+        const refused = err instanceof AsaasApiError && err.statusCode < 500
+        const message = refused
+          ? `O Asaas recusou o CNPJ: ${err.message}`
+          : "Não foi possível atualizar o CNPJ na cobrança agora. Tente novamente em instantes."
+        return NextResponse.json(
+          { error: message, fields: { cnpj: [message] } },
+          { status: refused ? 400 : 502 },
+        )
+      }
+    }
+
     await prisma.user.update({
       where: { id: ctx.userId },
       data: {
@@ -175,7 +234,25 @@ export const PUT = withRequestContext(
     if (canManageUnit) {
       await prisma.tenant.update({
         where: { id: ctx.tenantId },
-        data: { name: parsed.data.companyName },
+        data: {
+          name: parsed.data.companyName,
+          ...(companyChange ? companyChange.after : {}),
+        },
+      })
+    }
+    if (companyChange) {
+      await logAudit({
+        action: "tenant.cnpj.update",
+        resource: "Tenant",
+        resourceId: ctx.tenantId,
+        actorUserId: ctx.userId,
+        actorRole: ctx.memberRole,
+        tenantId: ctx.tenantId,
+        payloadBefore: companyChange.before,
+        payloadAfter: {
+          ...companyChange.after,
+          asaasCustomerUpdated: Boolean(companyChange.after.cnpj && companyChange.asaasCustomerId),
+        },
       })
     }
 

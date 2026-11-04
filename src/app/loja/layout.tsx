@@ -130,6 +130,7 @@ export default async function LojaLayout({
       <FooterMain
         categorias={categorias}
         showCnpj={false}
+        legal={tenant ? { cnpj: tenant.cnpj ?? null, razaoSocial: tenant.razaoSocial ?? null } : undefined}
         social={{
           instagram: instagramUrl,
           facebook: facebookUrl,

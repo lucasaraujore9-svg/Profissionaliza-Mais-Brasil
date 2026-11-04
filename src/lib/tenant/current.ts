@@ -45,6 +45,10 @@ export interface CurrentTenant {
   ejaUrl: string | null
   ejaLabel: string | null
   automationEnabled: boolean
+  // Entrada antiga do cache pode vir sem os dois (undefined): rodapé sem CNPJ
+  // até o TTL de 5 min expirar.
+  cnpj: string | null
+  razaoSocial: string | null
 }
 
 export const getCurrentTenant = cache(
@@ -103,6 +107,8 @@ export const getCurrentTenant = cache(
           ejaUrl: true,
           ejaLabel: true,
           automationEnabled: true,
+          cnpj: true,
+          razaoSocial: true,
         },
       })
 

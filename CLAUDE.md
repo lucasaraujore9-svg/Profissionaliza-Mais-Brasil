@@ -2801,6 +2801,24 @@ sem cobranca nenhuma. Remediacao generica:
 - O token Asaas local (`~/.asaas_token`) NAO e da conta-mae: correcao que
   precise do Asaas da PMB passa por rota em producao, nao por chamada local.
 
+### CNPJ da unidade (2026-11-04)
+
+Chamado Meraki: a unidade digitava o CNPJ no campo "CPF" de /painel/configuracoes
+e o PUT respondia 400 "CPF inválido". O PMB não tinha onde guardar CNPJ: o único
+documento era `User.cpf` (login de pessoa física, que de propósito nunca aceita
+CNPJ), e o CNPJ do cadastro ia só para o cliente Asaas da mensalidade.
+
+- `Tenant.cnpj` (14 dígitos) + `Tenant.razaoSocial`, migration
+  `20261104_tenant_cnpj` (aditiva, idempotente, sem backfill). Editáveis em
+  "Dados da conta" por quem tem `configuracoes.manage`; auditado como
+  `tenant.cnpj.update`. Validação em `lib/validation/cnpj.ts` (puro).
+- **Salvar CNPJ atualiza o cliente Asaas da mensalidade** (`updateCustomer`,
+  conta-mãe) ANTES de gravar no banco: recusa do Asaas = nada muda. Razão social
+  vira o `name` do cliente. Apagar o CNPJ só tira do PMB; o Asaas fica como está.
+- Rodapé da vitrine mostra "razão social · CNPJ" quando informado. CPF nunca vai
+  para o rodapé (página pública).
+- Fora: /admin não edita esses campos, e a API de parceiros não os devolve.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

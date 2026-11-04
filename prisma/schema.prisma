@@ -360,6 +360,12 @@ model Tenant {
   cancellationPolicy Json? @map("cancellation_policy")
   // Exemplo: { gracePeriodDays: 15, keepStudentsActive: true, notifyStudents: true }
 
+  // CNPJ (14 digitos, sem mascara) e razao social da empresa da unidade.
+  // Editaveis em /painel/configuracoes; aparecem no rodape da vitrine e viram
+  // o documento do cliente Asaas da mensalidade. Migration 20261104_tenant_cnpj.
+  cnpj        String? @map("cnpj")
+  razaoSocial String? @map("razao_social")
+
   // Integracao Asaas (mensalidade do revendedor)
   asaasCustomerId     String? @unique @map("asaas_customer_id") // cus_xxxx
   asaasSubscriptionId String? @unique @map("asaas_subscription_id") // sub_xxxx — assinatura regular (valor cheio)

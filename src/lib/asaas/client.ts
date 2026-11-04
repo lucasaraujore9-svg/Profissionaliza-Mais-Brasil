@@ -229,6 +229,18 @@ export async function getCustomer(
   return request<AsaasCustomer>("GET", `/customers/${customerId}`, undefined, apiKey)
 }
 
+/** PUT /customers/{id}. So os campos passados mudam no Asaas. */
+export async function updateCustomer(
+  customerId: string,
+  params: { name?: string; cpfCnpj?: string; company?: string },
+  apiKey?: string,
+): Promise<AsaasCustomer> {
+  return request<AsaasCustomer>("PUT", `/customers/${customerId}`, {
+    ...params,
+    ...(params.cpfCnpj ? { cpfCnpj: sanitizeDoc(params.cpfCnpj) } : {}),
+  }, apiKey)
+}
+
 export async function listCustomers(params?: {
   email?: string
   cpfCnpj?: string
