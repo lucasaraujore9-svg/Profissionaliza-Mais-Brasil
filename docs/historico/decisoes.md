@@ -1,0 +1,2834 @@
+# Historico de decisoes — Profissionaliza Mais Brasil
+
+> Movido do CLAUDE.md em 2026-11-05 (o arquivo passou do limite de 150k caracteres).
+> Secoes em ordem cronologica. Entrada nova vai no FIM deste arquivo + uma linha no indice do CLAUDE.md.
+
+### O que ja esta implementado
+
+**Fundacao (020-029):** Prisma migrado + seed · middleware multi-tenant · NextAuth v5 (credentials, roles SUPER_ADMIN/PMB_SALES/PMB_RESELLER_MGR/RESELLER) · layouts auth/main/admin/painel/loja · clients plataforma/Asaas/MP · crypto AES-256-GCM · Redis Upstash · Resend + React Email.
+
+**Prototipos (001-019):** UIs hardcoded de todas as 19 paginas principais.
+
+**Behaviors (030-049):** landing, auth, checkout revendedor, vitrine, curso, checkout aluno, confirmacao, dashboard/cursos/alunos/cupons/financeiro revendedor, dominio (Vercel API), vitrine config (Supabase Storage), configuracoes, onboarding, dashboards + financeiro + analytics + config do admin.
+
+**Webhooks/Cron (050-053):** webhook Asaas (PAYMENT_RECEIVED/OVERDUE ativa/suspende tenant) · webhook MP (matricula automatica na plataforma) · cron diario 6h sync cursos (vercel.json) · auto-block/unblock de alunos via `src/lib/auto-block.ts`.
+
+**Home vitrine (054):** home udemy-style com logo oficial + navbar/footer.
+
+**Expansao de roles e vitrine PMB (061-067):**
+- UserRole expandido para SUPER_ADMIN, PMB_SALES, PMB_RESELLER_MGR, RESELLER (+ consultor via TenantMember role="consultant" com `maxDiscount`)
+- Guards em `src/lib/auth/guards.ts` no padrao `{ ok, session } | { ok, response }`
+- /admin/equipe (SUPER_ADMIN) — CRUD de usuarios PMB + atribuicao de tenants a gerentes
+- /admin/revendedores (+ PMB_RESELLER_MGR) — lista filtrada por `accountManagerId`, aba Asaas, notas de suporte
+- /admin/vendas/* (SUPER_ADMIN, PMB_SALES) — dashboard + nova venda (form single-page) + cupons (cap 50% para PMB_SALES) + alunos PMB
+- /painel/equipe (RESELLER owner) — convida consultores, define `maxDiscount`
+- **Vitrine PMB**: `Enrollment/Payment/Coupon.tenantId = null`; `Student.tenantId` aponta para tenant placeholder slug `__pmb__` criado lazy por `src/lib/pmb-tenant.ts`
+- Env PMB: `PMB_MP_ACCESS_TOKEN` (plain), `PMB_PLATAFORMA_VENDEDOR_ID`, `PMB_PLATAFORMA_POLO`. Helpers em `src/lib/pmb-config.ts`
+- Webhook MP (`src/lib/mercadopago/process.ts`) com branch `isPmbVitrine` — usa pmbContext sintetico, token plain, nao atualiza WebhookLog.tenantId
+- Seed reescrito (`prisma/seed.ts`): super@/admin@ legado/vendas@/gerente@/owner1/owner2/consultor1, tenants revenda1+revenda2, 5 cursos (2 destaqueHome), 3 cupons (SUPER50, VENDAS30, CONSULT10). Cupons via findFirst+create (nao upsert) porque `@@unique([tenantId,code])` nao dedupe com NULL
+- QA manual documentado em `docs/qa/PERFIS.md`
+
+### Validacao executada em 2026-04-15
+
+`npm install`, `npx prisma generate`, `npx tsc --noEmit`, `npm run build` — **todos verdes**. Fixes aplicados:
+- Button shadcn nao suporta `asChild` — trocado por `<Link className="inline-flex ...">` direto em `src/app/admin/vendas/page.tsx`
+- `MPPreferencePayer.email` exige string nao-nula — `src/app/api/admin/vendas/route.ts` valida `student.email` antes (400 se ausente)
+- Coupon seed usa `findFirst`+`create` em vez de `upsert` (NULL em composite unique)
+
+### Credenciais pos-seed (2026-04-15)
+
+SUPER_ADMIN primario agora e `super@pmb.com.br` / `super123`. Matriz completa em `docs/qa/PERFIS.md`.
+
+### Nova fornecedora LMS (2026-06-19, branch `feat/lms-provider`)
+
+Segunda fornecedora de cursos: LMS proprio (host em `LMS_API_URL`; API M2M REST JSON `/api/v1`, Bearer `LMS_API_KEY`). **Aditiva** — EA legada intacta. O LMS provisiona nos parceiros por baixo (PMB → LMS → EA); financeiro 100% no PMB.
+
+- **Discriminador:** `Course.provider` (enum `EA`|`LMS`, default EA). `Course.lmsCourseId` (UUID/cuid, chave de match do sync) + `lmsSlug`. `nome` deixou de ser unique global → `@@unique([provider, nome])` (ripple corrigido em `sync.ts` + `seed.ts`). `Enrollment.lmsEnrollmentId`, `Student.lmsStudentId`, `SystemSettings.lmsDayUpdateCursor`. Migration idempotente `prisma/migrations/20260619_lms_provider`.
+- **Client:** `src/lib/lms/` (config/errors/types/client) — wrappers tipados de todos os endpoints, retry/timeout no padrao EA.
+- **Fluxo:** provisionamento ramifica em `fulfill.ts` (`provisionLmsAccess` via `POST /enrollments`, Idempotency-Key = id do pagamento; `provisionCourseForStudent` cobre pacotes mistos). `provisioning.ok=false` → alerta SUPER_ADMIN e segue. Catalogo: `sync-lms.ts` + cron `/api/cron/sync-cursos-lms`. Progresso/conclusao: `lms/day-update.ts` (delta, substitui webhook) + cron `/api/cron/sync-day-update-lms` → emite certificado existente. SSO: `/api/aluno/curso/[enrollmentId]/acessar` (botao no `/aluno` ramifica EA vs LMS). Bloqueio/revogacao: branch em `plataforma-actions.ts` (`setLmsStudentAccess`/`revokeLmsEnrollment`).
+- **Pendente de deploy:** rodar os 2 novos jobs em `prisma/sql/pg_cron_jobs.sql` no Supabase (pg_cron manual); setar `LMS_API_URL`/`LMS_API_KEY` no Vercel. Validado: tsc + lint verdes, build compila, conexao live `GET /api/v1/courses` → 200.
+
+### Papeis da equipe da unidade (2026-07-28, branch `feat/painel-roles`)
+
+Antes: a unidade tinha so `owner` e `consultant`, e os dois viam o painel
+completo do dono — o filtro `ownerOnly` do menu era codigo morto (`isOwner`
+default `true`, nunca passado pela layout) e 85 das 93 rotas `/api/painel`
+usavam `requireResellerSession`, que nao distingue dono de membro.
+
+- **Fonte unica:** `src/lib/auth/painel-permissions.ts` — catalogo fechado de
+  permissoes, 4 papeis atribuiveis (`manager`, `consultant`, `support`,
+  `finance`) + `owner`, `resolvePermissions` (preset ∪ extra − revoked).
+  `OWNER_EXCLUSIVE` (`equipe.manage`, `conta.delete`) nunca e concedida por
+  override. Papel desconhecido — inclusive `"owner"` numa membership — cai no
+  preset mais restrito (fail-closed).
+- **Guard:** `src/lib/auth/painel-guard.ts` — `requirePainel` (403) para rotas,
+  `requirePainelPage` (redirect) para paginas, `painelContext` para a layout.
+  Permissoes NAO vao no JWT (ficariam obsoletas por ate 60s); sao resolvidas por
+  request numa query indexada.
+- **Escopo de dados:** `ctx.scope.{alunos,vendas,pagamentos,leads}` usa os campos
+  de autoria ja existentes (`soldByUserId`, `ownerUserId`). Sem `*.viewAll`, a
+  pessoa so ve a propria carteira — nas listagens **e** nos lookups por ID.
+  Cuidado: em `where` que ja usa a chave `enrollments`, o escopo tem que ir em
+  `AND`, senao o spread o sobrescreve (dois vazamentos assim ja foram corrigidos).
+- **Overrides por pessoa:** `TenantMember.extraPermissions/revokedPermissions`
+  (migration `20260728_tenant_member_roles`, idempotente, sem backfill).
+- **Previa "ver como":** cookie assinado de 30 min, so para o dono, sempre
+  reduzido a somente leitura por `toReadOnly`.
+- **Quebra deliberada no deploy:** consultores existentes seguem com
+  `role='consultant'` e caem no preset restrito de Vendedor. Quem atuava como
+  gerente precisa ser repromovido pelo dono em `/painel/equipe`.
+
+### Papeis e permissoes do sistema mae (2026-07-28)
+
+Mesmo modelo da unidade, agora no /admin. Antes: sete valores de `UserRole` e a
+matriz reimplementada a mao em cada rota (`requireAdminSession` + um
+`if (role !== "SUPER_ADMIN")`), espalhada por 139 rotas e 47 paginas — foi assim
+que /admin/financeiro passou a abrir para o vendedor de curso com a unica aba da
+tela retornando 403.
+
+- **Fonte unica:** `src/lib/auth/admin-permissions.ts` — catalogo fechado de
+  permissoes + um preset por papel PMB. Os presets REPRODUZEM a matriz que os
+  guards antigos aplicavam (ha teste de paridade), tirando os tightenings
+  listados no fim desta secao. O que muda e que a matriz virou declarativa e
+  ajustavel pessoa a pessoa.
+- **A autorizacao virou permissao; as regras de negocio a jusante TAMBEM
+  precisam.** Foi a causa raiz de cinco escaladas pegas na revisao: o guard
+  passou a aceitar quem tem a permissao, mas o teto de desconto, o filtro de
+  dono do cupom e o recorte de carteira continuavam perguntando "o papel e
+  PMB_SALES?" e respondendo "nao e, entao libera". Ao mover um gate para
+  permissao, procure toda trava interna que dependia daquele papel.
+- **`unidades.viewAll` e SUPER_EXCLUSIVE.** Ela nao e so um filtro de listagem:
+  e o substituto de todo bypass `role === "SUPER_ADMIN"` do codigo antigo, e
+  quem a tem passa direto pelo recorte de carteira em senha do titular,
+  impersonacao, gateway e export de comissoes.
+- **Recorte de carteira sai do guard, nunca e re-derivado na rota.** Use
+  `ctx.canAccessTenant(tenant)` (unidade ja carregada), `ctx.unidadesWhere()`
+  (listagem) ou `ctx.comissoesScope()` (dinheiro de indicacao). A derivacao
+  `can("unidades.view") && !can("unidades.viewAll")` que estava espalhada era
+  errada nos dois sentidos: revogar `unidades.view` REMOVIA o filtro (ampliando
+  o acesso) e ela assumia `accountManagerId` para papeis ligados por
+  `salesUserId`.
+- **Guard:** `src/lib/auth/admin-guard.ts` — `requireAdmin` (403) para rotas,
+  `requireAdminPage` (redirect) para paginas, `adminContext` para a layout.
+  Variantes `requireAdminAny` / `requireAdminPageAny` quando a rota tem dois
+  publicos. Permissoes NAO vao no JWT (ficariam obsoletas por ate 60s pelo
+  throttle do callback); sao resolvidas por request num `findUnique` na PK.
+- **Escopo de dados:** continua ESTRUTURAL, vindo de `lib/auth/scope.ts` — no
+  admin a unidade pertence a alguem por `accountManagerId`, `salesUserId` ou
+  pelo time de vendas, conforme o papel. As permissoes `*.viewAll` funcionam
+  como "ignore o recorte do papel": `ctx.unidadesWhere()` devolve `{}` para quem
+  as tem, `null` para quem nao alcanca unidade nenhuma (a rota fecha).
+- **Overrides por pessoa:** `User.extraPermissions/revokedPermissions`
+  (migration `20260728_user_permissions`, idempotente, sem backfill). Editaveis
+  em /admin/equipe (mesmo componente de "Permissoes avancadas" do painel).
+  `equipe.manage` e SUPER_EXCLUSIVE — nunca concedida por override, porque e a
+  permissao que deixaria alguem ampliar os proprios poderes.
+- **Invariante testada:** `src/app/api/admin/guard-coverage.test.ts` quebra se
+  uma rota nova nascer sem `requireAdmin`, se uma pagina nascer sem
+  `requireAdminPage`, se alguem voltar a decidir autorizacao pelo papel do ator,
+  ou se um guard por papel reaparecer.
+- **Revisao multi-agente (xhigh) rodada antes do commit:** 15 defeitos
+  confirmados, todos corrigidos. Cinco eram escalada de privilegio real
+  (cancelar cobranca de qualquer unidade, desconto e cupom de 100% sem teto,
+  clawback fora da carteira, saques da rede inteira ao REVOGAR uma permissao) e
+  um era IDOR na pagina de comissoes da unidade. O teste de paridade chegou a
+  ratificar um alargamento como se fosse a matriz antiga — trava de regressao
+  que codifica o comportamento novo nao protege nada.
+- **Tightenings deliberados** (rotas que estavam largas demais e agora fecham):
+  notas/senha/reenvio de e-mail do aluno e a busca global de alunos saem do
+  `requirePmbTeam` (que aceitava ate o Designer) e passam a exigir
+  `alunosRede.*`; o export de comissoes/saques exige `indicacoes.view`; o
+  cancelamento de matricula de aluno de unidade exige `unidades.manage`.
+  A aba "Exportacoes" dos relatorios some para gerente de vendas, vendedor de
+  revenda e financeiro — a API de export nunca os atendeu (403). Escritas
+  destrutivas que estavam sob permissao de leitura foram movidas para a de
+  escrita (`artes.manage`, `vendas.create`), e trocar o token do Mercado Pago
+  passou a exigir `integracoes.manage` (a tela ja escondia o campo; so o PATCH
+  direto passava).
+
+### Diretor de unidades (2026-07-29)
+
+Papel novo `PMB_RESELLER_DIRECTOR` ("Diretor de unidades"): faz pela REDE INTEIRA
+o que o Gerente de unidades faz pela carteira dele — suporte, dados, valores,
+cobranca, senha do titular, entrar como, governanca da conta.
+
+- **Por que papel novo e nao editar `PMB_RESELLER_MGR`:** `unidades.viewAll` e
+  `unidades.governanca` sao SUPER_EXCLUSIVE (nao concediveis por override), entao
+  so um PRESET pode carrega-las; e ampliar o gerente existente tiraria o recorte
+  de carteira de quem ja opera em producao.
+- **`SUPER_EXCLUSIVE` != "so o super admin tem".** Significa "nunca concedida por
+  OVERRIDE". A lista de presets que legitimamente as carregam vive em
+  `SUPER_EXCLUSIVE_BY_PRESET` e o teste exige igualdade EXATA — preset novo com
+  exclusiva sem declarar ali quebra o build. `equipe.manage` continua fora de
+  qualquer preset que nao seja o do super.
+- **Nao precisou tocar em rota nenhuma:** guards, dashboard, relatorios,
+  `unidadesWhere()` e `canAccessTenant()` ja chaveiam em `unidades.viewAll`.
+  O que precisou mudar foi a UI que ainda gateava por `role === "SUPER_ADMIN"`
+  (lista de revendedores e edicao de subdominio) — agora recebe flags de
+  permissao da API.
+- **Nova rota `GET /api/admin/revendedores/gerentes`** (`unidades.governanca`):
+  o seletor "atribuir gerente de conta" lia de `/api/admin/equipe`, que exige
+  `equipe.manage` — o diretor via o seletor vazio.
+- **Fora do papel, de proposito:** financeiro global (`financeiro.viewAll/manage`,
+  clawback, regras de comissao), `unidades.anonimizar`, catalogo, vitrine, vendas
+  B2C, integracoes e equipe. Ele VE e aprova saque da rede; quem da baixa no
+  pagamento e o Financeiro.
+- **Deploy:** migration `20260729_pmb_reseller_director_role` so adiciona o valor
+  no enum (idempotente, sem backfill). Ninguem vira diretor sozinho — promova em
+  /admin/equipe.
+
+### Par ver/editar em todas as areas (2026-07-31)
+
+O modelo de permissoes ja tinha `.view` vs `.manage` na maioria das areas, mas a
+disciplina nao era uniforme. Tres buracos, nos dois paineis:
+
+- **Areas so com `.manage`** — para CONSULTAR vitrine, dominio, automacao,
+  equipe, configuracoes, integracoes, gateway, atendimento, comunicacao, pacotes
+  e sub-revendas era preciso conceder o poder de ALTERA-LAS. Nao existia acesso
+  somente-leitura.
+- **Escrita guardada por leitura** — PATCH, DELETE, mudanca de etapa, atividades
+  e WhatsApp de lead no painel exigiam apenas `leads.view`. **`leads.manage` nao
+  existia.** O preset do Vendedor tem `leads.view`: ele APAGAVA lead.
+- **UI sem gate** — 30 paginas abriam com `.view` e desenhavam o botao de
+  escrita assim mesmo; o 403 so aparecia depois do clique. O caso visivel era
+  `/painel/cupons` mostrando "Novo cupom" para quem so tem `cupons.view`.
+
+**Mecanismo — `WRITE_IMPLIES_READ`** (um mapa em cada catalogo de permissoes):
+toda escrita concede a leitura da sua area, entao criar os `.view` faltantes NAO
+mexeu em preset nenhum (quem editava continua enxergando). A revogacao usa o
+mapa ao contrario e e **fail-closed**: revogar `catalogo.view` derruba
+`catalogo.manage` junto — sem isso, tirar a leitura deixava a pessoa sem a tela
+e com o PATCH liberado, que e pior do que nao ter revogado nada. `applyImplications`
+faz UMA passada; ha teste exigindo que nenhuma chave do mapa seja tambem um alvo.
+
+**Nenhum preset ganhou `.view` novo.** As permissoes de leitura novas nascem
+fora de todos os presets e sao concedidas pessoa a pessoa nos checkboxes de
+"Permissoes avancadas". Excecao: `leads.manage` entrou em `manager` e
+`consultant` para preservar o que eles ja faziam.
+
+- **Guards:** 43 handlers reapontados — todo GET para `.view`, toda escrita para
+  a permissao de escrita. Menus (`sidebar-admin`/`sidebar-painel`) passaram a
+  gatear pela LEITURA, senao quem tem acesso somente-leitura alcancava a pagina
+  pela URL mas nao pelo menu. Sub-item de menu agora aceita `perm` propria
+  ("Criar revenda" some numa secao aberta para leitura).
+- **UI:** `src/components/shared/permissions/permission-context.tsx` — os dois
+  layouts ja entregavam o conjunto de permissoes ao client, agora via contexto.
+  `useCan`/`Can` para gate pontual e `WriteGate` para tela de formulario
+  inteira (envolve em `<fieldset disabled>`, que desabilita nativamente todo
+  controle aninhado + banner de somente-leitura). `WriteGate` aceita LISTA de
+  permissoes = "basta uma" (telas que misturam areas, como /admin/configuracoes).
+  Fora do provedor, `useCan` devolve `false` — fail-closed.
+  **Limite:** `fieldset disabled` nao neutraliza `<a>` nem handler em `div`;
+  nesses casos gatear explicitamente com `<Can>`.
+- **Invariante testada:** `guard-coverage.test.ts` (admin e agora painel) quebra
+  se um POST/PUT/PATCH/DELETE nascer guardado so por `.view`. Verificada POR
+  MUTACAO nos dois lados antes do commit. Ha tambem teste exigindo que toda
+  escrita do catalogo declare seu par de leitura — permissao nova sem par quebra
+  o build.
+- **Divida registrada, nao escondida:** `/api/painel/equipe/*` e
+  `/api/painel/revendas/*` ainda usam guard por PAPEL
+  (`requireResellerOwner`/`requireResellerSeller`) e por isso nao respondem a
+  overrides. Lista FECHADA num teste: rota nova com guard por papel quebra.
+- **Nao e vazamento hoje, mas mudou o menu:** `/painel/configuracoes` (a tela da
+  propria senha) era gateada no menu por `configuracoes.manage` e sumia para
+  quase todo mundo; passou a `perfil.edit`. E a lista de "Modulos" em
+  /admin/configuracoes era escondida por `integracoes.manage`, que nao tem
+  relacao com aquelas telas — agora cada modulo declara a permissao do proprio
+  destino.
+
+### API de parceiros — consulta de unidades (2026-08-05)
+
+Superficie de saida do PMB para SISTEMAS DE TERCEIROS: dado um identificador
+unico, devolve os dados completos da unidade (revenda). Contrato em
+`docs/api/parceiros-v1.md`.
+
+- **Rotas:** `GET /api/v1/unidades/lookup?<campo>=<valor>`, atalho por path
+  `GET /api/v1/unidades/{identificador}` e `GET /api/v1/ping` (verificacao de
+  chave). Servidas no dominio da PMB; o proxy nao reescreve `/api`.
+- **Chave por INTEGRADOR, nao segredo unico em env** (model `ApiKey`, migration
+  idempotente `20260805_partner_api_keys`). Guardamos so o SHA-256 — o segredo
+  aparece UMA vez, no POST que o criou. Revogar derruba so aquele parceiro.
+  SHA-256 e nao bcrypt porque o segredo e CSPRNG de 256 bits: o hash rapido e o
+  que permite lookup por indice unico. **Sem chave ativa, /api/v1 responde 401
+  para todo mundo** — nada a ligar no deploy.
+- **Identificadores:** `email`/`cpf`/`telefone` do TITULAR (`User`), e
+  `id`/`slug`/`dominio`/`codigo` da unidade. Dois campos na mesma requisicao =
+  400: se apontassem para unidades diferentes, escolher um seria errar calado.
+  `?q=` deduz o tipo — CPF x celular (ambos 11 digitos) pelo DV; slug/id/codigo
+  sao indistinguiveis pela forma, entao a consulta cobre os tres num `OR` e a
+  resposta diz qual casou.
+- **`telefone` e o unico sem unicidade** (`User.phone` nao tem `@unique` e foi
+  gravado como a pessoa digitou). Comparacao normalizada em memoria sobre os
+  titulares (1 linha por unidade); empate devolve 409, nunca um palpite.
+- **`unidade-payload.ts` e a FRONTEIRA de dados** — allowlist, com teste que
+  quebra se nome proibido entrar no select. Fora: credencial de gateway,
+  segredo de webhook, mensalidade, comissao, PIX, dados de aluno. CPF do
+  titular sai mascarado. Recurso novo pede escopo novo + allowlist propria;
+  ampliar `unidades.read` daria ao parceiro o que ele nao contratou.
+- **Gestao:** /admin/configuracoes → aba API (`integracoes.view` para ver,
+  `integracoes.manage` para criar/revogar). Criacao/alteracao/revogacao entram
+  em `audit_logs` (`api_key.*`), sem o segredo. A listagem mostra ultimo uso,
+  IP e total de chamadas — olhe antes de revogar.
+- **Limite:** 120 req/min POR CHAVE (`rateLimitByKey`), nao por IP: o limite e
+  do contrato, nao da maquina de saida.
+
+### Venda direta com mais de um curso (2026-08-05)
+
+Antes, uma venda direta (no /admin e no /painel) era de UM curso ou de UM pacote
+do catalogo. Vender dois cursos avulsos exigia duas vendas, duas cobrancas e
+dois links — e o desconto/cupom nao enxergava o total.
+
+- **Reusa a mecanica do PACOTE, sem produto no catalogo.** A venda vira UMA
+  cobranca do valor somado: a matricula PRIMARIA (1o curso da lista) carrega o
+  Payment e lista os extras em `Enrollment.bundleCourseIds`; no fulfill cada
+  extra vira uma matricula SATELITE (finalAmount 0, sem Payment, sem dupla
+  receita). Migration idempotente `20260805_enrollment_bundle`.
+- **`primaryEnrollment` e o ponteiro que faltava** — vale para os DOIS casos
+  (pacote e multi-curso). E por ele que a COTA DE AULAS descobre o parcelamento
+  de uma satelite, que nao tem cobranca propria (ONE_TIME, `installmentsTotal`
+  null). Sem ele, o curso 2 de uma venda em 6x saia 100% liberado ja na 1a
+  parcela. O backfill da migration liga as satelites de pacote JA EXISTENTES —
+  com desempate deterministico, porque `(student_id, course_package_id)` nao e
+  unico (o mesmo aluno pode ter comprado o mesmo pacote duas vezes).
+- **O plano NAO e copiado para a satelite de proposito:** `installmentsTotal` e
+  campo de COBRANCA (sweep do carne, varredura de inadimplencia) e a copia faria
+  esses jobs tratarem a satelite como se tivesse boleto proprio. A heranca fica
+  em UM lugar: `effectivePacePlan` (pace-gate.ts). Toda leitura que alimenta as
+  funcoes de cota precisa espalhar `PACE_PRIMARY_SELECT` — sem ele a satelite se
+  apresenta como curso quitado e escapa da cota calada. O `where` gemeo
+  (`PACE_GATED_WHERE`, usado pela varredura diaria) tem teste de PARIDADE com
+  `isPaceGatedPlan`.
+- **Ordem importa no fulfill:** as satelites so podem ser avaliadas pela cota
+  DEPOIS da transacao que grava `installmentsPaid` da primaria. Avaliar antes le
+  "0 de N parcelas pagas" e bloqueia o aluno em 0% no ato da compra — cortando o
+  acesso e mandando "voce ja assistiu tudo o que as parcelas liberam" junto com
+  a confirmacao. Quem avalia e `evaluateSatellitePaceGates`, no chamador.
+- **A satelite herda `tenantCourseId`** na venda de unidade: e a coluna pela qual
+  o DELETE /api/painel/cursos/[id] conta matriculas ativas antes de deixar
+  remover um curso da vitrine. Satelite sem ela sumia dessa contagem.
+- **Descricao da cobranca** ("3 cursos: A, B, C") vem de `saleItemLabel` na venda
+  direta e de `descreverItemCobranca` (multi-course-server.ts) nas rotas de
+  checkout — senao o boleto do valor somado chega nomeando so o curso principal.
+  `multi-course.ts` e PURO porque os formularios de venda (client) importam
+  `MAX_SALE_COURSES` dali; o que toca o banco mora no `-server`.
+- **Curso mensal so e vendido sozinho:** somar mensalidade ao preco a vista de
+  outros numa cobranca unica cobraria so o 1o mes pelo conjunto.
+- **Gates:** duplicidade olha TODOS os cursos da venda (senao o aluno paga de
+  novo por um curso que ja tem, so por nao ser o primeiro da lista); curso
+  inativo ou ja matriculado no fulfill alerta o SUPER_ADMIN em vez de sumir
+  calado (o valor foi cobrado); rollback de venda que falhou apaga as satelites
+  junto (`rollbackSaleEnrollment`) — orfas ACTIVE travariam toda nova tentativa
+  com 409.
+- **Quebra de contrato interna:** `/api/painel/vendas` passou de `tenantCourseId`
+  para `tenantCourseIds` (e `/api/admin/vendas` de `courseId` para `courseIds`).
+  Clientes atualizados no mesmo commit.
+
+### Cota de aulas LIGADA em producao (2026-08-07)
+
+A trava proporcional ao pagamento (`pace-gate.ts` + `pace.ts`, escrita em
+2026-07-22) estava **desligada em producao desde que foi escrita**:
+`SystemSettings.paceGateEnabled = false`, nenhum tenant sobrescrevendo. Todo o
+motor rodava e devolvia cedo. O caso que expos foi um aluno de carne 6x que
+pagou 1 parcela (16% liberados), assistiu 45% do curso e nao foi travado —
+inadimplencia nao pegava porque a 2a parcela nem tinha vencido.
+
+- **Ligada globalmente** (`pace_gate_enabled = true`, `strict` continua false) e
+  varredura disparada na hora. Regra: `cota = floor(pagas/total x 100)`; vale
+  para `BOLETO_INSTALLMENT` e `MONTHLY` com mais de 1 parcela. Compra a vista e
+  cartao parcelado ficam de fora — nos dois o valor ja foi autorizado.
+- **Interruptor ganhou tela:** `/admin/configuracoes/cota-aulas`
+  (`configuracoes.view` para ver, `configuracoes.manage` para alterar) +
+  `PUT /api/admin/system-settings/pace-gate`, auditado. Antes so existia a
+  coluna — ligar/desligar exigia SQL na producao. A tela mostra o impacto
+  (matriculas sob a regra, quantas passaram da cota, quantas estao travadas)
+  antes de o dono virar a chave. O override por unidade (`Tenant.paceGateEnabled`)
+  continua so no banco.
+- **A 1a cobranca nao avaliava a PROPRIA matricula** — so as satelites. Numa
+  venda 6x o curso principal nascia sem teto no LMS e a trava so chegava depois,
+  reativa, quando o aluno ja tivesse assistido alem do que pagou. `fulfill.ts`
+  passou a chamar `evaluatePaceGate(enrollment.id)` logo apos a transacao que
+  grava `installmentsPaid` (antes dela leria zero parcelas pagas e travaria o
+  aluno em 0% no ato da compra).
+- **`paceAppliedPercent` virou "ultima cota PROPAGADA", nao "calculada".** Era
+  gravado antes/independentemente do `PATCH /enrollments/:id/limit` do LMS: um
+  envio falho ficava marcado como aplicado, a comparacao batia na passada
+  seguinte e a re-tentativa prometida no log **nunca saia** — o aluno que pagou
+  seguia preso no teto antigo. Agora falha grava null, e null e o sinal de
+  "ainda ha teto a mandar" que a varredura procura. `applyLmsLimit` devolve
+  tri-estado (`applied` / `skipped` / `failed`) porque "nao havia teto a mandar"
+  (matricula da EA) e "mandei e falhou" caem os dois no corte por aluno, mas so
+  o segundo pede nova tentativa.
+- **A varredura diaria ignorava quem nunca andou:** o filtro exigia
+  `progressPercent > 0`. Matricula parcelada com 0% ficava com o curso INTEIRO
+  aberto no LMS ate o aluno passar da cota. Entrou a clausula
+  `{ paceExemptAt: null, paceAppliedPercent: null }` — auto-limitada, some do
+  filtro na 1a passada bem-sucedida.
+- **Confirmado ponta a ponta em prod:** `PATCH /enrollments/:id/limit` do LMS
+  responde 200 e guarda `maxPercent` (o comentario em
+  `/api/aluno/curso/[id]/acessar` dizendo "enquanto o LMS nao expoe o limite"
+  esta desatualizado). Como a rota de SSO tambem recusa matricula com
+  `paceBlockedAt`, hoje o aluno travado perde o acesso a TUDO daquele curso,
+  inclusive a fatia que pagou — mais duro que o "teto, nao revogacao" do
+  contrato do LMS. Deliberado por ora; afrouxar e uma decisao comercial.
+
+### Churn honesto + cortesia excepcional (2026-08-07)
+
+O churn contava como cliente perdido quem nunca foi cliente. A formula era
+`canceladas / total` num snapshot lifetime, DUPLICADA em tres lugares com
+filtros divergentes (`bi/financeiro.ts`, `api/admin/financeiro`,
+`api/admin/analytics` — este ultimo nem tinha o `planValue > 0`). Unidade que
+nasceu cortesia, ganhou prazo esticado ou foi suspensa antes do 1o boleto
+entrava no numerador; `PENDING` que nunca pagou inflava o denominador.
+Medido em prod: **9,5% -> 4,4%**, e **20 unidades** (13 suspensas + 7
+canceladas) foram para o balde novo "Nunca ativou".
+
+- **Fonte unica:** `src/lib/tenants/lifecycle.ts` — clausulas `where`
+  (`EVER_PAID_*`, `NEVER_ACTIVATED_WHERE`, `CHURN_BASE_WHERE`), as constantes de
+  prazo e o gate `assertCortesiaExcepcional` (PURO, sem I/O). Um arquivo so: os
+  relatorios importam as clausulas, as rotas importam o gate.
+- **O predicado e SO "nunca pagou"** — as tres situacoes do pedido (nunca pagou
+  / cortesia / vencimento futuro) colapsam nele. `planValue === 0` como clausula
+  independente estaria ERRADO: e o valor de HOJE, sobrescrito sem historico, e
+  classificaria como "nunca ativou" a unidade que pagou 6 meses, virou cortesia
+  e so depois cancelou — churn real. "Nunca pagou" e monotonico.
+- **`Tenant.activatedAt` NAO serve de prova de pagamento** — parece servir (so o
+  webhook o grava), mas a migration `20260620_referral_commission_tiers` fez
+  backfill com `COALESCE(MIN(paid_at), created_at)`: o fallback carimbou 12
+  unidades que nunca pagaram. Usa-lo devolveria o churn a 9,7% e anularia a
+  mudanca. O ledger `tenant_payments` E confiavel — verificado em prod que
+  nenhuma cobranca paga virou `DELETED` (`DELETED` = cobranca em aberto removida
+  do Asaas no cancelamento).
+- **`RECEIVED_IN_CASH` entrou em `EVER_PAID_STATUSES`**, nao em `PAID_STATUSES`:
+  aquela constante alimenta /painel/cobrancas e o cron de lembretes, raio de
+  explosao diferente. Zero linhas hoje — e blindagem.
+- **O gate olha o status de ORIGEM, nao o de destino.** Foi o furo que anulava o
+  recurso: `SUSPENDED -> PENDING` (destino nao e ACTIVE, passa) e depois
+  `PENDING -> ACTIVE` (origem nao e mais suspensa, passa) reativavam de graca com
+  duas chamadas licitas. Por isso `REACTIVATING_STATUSES = ["ACTIVE","PENDING"]`.
+  Ha teste dedicado, **verificado por mutacao**.
+- **4 rotas guardadas:** `status` (reativar), `billing` (planValue 0 / promo /
+  vencimento > D+10), `payments/[paymentId]` (adiar a cobranca individual — o
+  mesmo prazo, uma a uma) e `mark-paid`, que **nao bloqueia** (registrar PIX
+  recebido por fora e o caminho legitimo de sair da trava) mas grava
+  `tenant.cortesia_excepcional.laundered` e notifica o SUPER_ADMIN **sem
+  `category`**, para nao poder ser silenciado por preferencia.
+- **Permissao `unidades.cortesiaExcepcional`** e SUPER_EXCLUSIVE — concedida por
+  override, seria um checkbox de nome ameno reabrindo o buraco. Nao esta no
+  preset do Diretor de unidades de proposito.
+- **403 devolve `requiresReason: true`** quando a pessoa TEM o poder e so falta
+  justificar — e o que faz a UI abrir o dialogo (`cortesia-reason-dialog.tsx`)
+  em vez de mostrar erro seco. O motivo vai para `audit_logs`; tentativas
+  NEGADAS tambem sao auditadas.
+- **Prazo tolerado = D+10** (`DEFAULT_FIRST_DUE_DAYS + CORTESIA_GRACE_DAYS`),
+  calibrado nos casos reais: `valedosaber` nasceu D+20, `andersoncidade` D+15,
+  `concluirconsultoriaeducacional` D+11 — nenhuma pagou. Comparacao em dia civil
+  brasileiro (`brDayStartUtc`), senao o servidor em UTC erra por um dia.
+- **Descoberta lateral:** `promoValue`/`promoMonths` NUNCA foram usados em
+  producao. O "periodo promocional" que o dono descreve sempre foi vencimento
+  esticado na mao.
+- **Fora de escopo, por decisao do dono:** a blacklist e por TENANT, nao por
+  pessoa — nada impede cancelar e criar outra unidade cortesia para o mesmo
+  dono; e nao ha piso de `planValue` (R$ 1 passa).
+- **Deploy:** migration `20260807_tenant_payments_ever_paid_idx` (indice parcial,
+  `CONCURRENTLY`, idempotente, sem backfill). A lista de status dele espelha
+  `EVER_PAID_STATUSES` — mudou la, migration nova aqui, senao o Postgres para de
+  usar o indice em silencio.
+
+### Revisao da cortesia: 10 defeitos + trava por titular (2026-08-08)
+
+Revisao multi-agente (29 agentes) sobre a feature JA EM PRODUCAO achou 10
+defeitos. Os quatro primeiros valem como padrao, nao so como conserto:
+
+- **O gate nao cobria `PENDING`.** `neverActivated` exigia SUSPENDED/CANCELLED,
+  mas a criacao fixa a 1a cobranca em D+3: os prazos esticados que calibraram a
+  regra so podem ter sido gravados enquanto a unidade ainda era PENDING — ela so
+  vira SUSPENDED DEPOIS de vencer. O caminho que PRODUZIU o problema era o unico
+  que continuava aberto. Agora `REQUIRES_INACTIVE` separa por gatilho: reativar
+  exige estar fora do ar; free/promo/postpone/discount valem em qualquer status
+  enquanto ela nunca tiver pago.
+- **Status de cobranca e MUTAVEL.** `asaas/process.ts` faz upsert do status atual
+  a cada evento, entao estorno/chargeback reescreve a linha que era RECEIVED e
+  apaga o pagamento. Predicado passou a aceitar `paidAt IS NOT NULL`, que
+  sobrevive as transicoes. Qualquer regra de "ja aconteceu" precisa de um campo
+  que nao seja reescrito.
+- **Gate parcial e gate furado.** O `dueDate` do PATCH de cobranca estava
+  guardado e o `value` do MESMO handler nao: reprecificar para R$ 0,01 fazia a
+  unidade "pagar" e sair da trava para sempre. Ao gatear um handler, olhe TODOS
+  os campos que ele escreve.
+- **Teto ancorado em "hoje" desliza.** Adiar todo dia para hoje+10 empurrava o
+  vencimento indefinidamente sem NUNCA ser bloqueado nem auditado. A ancora
+  virou `Tenant.createdAt`, que e imutavel.
+
+Os outros seis: auditoria de concessao gravada ANTES da escrita (502 deixava
+linha fantasma); `loadTenantLifecycle` sem teste nenhum (remover o filtro de
+pagamento mantinha os 1646 verdes); erro da retentativa pintado ATRAS do overlay
+do modal; Escape durante a requisicao fechava o dialogo mas concedia; card de
+/admin/financeiro ainda rotulado "Churn rate" com limiar de 5% sobre base nova;
+`CREATE INDEX CONCURRENTLY IF NOT EXISTS` nao e re-executavel (build abortada
+deixa indice INVALID que o `IF NOT EXISTS` passa a pular para sempre).
+
+**Trava por TITULAR.** A trava era por TENANT — cancelar a unidade que nunca
+pagou e abrir outra de graca para o mesmo dono contornava tudo.
+`findBlockedUnitsForPerson` casa por CPF, e-mail e telefone; o telefone EM
+MEMORIA, porque `User.phone` nao tem unicidade e foi gravado como a pessoa
+digitou (mesmo caminho da API de parceiros). Vale so para unidade que nasce SEM
+PAGAR: a preco cheio a pessoa volta como cliente de verdade e, se nao pagar, cai
+na trava sozinha. Fica no nucleo `createReseller`, entao /admin e o painel
+herdam a regra e um chamador novo nao nasce sem ela.
+
+**Cancelamento em lote** das que nunca pagaram: filtro "Nunca ativou" em
+/admin/revendedores + `POST /api/admin/revendedores/cancelar-lote`
+(`unidades.governanca`, a mesma do cancelamento individual). O servidor
+RE-DERIVA a elegibilidade — os ids do corpo sao FILTRO sobre `NEVER_ACTIVATED_WHERE`,
+nunca a fonte da verdade. Cada unidade segue a `cancellationPolicy` DELA para os
+alunos. **Nao move o churn:** o predicado ja exclui quem nunca pagou dos dois
+lados da razao; elas so migram de "suspensas" para "canceladas" dentro do mesmo
+balde. `lib/resellers/cancel.ts` e o nucleo compartilhado com o DELETE
+individual — duplicar um fluxo destrutivo que fala com o Asaas e como as duas
+metades divergem em silencio.
+
+### Responsavel financeiro para aluno menor (2026-08-13)
+
+Existia UMA identidade por venda: o `Student` era ao mesmo tempo quem estuda e
+quem paga. Como o gateway exige pagador adulto com CPF, a unica forma de vender
+para um menor era cadastrar a MAE como se fosse a aluna — e o **certificado, que
+le `Student.nome`/`cpf` no ato da emissao, saia no nome dela**. Nao havia regra
+de idade em lugar nenhum do codigo.
+
+- **O banco JA TINHA os campos, mortos:** `nascimento`, `responsavel`,
+  `rgResponsavel`, `cpfResponsavel` vieram da migration inicial (herdados do
+  schema da EA, que sempre aceitou esses campos) e nunca foram escritos.
+  Migration `20260813_responsavel_financeiro` so acrescenta contato
+  (`responsavel_email/fone/parentesco`), `responsavel_definido_em`,
+  `responsavel_asaas_customer_id`, os dois campos de revisao de titularidade e
+  `certificates.corrected_*`. Aditiva e idempotente, sem backfill.
+- **Fonte unica:** `src/lib/students/guardian.ts` — `isMinor` (dia civil BR via
+  `brDayStartUtc`), `guardianRequirement`, `guardianShape` + `withGuardianRule`
+  (shape e refine ACOPLADOS, para nenhuma rota reimplementar a regra) e a
+  escrita tri-estado `GuardianWrite`. **`nascimento = null` significa
+  DESCONHECIDO, nunca "adulto"**, e `UNKNOWN` NUNCA bloqueia — 217 dos 230
+  alunos em producao nao tem data, e travar a recompra deles seria um apagao.
+- **O pagador foi desacoplado ANTES da UI, e a ordem e restricao, nao
+  preferencia.** `src/lib/checkout/payer.ts` (`PAYER_SELECT`/`resolvePayer`):
+  como `resolvePayer` so aceita `PayerSource`, todo call site com `select` mais
+  estreito NAO COMPILA — o compilador substitui um teste estrutural. Os
+  contratos de gateway tiveram `studentNome/studentCpf` **renomeados** para
+  `payer*`: o rename quebra a compilacao nos call sites de proposito (um campo
+  opcional seria esquecivel). Se a UI viesse primeiro, o primeiro responsavel
+  coletado geraria cobranca no CPF do menor.
+- **A regra do pagador e DATA-DRIVEN, nao CLOCK-DRIVEN:** vence quem esta na
+  ficha (`responsavel` + `cpfResponsavel`), nao "quem e menor hoje". Assim o
+  aluno que faz 18 no meio de um carne continua cobrando o mesmo customer
+  Asaas, sem assinatura orfa.
+- **`responsavelAsaasCustomerId` e coluna separada de proposito.** Gravar o
+  `cus_` da mae em `asaasCustomerId` faria o aluno cobrar nela PARA SEMPRE,
+  inclusive depois dos 18 — e, como o codigo reusa o customer em cache, o erro
+  nunca seria detectado. Ha teste de mutacao nas duas colunas.
+- **CPF do responsavel != CPF do aluno** e trava no refine: sem ela o
+  `findOrCreateAsaasCustomer` (dedupe por `cpfCnpj`) resolveria os dois papeis
+  para o MESMO customer e a separacao viraria no-op.
+- **O gate que de fato segura e o do aluno EXISTENTE**, nao o do cadastro novo:
+  a maior parte das vendas usa a aba "buscar aluno". `/api/painel/vendas`
+  recusa com `GUARDIAN_REQUIRED` + `studentId`, e as duas telas de venda mostram
+  o aviso com link para completar a ficha ANTES do submit.
+- **Login passou a aceitar o CPF do RESPONSAVEL** (`src/lib/auth.ts`, `OR` em
+  `cpfResponsavel` + indice). Sem isso, corrigir a titularidade (o `cpf` vira o
+  do filho) tiraria o acesso da mae em silencio — e era ela quem vinha entrando.
+- **Remediacao do passado** (`src/lib/students/titularity/`): fila em
+  `/admin/alunos/titularidade` e `/painel/alunos/titularidade`. Dimensionada
+  pelos numeros REAIS de producao (230 alunos, 51 certificados em 17 alunos):
+  **sem model de fila, sem cron de varredura, sem lote** — os sinais sao
+  calculados na hora. Nao existe deteccao confiavel (o nome da mae e um nome de
+  aluno valido; o CPF nao codifica data de nascimento); a maquina ordena, a
+  pessoa decide, nada auto-corrige.
+- **O certificado corrigido MANTEM o `code`.** Ele ja circulou; troca-lo faria
+  `/validar/{code}` responder "nao encontrado" para quem conferisse o codigo
+  antigo — **le como fraude**. E NAO se reemite: `force` grava
+  `completionDate: new Date()` (a data de conclusao viraria hoje) e obrigaria a
+  revogar o original, deixando "Certificado revogado" em vermelho na pagina
+  publica de um aluno legitimo. Corrige-se o snapshot e nulifica-se
+  `pdfUrl`/`pdfGeneratedAt` (forma documentada de forcar regeneracao), com
+  regeneracao ansiosa apos o commit.
+- **Auditoria DENTRO da transacao**, contra o padrao do projeto: `logAudit`
+  engole falha de persistencia por design, e para reescrita de documento oficial
+  um buraco silencioso na trilha e inaceitavel. Um `AuditLog` por certificado.
+- **Permissao CONJUNTA, sem permissao nova:** corrigir cadastro exige
+  `alunos.manage`; reescrever certificado exige tambem `certificados.manage` —
+  quem atende conserta ficha, mas nao reescreve diploma. Criar permissao nova
+  obrigaria a mexer nos dois catalogos, no `WRITE_IMPLIES_READ`, em todos os
+  presets e nas listas de rotulos.
+- **EA passou a receber `responsavel`/`cpf_responsavel`/`rg_responsavel`** (o
+  contrato sempre aceitou). O comentario de `platform-state.ts` que justificava
+  a omissao por "nao temos valor autoritativo" foi ATUALIZADO — sem isso o
+  proximo leitor removeria o campo de novo. `text()` descarta vazio, entao campo
+  nulo do nosso lado PRESERVA o que a EA tem (mandar string vazia seria a mesma
+  classe do incidente de 2026-08-05). LMS fica de fora: `{name, email}` so, e
+  ele nao cobra nem certifica.
+- **Invariante testada:** `src/lib/students/guardian-coverage.test.ts` quebra se
+  uma rota nova criar aluno sem importar a regra, se `prisma.student.create`
+  aparecer fora dos dois pontos conhecidos, ou se `lib/certificates/**` passar a
+  ler campos do responsavel. Verificada POR MUTACAO, junto com `isMinor`, a
+  trava de CPF igual e a escrita tri-estado.
+- **Decisoes do dono:** CPF do aluno obrigatorio (inclusive menor); data de
+  nascimento obrigatoria em toda porta de venda; e-mail do responsavel em campo
+  proprio (o do aluno segue sendo a chave de login).
+- **`certificate_require_cpf` LIGADO em producao (2026-08-13).** Impacto medido
+  antes de virar a chave: 1 aluno sem CPF, sem matricula ativa, e ZERO
+  certificados emitidos sem CPF — ninguem foi bloqueado. Toggle em
+  /admin/certificados/configuracoes.
+  - O gate deixou de lancar `Error` generico e virou `MissingCpfError`, no
+    mesmo padrao do `PaceGateError`: recusa ESPERADA e ACIONAVEL. Antes o aluno
+    recebia "nao foi possivel emitir agora, tente novamente" — conselho que
+    nunca funcionaria, porque repetir nao preenche CPF nenhum.
+  - **A correcao de titularidade passou a EXIGIR o CPF do aluno quando ha
+    certificado a reescrever.** Ela permitia CPF vazio (para nao travar o
+    conserto do NOME de cadastro legado); com a exigencia ligada isso gravaria
+    `studentCpf: null` num documento — trocaria um certificado errado por um
+    certificado incompleto. Sem certificado emitido, o CPF segue opcional: a
+    maioria dos cadastros a corrigir nao tem documento, e travar tudo por um
+    RG que a unidade nao tem em maos seria pior.
+- **Divida registrada:** dois irmaos menores com o mesmo e-mail continuam sem
+  caber (`@@unique([tenantId, email])`); a mensagem de conflito passou a
+  explicar em vez de so barrar. O conserto real e login/identidade por CPF —
+  fora de escopo, raio grande.
+
+**Revisao multi-agente antes do commit: 15 defeitos, todos corrigidos.** Os que
+valem como padrao, nao so como conserto:
+
+- **Familia de permissao errada.** As rotas de titularidade nasceram sob
+  `alunos.*` (vitrine B2C da PMB) quando alcancam aluno de QUALQUER unidade —
+  `alunosRede.*`. Efeito duplo: quem tinha `alunos.manage` reescrevia certificado
+  de aluno de revenda por um gate mais fraco que o da edicao comum, e o **Diretor
+  de unidades**, cujo trabalho e exatamente esse, tomava 403 e nem via o menu.
+  Ao criar rota que toca aluno, conferir QUAL das duas familias se aplica.
+- **Recorte de carteira esquecido.** A fila e a correcao do painel filtravam so
+  por `tenantId`, sem `ctx.scope.alunos`. O preset de Vendedor tem
+  `alunos.view/manage` e NAO tem `alunos.viewAll`: ele listava nome, e-mail e CPF
+  de toda a unidade e podia reescrever qualquer cadastro. Toda rota
+  `/api/painel/alunos*` espalha esse filtro — rota nova tambem tem que espalhar.
+- **A regra compartilhada bloqueava o proprio caminho de remediacao.**
+  `withGuardianRule` recusa responsavel sem data de nascimento e exige
+  e-mail/telefone/parentesco — correto na VENDA, fatal na correcao de cadastro
+  LEGADO, que sempre nomeia responsavel e quase nunca tem esses dados. Vieram as
+  opcoes `requireNascimentoComResponsavel` e `requireGuardianContact`. Regra
+  unica nao significa regra unica-forma.
+- **Checkout ANONIMO podia APAGAR responsavel.** `buildGuardianWrite` devolvia
+  `null` (= limpar) quando o bloco nao vinha, entao refazer o checkout de um
+  menor com uma data de adulto zerava o responsavel ja verificado e mandava a
+  cobranca seguinte para o CPF da crianca. Os 4 checkouts publicos passaram a
+  usar `allowClear: false`: fluxo anonimo ADICIONA, nunca REMOVE.
+- **`OR` em login e armadilha.** O `OR: [{cpf}, {cpfResponsavel}]` num `findFirst`
+  sem ordem podia devolver a linha do FILHO para a mae que tem conta propria e e
+  responsavel dele no mesmo tenant — senha nao bate, ela fica trancada fora da
+  propria conta. Virou consulta em DUAS etapas, com o CPF proprio vencendo.
+- **`void promise` morre na Vercel.** A "regeneracao ansiosa" do PDF e o sync
+  com a EA usavam `void`, que pode ser congelado junto com a invocacao assim que
+  a resposta sai — nem o `.catch` roda. Trocado por `afterResponse`.
+- **Gate so no painel nao e gate.** `GUARDIAN_REQUIRED` de aluno existente
+  existia em `/api/painel/vendas` mas nao em `/api/admin/vendas` nem na recompra
+  `/api/aluno/comprar` — as duas cobravam no CPF do menor. Ao criar um gate,
+  varrer TODAS as portas equivalentes.
+- **O compilador nao pega pagador montado a mao.** O rename `student*` -> `payer*`
+  quebrou os call sites tipados, mas tres lugares montavam `payer: {...}` como
+  literal (`admin/vendas` MP, `aluno/comprar` MP, carne MP em `installments/plan`)
+  e passaram batido. Varredura por `payer: {` / `cpfCnpj:` / `identification:`
+  quando o dono de um dado muda.
+- **`asaasCustomerId` da matricula tinha precedencia sobre o do pagador**: uma
+  1a tentativa feita antes de a ficha ganhar o responsavel carimbava o customer
+  do MENOR, e a cobranca seguinte era lancada nele com o CPF da mae no
+  `creditCardHolderInfo`. `payerKind` agora invalida esse cache.
+- **Fila sem saida de dispensa.** So havia "Corrigir": os 17 alunos com
+  certificado — a maioria correta — ficariam presos na lista para sempre, e a
+  unica forma de limpar seria submeter uma correcao falsa. O PATCH existia e
+  nenhum componente o chamava.
+- Outros: P2002 ao gravar o CPF do filho que ja tem cadastro proprio virava 500
+  generico; `markTitularityReviewed` gravava auditoria sem `tenantId` (sumia da
+  visao por unidade); `PATCH /api/aluno/perfil` aceitava `nascimento: 2999-12-31`
+  sem a sanidade que a regra compartilhada ja tinha; o parentesco nao voltava
+  para o select (a coluna guarda o ROTULO, o select espera a CHAVE), fazendo todo
+  salvamento de menor falhar; e o modulo que reescreve documento oficial era o
+  unico sem teste — agora tem, verificado por mutacao.
+- **Cuidado de bundle:** `signals.ts` consulta o banco, entao os rotulos e tipos
+  vivem em `titularity/types.ts`. Importar valor de um modulo que toca Prisma num
+  componente `"use client"` arrasta o driver `pg` para o navegador e quebra o
+  build com "Can't resolve 'dns'".
+
+### Aproveitamento do certificado + progresso sob demanda (2026-08-14)
+
+Aluno concluiu na plataforma de aulas, nao conseguiu emitir o certificado, e
+quando o SUPER_ADMIN forcou a emissao o documento saiu com "Aproveitamento:
+67%". Dois defeitos independentes, ambos com a mesma raiz: **o progresso e uma
+copia pull-only e ninguem a atualizava na hora que ela decidia algo**.
+
+- **A EA nao tem webhook.** O progresso so entrava por (a) cron diario das 07:00
+  e (b) o aluno abrir `/aluno/cursos`. **Nenhuma tela de emissao** — admin,
+  painel ou botao do aluno — puxava da EA antes de decidir "concluiu?". O
+  operador via CONCLUIDO na plataforma de aulas e EM_ANDAMENTO aqui, com ate 24h
+  de defasagem. Agora as tres portas chamam `syncStudentProgressBestEffort`
+  (`lib/students/progress.ts`); na rota do aluno so no caminho de RECUSA, para o
+  caso feliz nao pagar a latencia. O cache de 5 min da propria
+  `syncStudentProgress` evita martelar a EA.
+- **"Aproveitamento" nunca foi nota** — era `Enrollment.progressPercent`, o
+  percentual de AULAS ASSISTIDAS, e era lido **ao vivo na hora de gerar o PDF**.
+  Num documento oficial isso da (1) contradicao — "certificado de CONCLUSAO" que
+  imprime 67% — e (2) instabilidade: como o PDF e regerado sob demanda, o mesmo
+  certificado imprimia numeros diferentes a cada download. A EA marca CONCLUIDO
+  **abaixo de 100%** (o contrato documenta `CONCLUIDO / 95%`; ha certificados em
+  producao com 88% e 97%), entao nem sincronizar resolveria. Agora e a constante
+  `CERTIFICATE_COMPLETION_PERCENT = 100` e o `progressPercent` foi removido de
+  ponta a ponta do pipeline de render (`render-data` → `generate-pdf` →
+  3 layouts → sample). O preview HTML **ja** mostrava 100% fixo: o PDF era o
+  divergente.
+- **Mudanca no CODIGO de render nao invalidava PDF gerado.** `freshness.ts` so
+  comparava fontes de DADOS (template, tenant, settings) — nenhuma se move
+  quando o que muda e o layout. Sem isso a correcao acima so alcancaria
+  certificados novos. Entrou `RENDER_REVISION_AT`: PDF gerado antes dela e
+  desatualizado. **Ao mexer no codigo de render, bumpe a data para o inicio do
+  dia SEGUINTE** — ancorar em "agora" deixaria os PDFs gerados na janela entre
+  commit e deploy marcados como atuais, preservando o conteudo errado. A
+  comparacao fica FORA do try/catch, senao o fallback "assume atual" de falha de
+  leitura a engole.
+- **Botao "Atualizar progresso"** em `/aluno/cursos`
+  (`components/aluno/sync-progress-button.tsx` →
+  `POST /api/aluno/progresso/sincronizar`): o aluno puxa na hora em vez de
+  esperar o proximo sync. **Passa `force: true`** — os dois atalhos de 5 min de
+  `syncStudentProgress` (Redis + `progressSyncedAt`) sao otimizacao para chamada
+  AUTOMATICA; num pedido EXPLICITO eles tornariam o botao um placebo. O
+  contrapeso e rate limit por ALUNO (`alunoSyncProgresso`, 4/5min), nao por IP —
+  o custo e da conta dele e alunos atras do mesmo IP nao podem se estrangular.
+- **O botao fala com as DUAS fornecedoras.** `syncStudentProgress` so cobre a
+  EA; 112 das 629 matriculas em producao sao LMS e ficariam com um botao mudo.
+  Entrou `syncLmsStudentProgress` (`lib/lms/student-progress.ts`), que pergunta
+  `GET /students/:ref` — o delta `day-update` nao serve para "atualizar agora"
+  porque o cursor e GLOBAL: forca-lo por um aluno reprocessaria a base inteira e
+  avancaria o cursor de todos. O mapeamento progresso→matricula foi extraido
+  para `lib/lms/apply-progress.ts` e e o MESMO nos dois caminhos: duplicar faria
+  as metades divergirem em silencio (bastaria uma esquecer `evaluatePaceGate`
+  para o aluno parcelado ficar com o curso inteiro liberado). A rota tolera
+  falha de cada fornecedora separadamente — a EA cair nao pode impedir o aluno
+  de LMS de atualizar.
+- **Descobertas de producao:** `certificate_auto_issue` esta **false** (toda
+  emissao e manual — o `toIssueCert` do sync nunca dispara) e
+  `certificate_min_percent` e **90**, nao o default 80 do schema. E o cron de
+  progresso so varre `status: ACTIVE`: emitir o certificado promove a matricula
+  a COMPLETED e ela sai da fila de sync para sempre. Nao e mais problema para o
+  documento (que agora nao le progresso), mas congela o "% concluido" exibido em
+  `/aluno/cursos`.
+
+### Cancelamento automatico por inadimplencia (2026-08-21)
+
+A unidade que fica **7 dias** com a mensalidade vencida agora e CANCELADA
+sozinha. Antes o relogio parava na suspensao (D+3) e ninguem cancelava: em
+21/08 havia 23 unidades vencidas, uma delas ha 29 dias, todas suspensas e
+acumulando.
+
+- **A regua e uma so:** `src/lib/tenants/overdue-policy.ts` (PURO) decide
+  suspender (D+3), avisar (D+5) e cancelar (D+7). O motor
+  (`overdue-sweep.ts`) executa e a rota do cron virou casca. O relogio das
+  tres decisoes e o MESMO — o `dueDate` da cobranca mais antiga em aberto, em
+  dia civil brasileiro (`daysUntilBrDay`). Contar a partir da SUSPENSAO faria
+  o prazo depender de quando o cron rodou; contar em UTC cancelaria com 6 dias
+  e 21 horas.
+- **O cancelamento nunca vem antes da suspensao:**
+  `cancelAfterDays = max(7, gracePeriodDays)`. Ha unidade em producao com
+  carencia 15 — sem o `max` ela pularia direto de "vendendo" para "cancelada".
+- **Cancelar e irreversivel, entao pede TRES provas** (suspender nao pede
+  nenhuma — se desfaz sozinho no `reactivate-paid`): (1) a cobranca nao tem
+  `paidAt`/`markedPaidAt`, campos que sobrevivem a reescrita de status pelo
+  webhook; (2) nao existe cobranca de ciclo POSTERIOR ja paga — se ha, a linha
+  velha e residuo de reconciliacao, nao divida; (3) o Asaas CONFIRMA na hora
+  que ela segue em aberto. Asaas fora do ar, id que nao resolve (`ins_` de
+  mensalidade parcelada) ou status inesperado (estorno, chargeback) **adiam**
+  o cancelamento. Fail-closed: adiar custa 6h, cancelar errado custa um cliente.
+- **O padrao de bloqueio de aluno e OPOSTO nos dois eventos — nao unifique.**
+  Na SUSPENSAO, politica ausente => bloqueia (comportamento que ja rodava; a
+  suspensao se desfaz ao pagar). No CANCELAMENTO, politica ausente => MANTEM o
+  aluno (`shouldBlockStudentsOnCancel`), igual ao cancelamento manual e ao em
+  lote: o aluno pagou o curso dele.
+- **Zero migration e zero job novo.** O aviso de D+5 reusa
+  `TenantPaymentReminder` com `offsetDays` NEGATIVO (`-5` = 5 dias DEPOIS do
+  vencimento; os lembretes pre-vencimento sao 5/2/0) — a PK composta e o que
+  impede aviso duplicado quando o pg_net re-tenta. E a varredura mora no
+  `pmb-sweep-tenants-overdue`, que ja roda de 6 em 6 horas: cron novo teria que
+  ser agendado a mao no pg_cron e ja aconteceu de dois ficarem de fora.
+- **`?dryRun=1`** na rota do cron calcula tudo e devolve QUEM SERIA cancelado
+  sem escrever, sem falar com o Asaas e sem avisar ninguem. E como se confere
+  um backlog antes da primeira execucao.
+- **Saida por unidade:** `cancellationPolicy.autoCancel: false` (negociacao em
+  curso) e `autoCancelAfterDays` (prazo proprio, nunca abaixo da carencia),
+  editaveis em /admin/revendedores/[id]. De quebra, o formulario mostrava
+  carencia **15** para unidade sem politica enquanto a varredura suspendia em
+  **3** — quem abrisse a tela e salvasse sem mexer em nada triplicava o prazo
+  sem querer (foi o que aconteceu com `vocequervocepode`, a unica unidade com
+  politica gravada). O default da tela agora e o do cron.
+- **Trilha:** `audit_logs` com `action: "tenant.cancel"`, `actorRole: "SYSTEM"`
+  e `payloadAfter.origem = "auto_inadimplencia"` — distingue das linhas do
+  cancelamento manual (`origem` ausente) e do lote (`lote_nunca_ativou`).
+- **Decisao do dono (21/08):** a regra vale para o PASSADO. Na primeira
+  execucao, as 13 unidades ja passadas de 7 dias sao canceladas — 11 delas ja
+  foram pagantes. Isso **move o churn** (ao contrario do cancelamento em lote
+  das "nunca ativou"): essas 11 estao na base do churn e migram de suspensa
+  para cancelada.
+- Testes: `overdue-policy.test.ts` (regua) e `overdue-sweep.test.ts` (as provas
+  antes de destruir, o dry-run e a falha parcial), verificados POR MUTACAO —
+  trocar o `max` por `??`, remover a guarda de ciclo pago ou inverter o padrao
+  de bloqueio da suspensao derruba o teste correspondente.
+
+### Cursos de autoria da unidade + split Asaas (2026-08-21)
+
+O catalogo era global e de dono unico: `Course` nao tinha `tenantId`, nem
+`createdByUserId`, nem marcador de origem — cursos so entravam por sync das duas
+fornecedoras e **nao existia POST de criacao de curso em lugar nenhum**, nem no
+/admin. A unidade passa a PRODUZIR curso proprio, escolher em quais vitrines ele
+e vendido e definir a comissao de quem vender. Isso traz o problema que o repo
+nunca teve: **uma venda cujo dinheiro pertence a mais de um tenant**.
+
+**As regras de dinheiro** (decisoes do dono, travadas na conversa):
+
+```
+Vitrine do proprio autor  -> produtor 100%, sem split e SEM os 5% da PMB
+Vitrine de outra unidade  -> vendedor c% (>=10) - PMB 5% - produtor o resto
+Vitrine PMB               -> a PMB e a vendedora: retem c% + 5%
+```
+
+- **Quem EMITE a cobranca e a vitrine que vendeu.** Escolha do dono, e a mais
+  segura: `Payment.tenantId` continua sendo o tenant da matricula, entao o
+  invariante de `assert-tenant-gateway.ts` (escrito depois do vazamento de
+  receita do Polo Betim) **vale sem nenhuma excecao**. O dinheiro cruza tenants
+  so pelas linhas de split, que sao explicitas e auditaveis.
+- **Tres modos de preco**, o produtor escolhe por curso: `FIXED` (preco igual em
+  toda vitrine), `MIN_PRICE` (piso; produtor e vendedor sobem juntos) e
+  `MIN_PRODUCER_NET` (o produtor recebe um valor fixo e a diferenca e toda do
+  vendedor — preco minimo passa a ser `authorAmount / (1 - c - f)`, senao a
+  comissao minima nao caberia).
+- **Desconto sai do bolso de quem vende, nunca do produtor:** a parte do produtor
+  e calculada sobre o preco DE TABELA e a taxa da PMB sobre o valor COBRADO. Sem
+  isso um cupom de 50% faria o produtor pagar por uma promocao que nao autorizou.
+  `computeSplit` recusa (`DISCOUNT_EXCEEDS_SELLER_SHARE`) quando o desconto
+  zeraria a parte do vendedor.
+- **`percentualValue` do Asaas incide sobre o LIQUIDO**, nao sobre o bruto: a
+  tarifa do gateway acaba rateada proporcionalmente entre os tres. Foi escolha —
+  percentual nunca estoura o liquido; `fixedValue` pode, e ai o split e BLOQUEADO
+  por divergencia. Os valores em `CourseSaleSplit.amount` sao o ESPERADO sobre o
+  bruto, e o creditado sai alguns centavos menor.
+
+**Arquitetura:**
+
+- **Autoria mora no `Course`, nao em tabela nova** (`authorTenantId` null = todo
+  o catalogo da PMB), pelo mesmo motivo de `precoVitrineMain`/`visibilityMode`:
+  os syncs preservam curadoria de proposito. `Course.distribution` e a escolha do
+  AUTOR; `visibilityMode` continua sendo a curadoria da PMB — eixos independentes,
+  os dois filtram.
+- **Ripple do unique:** `@@unique([provider, nome])` virou
+  `@@unique([provider, authorTenantId, nome])` + **indice unico PARCIAL**
+  (`WHERE author_tenant_id IS NULL`) preservando a garantia do catalogo da PMB —
+  Postgres trata NULL como distinto num composto. Como o Prisma nao faz
+  `findUnique` com coluna nula, `sync.ts` e `seed.ts` passaram a `findFirst`.
+  A clausula `authorTenantId: null` no match do sync EA e a trava que impede o
+  **sequestro**: sem ela, uma unidade publicando "Excel Basico" teria o curso
+  reescrito com os dados do feed todo dia as 6h.
+- **Motor PURO** em `src/lib/course-authoring/split.ts` — o simulador do painel
+  importa dali, entao o servidor e a tela nunca divergem no numero prometido.
+  `sellerIsProducer` devolve `lines: []`: a regra dos 100% mora num lugar so.
+- **Snapshot congelado** em `Enrollment.authorSplitSnapshot`: um carne paga ao
+  longo de meses e o produtor pode editar a comissao no meio. As linhas
+  realizadas ficam em `CourseSaleSplit`, `@@unique([paymentId, role])`.
+- **`asaasSplitsForEnrollment(enrollmentId)`** e o que faz o rateio ser
+  impossivel de esquecer: quem monta a cobranca chama com o id da matricula e
+  recebe o array. Esquecer o split e o pior defeito da feature — a venda
+  acontece, o aluno recebe o curso e o produtor simplesmente nunca e pago, sem
+  erro em lugar nenhum.
+- **`fulfill.ts` virou transacao INTERATIVA** nos dois `payment.create` (as
+  linhas precisam do id do Payment). Sao 3 operacoes — longe do lote que ja
+  quebrou sobre o pooler. Herda as tres camadas de idempotencia existentes.
+- **Gate unico `authoredSaleGate`** nas oito portas de venda, pela licao do
+  `GUARDIAN_REQUIRED` (nasceu numa rota so e duas portas seguiram cobrando
+  errado por meses). Ele forca `gateway = ASAAS` ignorando o
+  `tenantCheckoutMode` da loja — cair no MP calado venderia SEM repasse — e
+  responde **503 `SPLIT_GATEWAY_REQUIRED`** quando a loja nao tem Asaas.
+- **Carteira Asaas** (`Tenant.asaasWalletId`) descoberta por `GET /v3/wallets/`
+  com a chave que a unidade JA conecta: ninguem digita walletId (um caractere
+  trocado mandaria dinheiro para um desconhecido). Dois gates de alturas
+  diferentes: RECEBER exige so a carteira; VENDER curso de terceiro exige
+  `asaasConnected` + `asaasWebhookToken`, porque a cobranca nasce na conta dela.
+- **Distribuicao:** `ensureTenantCourses` ganhou filtro de origem — sem ele o
+  curso da unidade A entraria na vitrine de B, C e D ainda em rascunho. Curso da
+  rede so alcanca quem tem carteira: melhor nao aparecer do que aparecer e
+  quebrar no checkout. Nasce VISIVEL e a unidade desativa (decisao do dono).
+- **Preco validado na ESCRITA do `TenantCourse`**, individual e em massa — nao so
+  no checkout. Validar so no checkout deixa a loja num estado pior que erro: o
+  curso listado, a unidade achando que vendeu por R$ 1, e a recusa aparecendo com
+  o aluno na tela de pagamento.
+- **Webhooks `PAYMENT_SPLIT_*` ganharam handler.** Ja estavam no union de tipos e
+  caiam no `default:` silencioso. O que mais importa e o `DIVERGENCE_BLOCK`: o
+  Asaas da **2 dias uteis** para ajustar antes de CANCELAR o split e liberar o
+  valor inteiro ao emissor — passado o prazo em silencio, o produtor perde o
+  dinheiro daquela venda. O alerta vai ao SUPER_ADMIN **sem `category`**, para
+  nao poder ser silenciado por preferencia.
+- **Permissoes:** par novo `cursosAutorais.view/manage` nos DOIS catalogos.
+  Familia propria de proposito — definir o preco de um curso da PMB na vitrine
+  nao deveria habilitar publicar produto proprio na rede, com comissao e
+  repasse. No /admin **nao entra em `SUPER_EXCLUSIVE`** (dispararia o teste de
+  igualdade exata de `SUPER_EXCLUSIVE_BY_PRESET`); e curadoria, nao escalada.
+
+**Limites deliberados da v1:**
+
+- **Curso de autoria de terceiro VENDE SOZINHO** — nao entra em venda
+  multi-curso nem em pacote (bloqueado tambem na criacao/edicao de pacote). O
+  split e da cobranca INTEIRA: num carrinho misto o percentual do produtor
+  atingiria o curso da PMB. Mesma trava de "curso mensal so e vendido sozinho".
+- **Sem aprovacao da PMB** (decisao do dono): o produtor publica direto. A
+  contrapartida e reativa — aba "Cursos das unidades" em /admin/catalogo com
+  acao de PAUSAR, que tira das vitrines e **nao mexe em matricula** (cortar quem
+  ja pagou puniria a pessoa errada).
+- **Certificado** continua saindo com a marca do tenant VENDEDOR. Para curso de
+  autoria de terceiro isso merece decisao do dono (autor? vendedor? ambos?).
+- **Unidade que perde a carteira** com cursos de terceiro ja na vitrine: o
+  checkout fecha com `SPLIT_GATEWAY_REQUIRED`. Varredura que oculta esses cursos
+  fica como follow-up.
+
+**Dependencia fora deste repo:** as aulas ficam no LMS, que precisa expor
+`POST /api/v1/courses` (casca com dono), `PATCH /api/v1/courses/:id`,
+`POST /api/v1/sso/author-token` e `ownerTenantExternalId` no catalogo — contrato
+em `docs/api/lms-autoria-unidade.md`. **Regra de ouro do lado de la: curso com
+dono NAO entra no catalogo global** (o PMB o gravaria como curso da PMB e ele
+seria distribuido de graca para a rede). Enquanto `LMS_AUTHORING_ENABLED` nao for
+`true`, a camada comercial inteira funciona e o curso fica em RASCUNHO —
+publicar sem conteudo faria a venda ser cobrada e o provisionamento falhar com o
+aluno ja tendo pago.
+
+**Deploy:** migration `20260821_course_authoring` (aditiva, idempotente, sem
+backfill — `author_tenant_id` nasce null = catalogo da PMB). Envs opcionais:
+`ASAAS_PMB_WALLET_ID` (sem ela, descoberta pela conta-mae a cada checkout) e
+`LMS_AUTHORING_ENABLED`. **Prototipar o split em SANDBOX antes de producao** —
+cobranca avulsa com 2 linhas, carne 3x conferindo o split por parcela, carteira
+inexistente (tem que falhar no ato, nao na liquidacao) e estorno conferindo a
+reversao automatica.
+
+### Cancelamento por inadimplencia EXECUTADO + cron diario (2026-08-24)
+
+Primeira execucao real da regra escrita em 21/08 — ela nunca tinha rodado,
+porque a integracao Git da Vercel estava caida e producao servia codigo velho.
+
+- **13 unidades canceladas**, todas SUSPENDED, entre 9 e 32 dias de atraso
+  (~R$ 2.994/mes que ja nao entrava). Dry-run rodado antes: bateu exatamente com
+  a lista, zero adiadas. Cada uma com `audit_logs` action `tenant.cancel`,
+  `actorRole: SYSTEM`, `payloadAfter.origem = "auto_inadimplencia"`.
+- **Nenhum aluno foi tocado** — politica ausente => MANTEM o acesso
+  (`shouldBlockStudentsOnCancel`). Os 8 bloqueados ja estavam desde a SUSPENSAO
+  (a regra e oposta la, de proposito). Verificado por `updated_at`.
+- **Zero cobranca OVERDUE restante**; as abertas foram para `DELETING`
+  aguardando o webhook `PAYMENT_DELETED`. O `asaas_subscription_id` continua
+  gravado por historico — a assinatura foi cancelada no Asaas, e isso e
+  pre-requisito: `cancelTenant` aborta ANTES de mexer no banco se o Asaas falhar.
+- **`pg_net` estoura o timeout de 60s dele** enquanto o sweep ainda roda (13
+  cancelamentos x 2-4 chamadas ao Asaas). O job COMPLETA na Vercel (maxDuration
+  300), mas `net._http_response` fica com `status_code` null. Para conferir o
+  resultado, olhe o BANCO (status das unidades / `audit_logs`), nao a resposta
+  HTTP.
+
+**Cron passou de `0 */6 * * *` para `1 3 * * *`** = 00:01 de Brasilia. O horario
+nao e decorativo: a regua conta em DIA CIVIL BRASILEIRO, e as 03:01 UTC o dia ja
+virou no Brasil. `1 0 * * *` (00:01 UTC = 21:01 BRT do dia anterior) avaliaria o
+dia brasileiro ANTERIOR e atrasaria tudo em um dia. Efeito colateral aceito: a
+SUSPENSAO (D+3) sai pelo mesmo job e agora pode demorar ate 24h.
+
+### Autoria de curso pela unidade LIGADA em producao (2026-08-24)
+
+A camada comercial estava pronta desde 21/08, mas o LMS nao tinha nada do
+contrato: `POST /api/v1/courses` e `PATCH /courses/:id` respondiam **405**,
+`POST /sso/author-token` **404**, e `Course` **nao tinha dono**. A area
+`/autoria` de la era `requireAdmin()` — o proprio codigo dizia "nao e escopada
+por revenda". Com a flag ligada naquele estado, a unidade criaria a casca e o
+botao "Conteudo" nao abriria nada.
+
+**Os dois lados agora:**
+
+- **LMS** (`Area do Aluno PMB`, repo separado): `Course.ownerTenantExternalId`
+  (null = catalogo da plataforma), os tres endpoints, o campo no
+  catalogo/detalhe/`day-update`, e a sessao `role: "author"` presa a UM curso
+  (`src/lib/authoring-scope.ts`). **A invariante:** passa so quando
+  `ownerTenantExternalId === session.tenantExternalId` **E**
+  `id === session.courseId`. A primeira isola o catalogo da plataforma POR
+  CONSTRUCAO — la o dono e `null`. O curso dono e resolvido subindo pela
+  RELACAO da entidade (aula → modulo → curso), nunca pelo `courseId` do
+  FormData, que e do cliente.
+- **PMB**: `Tenant.courseAuthoringEnabled` — habilitacao COMERCIAL por unidade,
+  aba "Vitrine & extras" de /admin/revendedores/[id], molde de
+  `canSellResellers`. **Nao se confunde com `cursosAutorais.*`**, que e
+  permissao de PESSOA: o preset do dono e `owner: ALL`, entao sem a chave da
+  unidade TODA revenda produziria curso. Guard unico em
+  `lib/course-authoring/module-gate.ts`.
+
+**Publicar e BLOQUEANTE, nao best-effort.** O LMS recusa (409) curso sem aula,
+matriz ou categoria. O PMB espelhava isso em `afterResponse(...).catch(log)`:
+a recusa virava uma linha de log e o curso VAZIO ia para a vitrine — o aluno
+compraria e cairia num curso sem conteudo. Hoje o publicar AGUARDA o LMS e
+acontece ANTES da escrita na vitrine (409 devolve a mensagem DELE, que lista o
+que falta; qualquer outra falha e 502 fail-closed). Despublicar segue
+best-effort de proposito: tirar de venda e a direcao SEGURA, e bloquear
+impediria o produtor de tirar do ar o proprio curso porque a outra ponta caiu.
+
+**Validado ponta a ponta em producao (24/08)**, com a unidade
+`vocequervocepode`: casca com dono criada; curso fora do catalogo global
+(rascunho); token recusado para outra unidade (403); SSO de uso unico (replay →
+`/login?erro=autoria`); upload de capa gravando no MinIO; upload, presign e
+complete recusados (403) para curso e aula de outro dono; sem sessao 401.
+
+**Dois defeitos so apareceram na validacao, nao nos testes:** o SSO mandava o
+autor para `/curso-autoria/<id>` (o grupo `(autoria)` nao entra na URL — o
+editor e `/autoria/curso/<id>`), entregando um 404 com o token ja queimado; e as
+telas administrativas mandavam o autor para `/login`, beco sem saida para quem
+nao tem senha la (agora `requireAdminArea()` devolve ao curso dele).
+
+**Cuidado de deploy — a integracao Git da Vercel caiu em silencio.** Entre 21 e
+24/08 o projeto ficou com `link: null`: push em main deixou de gerar deploy e
+producao serviu codigo velho por 3 dias enquanto 4 commits "subiam". **Push
+aceito no GitHub NAO prova deploy** — conferir
+`gh api repos/<owner>/<repo>/deployments --jq .[0]`. Religado com
+`npx vercel git connect --yes`.
+
+### Identidade da unidade dentro do LMS (2026-08-24)
+
+So `brandName` e `logoUrl` chegavam a plataforma de aulas: o aluno via a logo da
+unidade sobre a paleta VERDE da PMB, e — desde a autoria — a propria unidade
+editava o curso dela numa casca com a marca da plataforma ("Minha Escola").
+
+- `TenantLink` ganhou `primaryColor`/`secondaryColor` (aditivo, `""` = padrao),
+  enviados por `PUT /api/v1/tenants/:id`.
+- **O mapeamento e COPIADO da vitrine do PMB** (`lms: src/lib/tenant-theme.ts` x
+  `pmb: src/app/loja/layout.tsx`): a primaria colapsa a rampa
+  `--color-pmb-green*`, a secundaria colapsa `--color-pmb-gold*`. As duas
+  aplicacoes compartilham a MESMA paleta — repetir o mapeamento e o que faz a
+  unidade ver a MESMA cor nos dois lugares. Sobrescrever a RAMPA (e nao so
+  `--primary`) e o que re-skina a casca: a barra lateral da autoria pinta com
+  `--color-pmb-green-700` direto.
+- Vale para a autoria E para a area do aluno, incluindo o `<head>`
+  (`<title>`, `application-name`, `theme-color`) — a aba dizia "Minha Escola"
+  enquanto a pagina ja mostrava a marca da unidade.
+- **A cor vem de outro sistema e entra dentro de `<style>`**: `safeHex` so aceita
+  `#RGB`/`#RRGGBB` e DESCARTA o resto. Um `}` solto fecharia a regra e o resto
+  viraria CSS arbitrario na pagina de todo aluno daquela revenda.
+- **Campo AUSENTE preserva; `""` limpa.** Das quatro chamadas de
+  `syncTenantBrandingToLms`, tres nao conhecem as cores (upload de logo x2 e
+  criacao da revenda) — por isso `?? undefined` e nao `?? ""`, senao trocar a
+  logo apagaria a identidade. Ha teste, verificado por mutacao.
+- **Backfill feito (88/88)**: a cor so chegaria ao LMS quando a unidade salvasse
+  a Personalizacao. Decisao do dono: empurrar todas, iguais a vitrine —
+  inclusive as 43 que nunca escolheram cor e estao no **azul padrao do banco**
+  (`#2563eb`), que ja e o que a vitrine delas mostra. (Cuidado: o default do
+  schema e AZUL, nao o verde da plataforma — por isso `isCustomColor` compara com
+  `#025918` e praticamente toda unidade conta como "custom".)
+
+### Responsabilidade pelo conteudo de curso de autoria (2026-08-24)
+
+O catalogo passou a ter DUAS origens que ninguem distingue de fora: curso da PMB
+(curado) e curso que uma unidade produziu por conta propria. Tres superficies
+passam a dizer de quem e o conteudo — e de quem NAO e:
+
+- **Vitrine (PMB e revenda)** — `AutoriaNote`, bloco completo na pagina do curso:
+  responsabilidade integral da unidade pelo material E pela autoria,
+  originalidade, veracidade, atualizacao e adequacao legal (incl. direitos
+  autorais e de imagem); isenta NOMINALMENTE as tres marcas e diz para quem
+  reclamar. Componente SEPARADO da `RegulamentacaoNote` de proposito: aquela e
+  texto juridico fechado sobre curso livre e vale para TODO curso.
+- **Certificado** — linha discreta no VERSO, dentro do corpo da fundamentacao
+  legal (6.8pt). A FRENTE e do aluno: uma isencao ali mudaria o tom do documento
+  que ele mostra a um empregador. `authorName` != `unidade` (quem produziu vs.
+  quem emitiu/vendeu). **Exigiu bump de `RENDER_REVISION_AT` para 2026-08-25** —
+  sem ele a nota so sairia em certificados NOVOS.
+- **Area do aluno (LMS)** — "Conteudo de {unidade}" como item de META no card,
+  por ULTIMO. Bloco juridico em cada card competiria com o ato de estudar.
+
+**Nenhuma das tres renderiza quando o curso e da PMB** (a esmagadora maioria):
+uma nota dizendo que a plataforma "nao se responsabiliza" impressa num curso da
+PROPRIA plataforma seria pior que nota nenhuma. Verificado por mutacao nas tres.
+
+### Video obrigatorio so FORA da propria vitrine (2026-09-24)
+
+Curso de autoria vendido **so na vitrine da unidade** (`distribution = OWN_ONLY`)
+pode ter aula sem video — um curso so de PDF. Em `OWN_AND_PMB` e `NETWORK` toda
+aula precisa de video: quem compra na vitrine da PMB ou de outra unidade nao
+escolheu comprar apostila.
+
+- **A regra mora no LMS** (`lessonVideoRequired` em `src/lib/publishCheck.ts`
+  de la), dentro do `checkPublishProblems` que ja decide a publicacao. O PMB
+  so manda o alcance: na criacao da casca (`OWN_ONLY`) e em TODO
+  `setLmsCoursePublished`, que agora recebe `distribution` como 3o argumento.
+- **O alcance que desce e o PEDIDO, nao o gravado** (`data.distribution ??
+  course.distribution`). Mandar `course.distribution` faria o LMS checar contra
+  "so na minha vitrine" e aprovar a ida de um curso so de PDF para a rede.
+  Teste de forma em `publish-gate.test.ts`.
+- **Curso ja publicado tambem e barrado.** Toda edicao de curso publicado passa
+  pelo ramo bloqueante de publicar; o LMS re-checa quando o alcance muda (antes
+  o atalho idempotente dele respondia OK sem olhar nada) e o 409 volta ao
+  produtor com a saida: "Para vender fora da sua loja, toda aula precisa de
+  video. So na sua loja, o video e opcional."
+- **So a publicacao checa.** Tirar o video de uma aula DEPOIS de publicado para
+  a rede nao passa por aqui — mesma lacuna que ja existia para matriz e prova.
+- E-book nao tem aula: a regra nao se aplica, e o aviso do seletor de alcance
+  no painel nao aparece para ele.
+
+### Regras pedagogicas: a unidade define como as aulas abrem (2026-08-25)
+
+Antes, o aluno navegava livre pelo curso: as unicas travas eram a PROVA (que
+para a sequencia) e a COTA DE PARCELAMENTO. A unidade passa a definir tres
+eixos INDEPENDENTES — ordem, ritmo e horario — com padrao por unidade e
+override por curso NAQUELA vitrine.
+
+- **Motor PURO e DUPLICADO de proposito.** `src/lib/pedagogia/{policy,gate,
+  br-time}.ts` no PMB e `src/lib/pedagogia.ts` no LMS, com os MESMOS 30 testes
+  e os mesmos nomes de caso — e o que faz a divergencia aparecer. Precedente:
+  `tenant-theme.ts`. O LMS conhece a grade e decide aula a aula sem uma chamada
+  de rede por clique; o PMB precisa das mesmas respostas para a tela de
+  configuracao e para a janela na fornecedora legada.
+- **Alcance HONESTO, e e a decisao mais importante da feature.** Em producao,
+  448 das 589 matriculas vivas estao na fornecedora legada, cuja API nao tem
+  gate por aula, nem progresso por aula, nem webhook — o unico controle e
+  `usuarios/editar` ativo/bloqueado, **por login**. Entao: os tres eixos valem
+  na plataforma propria; **so o horario** alcanca a legada, e fechando o acesso
+  INTEIRO do aluno. A tela do painel diz isso em numeros antes de a unidade
+  configurar — mas **sem nomear a fornecedora**, que a invariante de sigilo
+  (`students/course-access.test.ts`) proibe: ela fala do EFEITO por curso.
+- **`Student.status` nao tinha espaco para um terceiro motivo.** BLOQUEADO ja e
+  inadimplencia e DEVEDOR ja e a cota; reusar qualquer um faria a liberacao da
+  manha devolver acesso a quem deve. Dai a coluna `scheduleBlockedAt` como
+  DISCRIMINADOR: `setStudentScheduleBlock` so bloqueia quem esta ATIVO e so
+  libera quem carrega a marca.
+- **A corrida que quase passou:** enquanto o aluno esta travado pelo relogio, a
+  unidade pode ficar inadimplente — e `blockTenantStudents` PULA quem ja esta
+  BLOQUEADO, entao ninguem carimba. Liberar as 08:00 devolveria acesso de
+  unidade suspensa. Por isso `hasStrongerBlock` + o estado `handoff`: soltamos a
+  marca e deixamos o bloqueio de pe. Testado e VERIFICADO POR MUTACAO (5/5).
+- **A janela nao toca no LMS**, so na legada: la ela e aplicada aula a aula pelo
+  proprio LMS, que e mais fino. Duas travas disputando a decisao deixariam o
+  aluno preso quando uma perdesse a corrida.
+- **REVISAO nunca e barrada** por ordem, gotejamento ou cota — a cota limita o
+  AVANCO, e travar o que o aluno ja conquistou seria apaga-lo. A JANELA, sim,
+  vale para a revisao: ela e sobre QUANDO se estuda. E ela vem PRIMEIRO na
+  ordem de avaliacao, senao o aluno fora do horario receberia "conclua a aula
+  anterior" — conselho que tambem nao funcionaria.
+- **`parsePolicy` resolve todo valor invalido para o lado MENOS restritivo** e
+  nunca lanca: e lido no caminho quente do player, e um JSON corrompido travaria
+  quem pagou. Cota `0` vira "sem cota"; janela invertida e descartada INTEIRA
+  (guardar meia janela fecharia 24h); os sete dias marcados viram `[]`. O
+  formulario usa um schema SEPARADO que RECUSA com mensagem — normalizar calado
+  faria a unidade salvar "das 22h as 2h" e nao travar ninguem.
+- **`null` no curso HERDA, e herdar se propaga mandando `null`** ao LMS (limpa o
+  override da matricula). Mandar a politica da unidade resolvida congelaria a
+  matricula na regra da epoca, e editar o padrao depois nao a alcancaria.
+- **O gate DURO mora em `lessonAccess`** (LMS), o funil por onde passam
+  progresso, anotacoes e comentarios — rota nova herda a regra sem fazer nada. A
+  matricula chega PRONTA do chamador: recarrega-la sairia uma vez por
+  salvamento de posicao do player, o endpoint mais chamado do sistema.
+- **Fuso:** o LMS nao tinha nenhum helper de horario brasileiro. `brOffsetMinutes`
+  e derivado do Intl e nao constante `-180` — o Brasil ja teve horario de verao,
+  e a constante errada deslocaria toda janela em uma hora sem ninguem perceber.
+- **Permissao `pedagogia.view/manage`** (familia propria): precificar e decisao
+  comercial, definir como o aluno estuda e pedagogica, e a unidade costuma
+  entregar as duas a pessoas diferentes. A regra alcanca aluno que JA COMPROU —
+  por isso toda alteracao vai para `audit_logs` com antes e depois.
+- **Deploy:** migration `20260825_pedagogia` (aditiva, idempotente, sem backfill
+  — `pedagogy_policy` nasce NULL = comportamento de hoje). No LMS, `db push`
+  cria as duas colunas com default `""`. Falta **agendar `pmb-pedagogia-janela`
+  no pg_cron** (job novo NAO se agenda sozinho — conferir `cron.job` apos o
+  deploy) e rodar `?dryRun=1` antes da primeira execucao real.
+
+### Curso renomeado na fornecedora virava duplicata invendavel (2026-08-31)
+
+A EAD Carelli nao conseguia liberar "Preparatorio para Corretor de Imoveis":
+**"Falha ao matricular o aluno na plataforma de aulas. Tente novamente."** —
+conselho que nunca funcionaria, porque repetir nao inventa o id que faltava.
+
+- **A causa:** o sync EA identificava o curso pelo **NOME**, que e MUTAVEL na
+  fornecedora. Em 29/08 ela renomeou o curso **267** de "Auxiliar Corretor de
+  Imoveis" para "Preparatorio para  Corretor de Imoveis" (com dois espacos). O
+  match por nome nao achou nada, o sync CRIOU uma linha nova — e ela nasceu **sem
+  `plataformaCourseId`**, porque o 267 ja estava tomado pela linha antiga
+  (`@unique`) e o `canSetEaCourseId` desistia **em silencio**. Sem id, o
+  provisionamento morre em `linkCourseToStudent`; o gate ja era fail-closed, o
+  problema e que a linha chegou a ser vendavel.
+- **Raio real, maior do que o chamado:** a duplicata caiu na vitrine de **18
+  unidades** (via `ensureCourseForResellers`), com o preco velho na copia velha e
+  o preco novo na copia nova. Nenhum aluno chegou a pagar — a unica matricula era
+  a tentativa da Carelli, ja revertida — mas no **checkout publico** o aluno
+  PAGA primeiro e o provisionamento falha depois (`provisioning.ok=false` so
+  alerta o SUPER_ADMIN). Foi sorte, nao desenho.
+- **`ea_course_id` so existe por convencao de URL.** O endpoint `cursos/listar`
+  nao devolve o id numerico: ele e extraido da capa
+  (`/imagemcursos/<id>.<ext>`, `extractCourseIdFromCapa`). E o unico
+  identificador estavel que o feed expoe — e mesmo assim some quando o admin da
+  fornecedora sobe uma capa com outro nome de arquivo. Por isso o gate de
+  visibilidade abaixo nao e redundante com o fix do sync: **o buraco tem duas
+  entradas**.
+- **Fix 1 — identidade pelo ID, nome so como fallback** (`upsertEaCourse` em
+  `catalog/sync.ts`): casa primeiro por `plataformaCourseId`, depois por nome.
+  Renomeacao vira UPDATE da linha existente. `authorTenantId: null` continua nas
+  DUAS consultas (trava anti-sequestro). Renomeacao vai para o log
+  (`catalog.sync_ea.renamed`) e id ja tomado por outra linha virou WARN
+  (`catalog.sync_ea.duplicate_platform_id`) em vez de silencio.
+- **Fix 2 — `COURSE_PROVISIONABLE`** (`catalog/visibility.ts`): "curso que a
+  plataforma de aulas nao consegue matricular nao pode ser vendido". Mora em
+  `visibilityFilter` e em `catalogScopeForTenant` — os pontos por onde as
+  consultas de vitrine e a propagacao **ja passam** —, e ao lado de
+  `COURSE_HAS_PRICE` na vitrine mae. Gate que precisa ser lembrado a cada query
+  nova e gate que uma hora fica de fora.
+- **Fix 3 — recusa na porta de venda.** Os identificadores entraram no
+  `AUTHORED_COURSE_SELECT`, entao `authoredSaleGate` (o gate unico das oito
+  portas) recusa com **409 `COURSE_NOT_PROVISIONABLE`** nomeando o curso, ANTES
+  da cobranca. Ele roda ANTES do gate de rateio de proposito: numa loja sem
+  Asaas, um curso de terceiro sem id responderia `SPLIT_GATEWAY_REQUIRED` e
+  esconderia o defeito real.
+- **Pacote recusa INTEIRO**, nao remove o curso da lista: quem compra "5 cursos"
+  e recebe 4 pagou por algo que nao foi entregue, e o silencio esconderia
+  justamente o defeito.
+- **Curso novo sem id nasce `hiddenMain: true`.** O gate ja o tiraria das
+  vitrines; nascer oculto faz o estado APARECER em /admin/catalogo em vez de o
+  curso simplesmente sumir.
+- **Sync ficou tolerante a falha por linha.** O corpo do loop virou
+  `upsertEaCourse` com try/catch por curso. Sem isso, o proprio fix 1 abriria um
+  risco novo: casar por id e renomear pode colidir com o indice unico parcial
+  (`courses_provider_nome_pmb_key`) quando a fornecedora troca dois nomes entre
+  si, e UM throw abortava o catalogo inteiro — a rede passaria o dia com o
+  catalogo da vespera.
+- **Producao remediada na hora** (nao esperou deploy): sinais de interesse
+  (`student_leads`, `visitor_events`) e a matricula CANCELLED foram REPONTADOS
+  para `ea_267` (e o mesmo curso — apagar registro de evento real e pior), as 18
+  `tenant_courses` da duplicata apagadas (todas as 18 unidades ja tinham
+  `ea_267` precificado e visivel), a duplicata removida e `ea_267` renomeada. O
+  bloco roda com guardas: aborta se a duplicata tiver certificado, pagamento ou
+  matricula viva. **Decisao do dono:** os R$ 700 que a Carelli definiu na
+  duplicata foram levados para a linha que sobreviveu (estava em R$ 197).
+- **A ordem importa na remediacao:** apagar a duplicata ANTES de renomear
+  `ea_267`, senao o indice unico parcial recusa o nome novo.
+- **Testes verificados POR MUTACAO** (`catalog/sync.test.ts`,
+  `catalog/visibility.test.ts`, `course-authoring/checkout-gate.test.ts`):
+  voltar a casar so por nome, tirar o `hiddenMain` fail-closed, remover o
+  try/catch por curso ou tirar o gate de qualquer uma das consultas derruba o
+  teste correspondente.
+
+
+### Periodicidade da assinatura + venda direta (2026-09-03)
+
+A assinatura de aluno so existia MENSAL: `SubscriptionPlan.price` era a
+mensalidade, `addOneMonth` era a renovacao inteira, e a unica forma de contratar
+era o aluno chegar sozinho na vitrine. Agora o plano escolhe entre **mensal,
+trimestral, semestral, anual e VITALICIO**, e a assinatura entrou nas duas
+telas de venda direta (/admin/vendas e /painel/vendas).
+
+- **`SubscriptionInterval` e o discriminador**, e o VITALICIO nao e "um ciclo
+  muito longo": e uma cobranca UNICA com acesso permanente. Trata-lo como
+  recorrencia erraria em quatro lugares ao mesmo tempo — criaria assinatura no
+  gateway (cobrando de novo la na frente), deixaria a varredura de carencia
+  cancelar quem pagou, mostraria "proxima cobranca" para quem nao tem nenhuma, e
+  o cancelamento tentaria parar uma recorrencia que nunca existiu.
+- **Fonte unica em `src/lib/subscriptions/interval.ts`** (PURO, sem Prisma —
+  os formularios do /admin e do /painel sao client components). Ali moram meses
+  por ciclo, rotulos, `addInterval` (com clamp de fim de mes) e a traducao para
+  os DOIS gateways. Os nomes do Asaas nao batem com os nossos de proposito
+  (`SEMIANNUAL` la e `SEMIANNUALLY`, `ANNUAL` e `YEARLY`); a traducao num lugar
+  so evita a assinatura recusada por nome invalido. O MP conta em MESES, nunca
+  em dias — 90 dias nao e um trimestre e a data deslizaria a cada ciclo.
+- **A periodicidade e CONGELADA em `StudentSubscription.interval`**, pelo mesmo
+  motivo de `priceAtPurchase`: e ela que a renovacao usa para empurrar
+  `currentPeriodEnd`. Ler do plano faria um assinante mensal virar anual (ou
+  perder o vitalicio) no dia em que alguem editasse o catalogo. As duas telas de
+  plano avisam que editar so alcanca contratacoes NOVAS.
+- **`interval` entrou em `SubscriptionAccessInput` como campo OBRIGATORIO.** E o
+  compilador que passa a exigi-lo em todo `select` que alimenta a decisao de
+  acesso — foi assim que os 5 call sites apareceram sozinhos. Sem isso, uma
+  consulta nova esqueceria o vitalicio e cortaria o acesso de quem pagou.
+- **O vitalicio nunca e cancelado, e a trava e DUPLA**: filtro
+  `interval: { not: "LIFETIME" }` na varredura + o predicado puro
+  `subscriptionShouldCancel`. Duas porque o preco do erro e altissimo — cancelar
+  revoga o curso na fornecedora legada, e la desvincular APAGA o progresso do
+  aluno. A guarda do predicado nao e redundante: ela pega o vitalicio marcado
+  `PAST_DUE` por engano, que "nao libera + tem prazo vencido" transformaria em
+  cancelamento.
+- **`currentPeriodEnd` continua NULL no vitalicio.** Gravar uma data distante
+  seria uma mentira que a varredura acabaria cobrando. Como o campo deixou de
+  servir para saber se ja houve um 1o ciclo, `settleSubscriptionCycle` passou a
+  olhar `startedAt`.
+- **Webhook do Asaas ganhou rota por `externalReference`.** A cobranca vitalicia
+  e AVULSA: chega sem `subscription` e caia no fallback de "mensalidade avulsa da
+  unidade" — o aluno pagava, a assinatura ficava PENDING para sempre e ele nunca
+  via o catalogo. O corpo do tratamento virou
+  `handleStudentSubscriptionPayment`, chamado pelos dois caminhos (`pmb_sub_<id>`
+  e `asaasSubscriptionId`), porque duas resolucoes com codigo duplicado
+  divergiriam em silencio.
+
+**Venda direta de assinatura** (`src/lib/subscriptions/direct-sale.ts`, nucleo
+compartilhado pelas duas rotas — a licao do `GUARDIAN_REQUIRED`, que nasceu numa
+rota so e deixou duas portas cobrando errado por meses):
+
+- **Nao cobra na hora.** O vendedor nao tem o cartao do aluno em maos, entao a
+  cobranca nasce EM ABERTO (`billingType: UNDEFINED` no Asaas, preapproval
+  `status: "pending"` no MP) e o aluno escolhe o meio na fatura/autorizacao do
+  gateway. Mesmo desenho da venda direta de curso mensal que ja existia.
+- **`checkoutUrl` e gravado na linha.** O link so e devolvido UMA vez, na
+  resposta; sem a coluna o vendedor que fechasse a aba perdia a unica copia.
+  Mesmo papel de `Enrollment.asaasInvoiceUrl`. A lista so o oferece enquanto a
+  assinatura esta PENDING — numa ja ativa o link antigo levaria a uma fatura
+  quitada.
+- **`soldByUserId` + `ctx.scope.assinaturas`.** A venda de assinatura NAO gera
+  matricula (elas nascem sob demanda, uma por curso aberto), entao ela sumiria
+  das duas telas de "vendas diretas", que consultam `Enrollment`. As paginas e
+  as APIs passaram a unir os dois models numa linha so. O recorte de carteira
+  precisou de um campo PROPRIO no `PainelScope`: `scope.vendas` e tipado para
+  `Enrollment` e nao compila em `StudentSubscription` — e re-derivar o recorte
+  dentro da rota e exatamente o padrao que ja produziu vazamento aqui.
+- **Sem cupom, sem carne, sem bolsa** (recusado no schema das duas rotas e
+  escondido nas duas telas). Cupom: `StudentSubscription.couponId` existe mas
+  NUNCA foi escrito por nenhum checkout — acorda-lo so aqui criaria o unico
+  lugar do sistema onde um cupom desconta recorrencia, com semantica que ninguem
+  definiu. Carne: nao existe "assinatura em 6x". Bolsa: sem cobranca nao ha
+  recorrencia a criar no gateway. O desconto MANUAL do vendedor passa, respeita
+  o teto dele e **vale para TODAS as cobrancas** (o gateway guarda UM valor por
+  assinatura) — as duas telas dizem isso antes de confirmar.
+- **Escolher assinatura zera bolsa/cupom/carne no estado do formulario.** Os
+  controles somem, mas o estado ficaria: um `bolsista` verdadeiro invisivel
+  mostraria "Total R$ 0" num resumo de venda que vai cobrar o valor cheio.
+
+**Consertos de rota que a feature expos:**
+
+- `cancelSubscriptionAccess` cancelava a assinatura Asaas SEMPRE com
+  `motherAsaasKey()`. Com a chave errada o Asaas responde 404 silencioso e a
+  cobranca do aluno de revenda seguiria viva para sempre. Passou a usar
+  `resolveEnrollmentGatewayKeys`, como o ramo do MP logo abaixo ja fazia.
+- O preapproval do MP nunca mandou `notification_url`: a renovacao de uma
+  assinatura vendida por revenda caia no processador da PMB e o ciclo nunca era
+  reconhecido.
+- O gate "esta loja aceita assinatura apenas no cartao" (MP) rodava ANTES de
+  carregar o plano. A restricao e da RECORRENCIA, nao da loja — uma compra
+  VITALICIA no MP e um pagamento comum e aceita PIX e boleto.
+
+**Deploy:** migration `20260903_subscription_intervals` (aditiva, idempotente,
+sem backfill — `interval` nasce `MONTHLY` nos dois models, que e o unico
+comportamento que existia). Nada a ligar: plano novo nasce mensal e so muda se
+alguem escolher outra periodicidade na tela.
+
+**Limites deliberados:** a venda direta do /admin manda o aluno para a fatura do
+gateway (a do /painel deixou de mandar em 2026-09-14, ver abaixo); e um plano cujo escopo alcance curso de
+autoria de OUTRA unidade nao passa por `authoredSaleGate` (o rateio e da
+cobranca, e uma assinatura cobre um conjunto que muda sozinho) — hoje isso nao
+acontece porque `planCourseWhere` so alcanca o que a vitrine vende, mas e o
+ponto a revisitar se cursos de terceiros entrarem em plano.
+
+
+### Comissao de indicacao aparece no dia 1, nao no dia 20 (2026-09-09)
+
+O valor a pagar so existia no dia 20: o cron `pmb-referral-monthly-payout`
+rodava uma vez por mes e, na MESMA execucao, fechava a competencia, liberava a
+comissao e montava a lista de pagamento. Antes disso nao havia numero nenhum em
+lugar nenhum — nao dava para pagar um indicador antes da data porque ninguem
+sabia quanto era.
+
+- **Os dois eventos foram SEPARADOS.** Dia 1: a competencia fecha, a comissao e
+  apurada e o `ReferralPayout` (a lista do financeiro) nasce ja com o valor
+  final. Dia 20 (`SystemSettings.referralPayoutDay`): a comissao e LIBERADA
+  (PENDING -> AVAILABLE), como sempre. O financeiro paga em qualquer ponto entre
+  os dois.
+- **A antecipacao mexe no PAYOUT, nunca no `status` da comissao.** Promover para
+  AVAILABLE no dia 1 mudaria a promessa que a unidade le no painel ("liberado
+  dia 20") e o extrato dela. Por isso `processMonthlyPayouts` passou a recolher
+  tambem as PENDING cujo `availableAt` cai DENTRO deste mes — a regua e
+  `anticipationCutoff` (`lib/referrals/payout-window.ts`, PURO): o 1o instante
+  do mes seguinte, em UTC porque `availableAt` tambem e gravado em UTC.
+  Competencia que so vence no mes que vem fica de fora: seria adiantar mes nao
+  apurado.
+- **O CAS do vinculo passou a aceitar `PENDING`** (`status: { in: [...] }`).
+  Continua sendo um CAS por status de proposito — e ele que impede vincular uma
+  comissao CANCELADA por clawback entre a leitura e a escrita.
+- **`ReferralPayout.dueAt`** guarda a data prevista de liberacao (a MAIOR
+  `availableAt` do payout — a menor prometeria uma data em que parte do valor
+  ainda estaria retida). Sem a coluna, a tela nao distingue "vence dia 20" de
+  "ja venceu": a linha do dia 1 leria como pagamento atrasado. Migration
+  `20260909_referral_payout_due_at` (aditiva, idempotente, sem backfill —
+  payout antigo fica NULL, que e a leitura correta: todos nasceram no dia da
+  liberacao).
+- **O valor CONGELA no dia 1**, porque `computeMonthlyCommissions` pula
+  competencia ja vinculada a payout. Na pratica nao se perde janela de correcao
+  (o fechamento antigo tambem congelava no ato), e fechar logo apos o mes e MAIS
+  correto: `activeNowCount` conta status de HOJE, entao unidade criada no meio do
+  mes corrente contamina menos a faixa da competencia passada.
+- **O gate de clawback no `markPayoutPaid` passa a valer por 19 dias a mais** —
+  e o que impede pagar, no dia 5, uma comissao que foi estornada no dia 10.
+- **Cron:** `'0 5 20 * *'` -> `'0 5 1,20 * *'` em `prisma/sql/pg_cron_jobs.sql`.
+  **Mudanca de agendamento NAO se aplica sozinha**: rodar o `cron.schedule` do
+  arquivo no Supabase apos o deploy e conferir em `cron.job`.
+- Testes verificados POR MUTACAO (`payout-window.test.ts`,
+  `payout-antecipacao.test.ts`): tirar o ramo PENDING da selecao, deslocar o
+  cutoff em um mes ou voltar o CAS para so `AVAILABLE` derruba o caso
+  correspondente.
+
+### Tipo de conteudo: curso ou e-book (2026-09-09)
+
+O catalogo so tinha uma forma de produto. Agora `Course.contentType`
+(`COURSE`|`EBOOK`) discrimina, e o e-book compartilha TODA a camada comercial —
+matricula, cobranca, cupom, pacote, split de autoria, assinatura, inadimplencia.
+O que muda e o que o aluno RECEBE e, por consequencia, o que a pagina de venda
+promete.
+
+- **So a fornecedora propria (LMS) produz e-book.** A legada (EA) e uma
+  plataforma de aulas em video e nao tem o conceito; o sync dela nunca toca o
+  campo e o default cobre todo o catalogo existente. O tipo e do LMS, que e o
+  dono do conteudo, e desce pelo sync como o resto (`sync-lms.ts`).
+- **O tipo e definido na CRIACAO e nao muda depois** — nem no PMB, nem no LMS,
+  nem pela API. Um curso ja montado que virasse e-book perderia modulos, aulas e
+  provas de vista, sem caminho de volta; e reescreveria o que o comprador viu na
+  pagina de venda. Trocar de tipo e criar outro conteudo. Por isso sao DOIS
+  BOTOES ("Novo curso" / "Novo e-book") e nao um seletor dentro do formulario.
+- **Fonte unica:** `src/lib/catalog/content-type.ts` (PURO — os formularios de
+  venda sao client). Ali moram o vocabulario (`contentLabel`,
+  `contentAccessLabel`, `contentCardMeta`) e as DUAS regras que dependem do tipo:
+  `canIssueCertificate` e `isPaceGateApplicable`. O arquivo e curto de proposito:
+  quanto menos o sistema perguntar "que tipo e isto?", menos lugares divergem.
+- **Pagina de venda SEPARADA, nao um `if`**: `EbookDetailView` x
+  `CourseDetailView`. Aquela promete "N aulas em video", "carga horaria",
+  "certificado reconhecido nacionalmente", "assistir pelo celular" e "conclua
+  todas as aulas" em oito lugares — um discriminador espalhado por ela viraria um
+  componente ilegivel, e a primeira promessa que alguem esquecesse de gatear
+  seria vendida. **O DINHEIRO e compartilhado** (`offer-panel.tsx`, extraido do
+  curso): o "De R$", o "Nx sem juros", o carne no boleto e a mensalidade sao a
+  mesma conta, e duas copias divergiriam na tela em que a pessoa decide pagar.
+- **E-BOOK NAO EMITE CERTIFICADO.** O certificado e documento de CURSO LIVRE
+  (Lei nº 9.394/96 + Decreto nº 5.154/2004): declara carga horaria, conclusao
+  apurada e traz matriz curricular no verso. Num e-book a "conclusao" e o proprio
+  leitor dizendo que terminou, sem apuracao nenhuma. O gate mora no NUCLEO
+  (`issueCertificateIfEligible` -> `NotCertifiableError`) e nao em cada tela,
+  pela licao do `GUARDIAN_REQUIRED` — a emissao tem quatro portas (automatica
+  pelo progresso EA, delta do LMS, manual do /admin e do /painel, botao do
+  aluno). **`force` NAO abre excecao**: o SUPER_ADMIN pode forcar uma emissao
+  travada pela cota, mas ninguem transforma um e-book em curso livre.
+- **A `RegulamentacaoNote` NAO renderiza em e-book** — aquele texto declara que o
+  produto e um curso livre regulamentado. Imprimi-lo ali seria afirmacao legal
+  falsa. A `AutoriaNote` renderiza, com `kind="ebook"`: mesmo texto juridico com
+  o objeto certo (enumerar "aulas, exercicios e avaliacoes" num e-book descreve
+  outro produto, e clausula que descreve outra coisa nao protege ninguem).
+- **E-book fica FORA da cota de aulas.** A cota compara a fracao paga com a
+  fracao de AULAS assistidas e desce ao LMS como teto de aulas liberadas; um
+  arquivo nao tem aulas, e o progresso dele so assume 0 ou 100 — quem marcasse
+  "li" seria travado no ato. `evaluatePaceGate` trata como `paceExemptAt`:
+  **limpa** a marca de quem ja estava travado, senao o flag prenderia o aluno
+  numa trava que ninguem mais reavalia. **Consequencia aceita, e ela e comercial:
+  e-book vendido em 6x fica inteiro disponivel desde a 1a parcela** — quem para
+  de pagar cai na trava de inadimplencia, que revoga o acesso. Fatiar um PDF por
+  parcela exigiria servir intervalos de pagina, o que o leitor nao faz e o
+  download derrubaria de qualquer forma.
+  `PACE_GATED_CONTENT_WHERE` fica SEPARADO de `PACE_GATED_WHERE` (que tem teste
+  de PARIDADE com `isPaceGatedPlan`, e plano nao sabe o que esta sendo vendido);
+  ele so evita trabalho desperdicado na varredura e numeros de impacto mentirosos
+  em /admin/configuracoes/cota-aulas.
+- **Cards, confirmacao e area do aluno tambem mudam.** O card trocava "N aulas"
+  por "0 aulas" e prometia "Certificado" — agora `contentCardMeta` (fonte unica,
+  usada pelos TRES mapeadores de card) diz "84 paginas" e a linha vira "Acesso
+  imediato". A confirmacao dizia "Matricula realizada" e "assista quando quiser".
+  O CTA da area do aluno vira "Ler e-book" e o SSO leva DIRETO ao leitor
+  (`returnUrl: /curso/<slug>/ler`, que e path interno do LMS).
+- **Deploy:** migration `20260909_course_content_type` (aditiva, idempotente, sem
+  backfill — `content_type` nasce `COURSE` em todas as linhas, que e o que elas
+  sao). Nada a ligar: o e-book so aparece quando o LMS mandar um no sync. O LMS
+  precisa estar na versao que devolve `contentType` em `GET /api/v1/courses` —
+  campo ausente resolve para curso, entao a ordem de deploy nao quebra nada.
+
+### Comissao de indicacao virou rateio de RECEITA (2026-09-09)
+
+Duas decisoes do dono, no mesmo dia, que mudam o que o programa remunera:
+
+**1. Unidade que nunca pagou nao entra em conta nenhuma.** O caso que expos:
+`desenvolve tamarana` estava ACTIVE com plano de R$ 239, `activatedAt` nulo e a
+unica cobranca DELETED — nunca entrou um centavo, e mesmo assim ela subia a
+faixa e valia R$ 75. Predicado reusado de `lib/tenants/lifecycle.ts`
+(`EVER_PAID_TENANT_WHERE`), o MESMO do churn: status de cobranca e mutavel
+(estorno reescreve a linha), por isso `paidAt`/`markedPaidAt` entram no OR, e
+`activatedAt` NAO prova pagamento (backfill da migration 20260620). Vai nas TRES
+consultas (faixa por ativacao, faixa por ativas, universo) — aplicar so numa faz
+as metades da regra discordarem sobre quem e uma indicada valida.
+
+**2. O valor FIXO virou PROPORCIONAL ao caixa do mes** (`lib/referrals/plano-base.ts`):
+
+```
+comissao da unidade = rate x (recebido no mes / preco de TABELA do plano)
+```
+
+- **O denominador nunca e `planValue`** — e exatamente onde a cortesia fica
+  gravada (a rota de billing o sobrescreve sem historico). Usa-lo daria
+  `recebido/planValue = 1` para toda unidade com desconto e a regra viraria
+  no-op justo no caso que ela existe para cobrir. Os precos de tabela sao dois:
+  **PRO R$ 239** (com o modulo Automacao) e **Profissionaliza R$ 209**;
+  `Tenant.automationEnabled` e o discriminador.
+- **Proporcao com TETO 1 e PISO 0.** O teto nao e detalhe: sem ele, quitar DUAS
+  faturas no mesmo mes pagaria comissao dobrada (a faixa e por unidade/mes, nao
+  por fatura), e a unidade cuja flag de automacao nao bate com o preco pagaria
+  mais que a faixa cheia. O piso impede que um estorno lancado como cobranca
+  vire comissao negativa calada — reverter comissao paga e clawback, com revisao
+  humana.
+- **Sem pagamento no mes: nem comissao, nem LINHA no snapshot.** Uma linha de
+  R$ 0 leria como "entrou na conta e nao valeu nada"; o certo e nao ter entrado,
+  e o relatorio explica a ausencia ("Sem pagamento no mes").
+- **`baseSum` continua sendo so a base do PERCENT.** O recebido que fundamenta a
+  linha FIXED viaja em `linesSnapshot[].mensalidade` (que passou a ser o
+  RECEBIDO, nao mais o `planValue`); somar no `baseSum` mudaria o significado de
+  uma coluna que o financeiro e o BI ja leem.
+- **Efeito colateral no vocabulario:** para o FIXED, `payoutBase: ALL_ACTIVE`
+  passou a se comportar como PAID_THIS_MONTH. A configuracao continua existindo
+  para o PERCENT e para o recorte REFERRED_THIS_MONTH.
+- **Testes verificados POR MUTACAO:** tirar a proporcao, trocar o denominador
+  por `planValue` ou remover o teto derruba o caso correspondente. Dois testes
+  que AFIRMAVAM o contrario ("paga R$ por unidade ativa, INDEPENDENTE de
+  pagamento no mes" e "o valor NAO depende de quem pagou no mes") foram
+  reescritos com o registro da inversao — nao apagados.
+
+**Impacto medido em producao:** agosto/CDA saiu de 17 unidades (R$ 1.275) para
+16 (R$ 1.200) com a regra 1, e para 12 (R$ 900) com a regra 2. Nenhuma unidade
+da rede teve pagamento PARCIAL em agosto — a proporcionalidade e blindagem para
+frente, nao correcao retroativa.
+
+### Relatorio de indicacoes (2026-09-09)
+
+`/admin/indicacoes/[id]` (financeiro) e `/painel/indicacoes/relatorio`
+(indicador) — MESMO loader e MESMA tabela, de proposito: quando o indicador
+contesta um valor, os dois lados tem de estar olhando a mesma conta.
+
+- **Nada ali recalcula comissao.** Quem entrou e quanto valeu sai do
+  `linesSnapshot` gravado pelo motor; a faixa sai das colunas da comissao.
+  Recalcular para exibir criaria uma segunda fonte da verdade e a tela passaria
+  a conferir a si mesma — bateria sempre, inclusive quando estivesse errada.
+- **`relatorio-motivo.ts` explica so a AUSENCIA**, na ordem de gates do motor, e
+  nao decide nada: `null` ("nao sei dizer") e resposta valida e a tela mostra
+  "—" em vez de chutar. Ha teste travando o caso caro: nunca dizer "nao pagou"
+  de quem pagou no mes.
+- **Ordenacao na URL**, nao em estado de client: relatorio mandado por link
+  reabre na mesma ordem. Status ordena por SITUACAO (ativa primeiro, cancelada
+  por ultimo) e todo criterio desempata por NOME — sem isso a mesma tela abriria
+  em ordens diferentes a cada consulta.
+
+### Assinatura virou modulo opcional por unidade (2026-09-10)
+
+A assinatura de aluno nasceu aberta para toda revenda: o preset do dono e
+`owner: ALL`, entao `assinaturas.*` nunca barrou ninguem, e plano da PMB
+(`tenantId` null) aparece sozinho em todas as vitrines. Agora e o modulo
+"Vender assinaturas", no molde de "Produzir cursos".
+
+- **`Tenant.subscriptionsEnabled`**, default FALSE para TODA unidade — decisao
+  do dono, inclusive para quem ja tinha plano montado. Migration
+  `20260910_tenant_subscriptions_module` (aditiva, idempotente, sem backfill).
+  **Invertido em 2026-10-22** (decisao do dono): default TRUE e todas as
+  unidades religadas (`20261022_tenant_subscriptions_default_on`, backfill
+  guardado pelo default antigo para nao religar quem for desligado depois).
+  Liga em /admin/revendedores/[id] → "Vitrine & extras"
+  (`PUT /api/admin/tenants/[id]/assinaturas`, `unidades.governanca`, auditado
+  como `tenant.subscriptions_module`, notifica a unidade). Nao se confunde com
+  `assinaturas.*`, que diz QUEM dentro da unidade mexe nos planos.
+- **O gate mora em `resolveVitrinePlans` e `getPlanForCheckout`**
+  (`lib/subscriptions/plans.ts`), por onde ja passam a vitrine, o link da navbar,
+  a pagina do plano, /aluno/assinar, o seletor da venda direta e os tres
+  checkouts. As rotas de gestao `/api/painel/assinaturas/*` usam
+  `requireSubscriptionModule` — `guard-coverage.test.ts` quebra se um handler
+  novo nascer sem ele. A aba Catalogo → Assinaturas some e /loja/assinaturas da
+  404 com o modulo desligado.
+- **Fecha a VENDA, nunca a assinatura viva.** Webhook, renovacao, catalogo do
+  assinante, liberacao de curso e cancelamento seguem funcionando com o modulo
+  desligado: o aluno pagou pelo ciclo. Os planos da unidade ficam guardados e
+  voltam como estavam se o modulo for religado.
+- **A vitrine da PMB (`tenantId` null) nao depende do modulo** — e a dona do
+  produto. `isSubscriptionModuleEnabled(null)` devolve true sem consultar nada.
+- **Impacto medido em prod antes do deploy:** 6 unidades ja tinham plano (5 com
+  plano ativo na vitrine: conectaeducacional, eadcenatep, escala-digital,
+  pvo-educacao, rotadoaprendizado) e so a `eadcenatep` tinha assinatura vendida
+  (1 ACTIVE + 1 PENDING, as duas por venda direta). Todas saem do ar ate alguem
+  ligar o modulo delas; as 2 assinaturas seguem valendo.
+- Testes `module.test.ts`, `module-gate.test.ts`, `plans-scope.test.ts` e o
+  bloco de assinaturas do `guard-coverage.test.ts`, verificados POR MUTACAO:
+  tirar o gate de qualquer das duas funcoes, deixar o guard ignorar o modulo,
+  trocar o guard de uma rota ou tornar fail-open a unidade inexistente derruba o
+  teste correspondente.
+- **Achado lateral, NAO corrigido: /aluno/assinar (aluno ja logado) so
+  funcionaria na vitrine PMB, e nem la funciona.** `POST /api/aluno/assinatura`
+  chama `createSubscriptionAtGateway(..., "ASAAS")` SEM a conta da unidade, entao
+  para aluno de revenda `assertPmbCharge` recusa (fail-closed — nao cobra na
+  conta errada) e ele toma 502 depois de ver os planos listados. Para aluno da
+  vitrine PMB, `session.tenantId` e o placeholder `__pmb__`, tratado como
+  revenda: sem `TenantCourse`, a lista sai vazia. E a porta para onde o checkout
+  anonimo manda quem ja tem senha ("faca login para assinar"), entao toda unidade
+  que tiver o modulo ligado herda o defeito. Conserto pede resolver a conta da
+  unidade na rota e, no MP, tokenizar o cartao no browser como a loja faz.
+
+### Vagas da assinatura + um acesso por vez (2026-09-14)
+
+Duas regras novas, decididas pelo dono no mesmo dia, nos dois repos (PMB e LMS),
+mais a correcao do cancelamento pedido pelo aluno (fim desta secao).
+
+**1. A assinatura tem 10 vagas.** O plano pode cobrir o catalogo inteiro, mas o
+aluno estuda no maximo `SUBSCRIPTION_MAX_ACTIVE_COURSES = 10` cursos por vez.
+Com a lista cheia, abrir outro exige TIRAR um — no mesmo pedido (troca) ou por
+"Tirar da lista" em /aluno/assinatura.
+
+- **Fonte unica:** `src/lib/subscriptions/slots.ts` (PURO). Ocupa vaga: matricula
+  da assinatura em ACTIVE/PENDING/SUSPENDED e **nao** concluida. PENDING e
+  SUSPENDED entram porque voltam a ACTIVE sozinhas. "Concluido" e
+  `progressStatus = CONCLUIDO` (o que a plataforma reporta) ou COMPLETED — nunca o
+  percentual minimo do certificado, que e configuracao de emissao. O `where` gemeo
+  precisa do ramo `progressStatus: null` (Prisma `not` exclui NULL).
+- **Tirar da lista NAO e cancelar.** `Enrollment.subscriptionSlotReleasedAt` e o
+  discriminador sobre `status = CANCELLED`: a matricula e revogada no LMS, que
+  GUARDA o progresso por aluno, e "Retomar" reprovisiona de onde parou (chave de
+  idempotencia muda a cada volta).
+- **A assinatura libera as DUAS plataformas de aulas** (corrigido em 15/09). De 14 a
+  15/09 havia `{ provider: "LMS" }` em `vitrineGateWhere` e todo plano "catalogo
+  inteiro" perdeu os ~98 cursos da legada (ex.: 119 em vez de 217) sem aviso na tela
+  de quem montou o plano. Ha teste impedindo filtro isolado por fornecedora no gate.
+- **Curso da legada so sai da lista ANTES de o aluno comecar** (decisao do dono,
+  15/09): la desvincular APAGA o progresso. "Nao comecou" = 0% **e** situacao
+  `AGUARDANDO` — a legada arredonda para baixo (havia 105 matriculas `EM_ANDAMENTO`
+  com 0%) e preenche a "data da ultima aula" ate em curso nunca aberto, entao
+  `lastLessonAt` NAO serve de sinal. A tela usa a copia local
+  (`canReleaseSubscriptionSlot`); antes de desvincular, `findReleasable` confere AO
+  VIVO (`checkEaCourseStarted`) e qualquer duvida (plataforma fora, curso nao achado)
+  e recusa. Depois de comecar, a vaga libera ao concluir ("Libera ao concluir" na
+  tela). Com a lista cheia, a rota de liberar puxa o progresso das DUAS plataformas
+  antes de responder `SLOTS_FULL`.
+- **Curso novo da legada entra nas vitrines das unidades no proprio sync**
+  (`ensureCourseForResellers` no CREATE de `upsertEaCourse`, como o LMS ja fazia).
+  Antes so chegava quando o painel da unidade rodasse `ensureTenantCourses` — e ate
+  la ficava fora de toda assinatura "catalogo inteiro" dela, que exige o
+  `TenantCourse`. O escopo `ALL` em si ja era dinamico (resolvido na hora do acesso).
+- **Lock por ASSINATURA** (`SUBSCRIPTION_RELEASE:<subId>`), nao por curso: dois
+  cliques em cursos diferentes com 9 vagas ocupadas terminariam em 11.
+- **Troca e fail-closed para a regra:** revoga ANTES de abrir o novo; se o novo nao
+  abre, o que saiu e devolvido (`restoreReleased`). Com vaga livre, o
+  `replaceCourseId` e ignorado.
+- Lista cheia: a rota puxa o progresso do LMS antes de responder `SLOTS_FULL` — um
+  curso recem-concluido libera a vaga sem esperar o delta horario.
+- As telas de venda passaram a dizer a regra (`SUBSCRIPTION_SLOTS_RULE_TEXT`):
+  vender "estude quantos cursos quiser" sem o limite prometeria o que a tela do
+  assinante recusa.
+
+**2. Um acesso por vez, para toda modalidade** (avulso, pacote, assinatura — a
+regra e da CONTA). O login num segundo aparelho **derruba o anterior** (decisao do
+dono: derrubar, nao barrar, para ninguem ficar trancado fora).
+
+- **PMB:** `Student.activeSessionId/activeSessionAt` + `sid` no JWT. O callback
+  `jwt` confere a cada leitura de sessao de aluno (PK, sem throttle) e devolve null
+  quando nao bate. Fonte: `src/lib/auth/single-session.ts`. **JWT sem `sid` e
+  recusado** — todo aluno logado entra de novo UMA vez no deploy (sem o aviso de
+  "outro aparelho", que mentiria).
+- **"Entrar como" fica isento:** `impersonatedBy` vai DENTRO do JWT
+  (`buildSessionToken`). Sem isso, atender o aluno o derrubaria.
+- **LMS:** `Student.accountSessionId` + `sid` no cookie; `requireStudent` (paginas)
+  e `requireStudentApi` conferem. Derrubado → `/sessao-encerrada` (apaga o cookie,
+  que Server Component nao consegue) → aviso no login. `SessionGuard` (30s) e o 401
+  do batimento do player tiram o aparelho da tela sem esperar clique.
+- **Os dois lados se enxergam:** login no PMB → `PUT /students/:id/session` (a
+  sessao do LMS cai); SSO leva o `sid` do PMB (mesmo acesso, nao derruba nada); login
+  direto no LMS → webhook `student.session.started` → PMB derruba so a sessao
+  ANTERIOR ao login (o retry com backoff de horas nao pode derrubar login posterior);
+  "entrar como" gera SSO `mode: support` (8h, fora da regra). Contrato em
+  `docs/api/lms-webhook-catalogo.md` §8.5/§8.7/§9.3.
+- O card do painel `/aluno` passou a entrar por SSO nos cursos do LMS (antes mandava
+  para o login de la, e a senha digitada abriria uma sessao NOVA que derrubaria a do
+  proprio aparelho).
+- **Fora do alcance, por limite da API:** a plataforma legada (aluno entra direto
+  com login proprio, sem sessao nem troca de senha). Video ja carregado de URL
+  pre-assinada segue tocando ate o player bater (≤10s) ou o guard conferir.
+
+**Deploy, nesta ordem:** (1) PMB — migration `20260914_subscription_slots_single_session`
+(aditiva, idempotente); (2) LMS — `db push` cria as colunas. Ao contrario, o webhook
+novo chegaria a um PMB que responde 400 e iria para a DLQ com alerta.
+
+**Cancelamento pedido pelo aluno nunca cortava os cursos (corrigido).**
+`DELETE /api/aluno/assinatura` marca CANCELLED com `revokeAccess: false` ("o
+acesso segue ate o fim do ciclo, o cron cuida disso") — e nenhum cron olhava
+assinatura cancelada: a varredura so pega ACTIVE/PAST_DUE. Os cursos abertos
+ficavam para sempre.
+
+- **Fase 3 da `sweep-subscriptions`** (job `pmb-sweep-subscriptions`, ja agendado):
+  encerrada + recorrente + periodo pago vencido + matricula viva ->
+  `revokeEndedSubscriptionAccess`. Regra pura `endedSubscriptionAccessExpired`
+  (`access.ts`): corta NO DIA do fim do periodo, sem a carencia (ela e para quem
+  ainda vai pagar). Vitalicia nunca e cortada por prazo.
+- **Revogacao unica** (`revokeEnrollments` em `cancel.ts`) para o cancelamento e o
+  corte no fim do periodo — so marca CANCELLED o que a fornecedora confirmou. Por
+  isso a fase 3 tambem refaz, todo dia, revogacao que falhou antes.
+- **Voltou a assinar antes do fim do periodo:** o que a assinatura NOVA cobre (plano
+  + vagas) migra para ela (`adoptIntoLiveSubscription`, sob o lock de vagas da nova);
+  so o resto e cortado. Lock ocupado -> nao corta nada na passada (cortar sem olhar a
+  assinatura viva apagaria progresso de quem esta pagando).
+- **Vitalicia nao se cancela pela rota do aluno** (409): a tela escondia o botao,
+  mas o DELETE direto revogava o acesso comprado para sempre.
+- Consequencia aceita pelo dono: curso da plataforma legada de assinatura cancelada
+  e revogado no fim do periodo, e la isso apaga o progresso.
+
+### Venda direta de assinatura da unidade paga NA LOJA (2026-09-14)
+
+A Conecta Educacional (MP) vendeu uma assinatura pelo /painel/vendas e o link
+gerado era `mercadopago.com.br/subscriptions/checkout?preapproval_id=...`: a
+venda direta criava o preapproval `pending` na hora e mandava o `init_point`,
+tirando o aluno da loja da revenda — enquanto a venda de CURSO da mesma tela
+manda para o checkout transparente (`/pagar/<id>`).
+
+- **O /painel agora devolve `/pagar/assinatura/<id>`** na loja da unidade
+  (dominio proprio aplicado ou subdominio). `createDirectSubscriptionSale` ganhou
+  `checkout: { kind: "store" | "gateway" }`: `store` so cria a linha PENDING e
+  grava o link em `checkoutUrl`; `gateway` e o comportamento antigo, mantido no
+  /admin, cujas vendas de curso tambem mandam o link do gateway.
+- **A cobranca nasce quando o aluno paga** (`lib/subscriptions/store-payment.ts`
+  via `POST /api/loja/checkout/assinatura/pagar`), na conta DA UNIDADE, com
+  preco e periodicidade CONGELADOS na linha (nunca os de hoje do catalogo) e o
+  pagador resolvido pelo servidor. MP recorrente so no cartao (token no browser,
+  CPF do titular pedido na tela); Asaas aceita PIX/boleto/cartao.
+- **Uma cobranca por assinatura:** linha com `mpPreapprovalId`,
+  `asaasSubscriptionId` ou `externalReference` ja nao e paga de novo, e a
+  checagem e refeita dentro de advisory lock (`SUBSCRIPTION_STORE_PAY:<id>`).
+  Cartao recusado nao grava nada, entao o mesmo link serve para nova tentativa.
+- **Conserto lateral:** a busca da 1a fatura da assinatura Asaas
+  (`listPayments`) ia sem a chave e caia na conta-mae, que nao conhece a
+  assinatura da unidade — o aluno de revenda Asaas que escolhia PIX ficava sem
+  fatura, e a venda direta dessas unidades saia sem link nenhum.
+- **Linhas antigas** (vendidas antes do deploy, com preapproval pendente) nao
+  sao pagaveis pela pagina nova: ela mostra "pagamento em processamento".
+  Remediadas por `/api/cron/fix-subscription-mp-links` (dry-run por padrao,
+  `?apply=true` para executar; `lib/subscriptions/legacy-mp-link.ts`): le o
+  estado VIVO do preapproval, cancela no MP ANTES da linha, e reemite a venda
+  numa linha NOVA com preco/periodicidade/vendedor congelados. **Nao converte a
+  linha antiga:** o preapproval nasceu com `X-Idempotency-Key = pmb_sub_<id>`,
+  e o pagamento na loja reusaria a mesma chave. Quem ja autorizou no MP, ou cujo
+  estado nao pode ser lido, nao e tocado.
+
+### Link de pagamento de loja e sempre a pagina da plataforma (2026-09-14)
+
+Regra do dono, depois do caso Conecta Educacional (venda direta de assinatura
+mandando o `init_point` do Mercado Pago): em QUALQUER loja — unidade ou vitrine
+PMB — todo link ou redirecionamento de pagamento leva a uma pagina da propria
+plataforma. Dentro dela valem o QR do PIX, a linha digitavel e o PDF do boleto;
+nunca a fatura hospedada do Asaas (`invoiceUrl`), o checkout do MP
+(`init_point`), a pagina do PIX do MP (`ticket_url`) ou a preference do Checkout
+Pro. A cobranca mensal que a PMB faz das UNIDADES fica fora (nao e loja vendendo
+para aluno).
+
+- **Portas:** curso/pacote/carne → `/pagar/<id>` (loja da unidade ou dominio da
+  PMB, que agora renderiza MP e Asaas); assinatura → `/pagar/assinatura/<id>`
+  (loja ou PMB), inclusive 1o ciclo e RENOVACAO. `buildEnrollmentCheckoutUrl` e
+  `studentPaymentTarget` nem recebem a fatura. Venda direta (painel e /admin)
+  nunca fala com o gateway.
+- **O que tornou isso possivel sem cobranca dupla:** o checkout Asaas da unidade
+  criava uma cobranca NOVA a cada volta a pagina (era o motivo de a fatura ter
+  prioridade no "reenviar link"). Agora retoma sob advisory lock: paga → efetiva,
+  em analise → aguarda, mesmo metodo em aberto → reusa, outro metodo → remove e
+  so cria a nova quando o Asaas confirma `deleted` (DELETE e soft). Na assinatura,
+  `/pagar/assinatura` paga a cobranca que JA existe (PIX/boleto na tela, cartao
+  via `payWithCreditCard`), nunca cria outra por cima.
+- **Defeito latente achado no caminho:** `settleSubscriptionCycle` tratava o
+  ciclo que o webhook registrou EM ABERTO (PAYMENT_CREATED/OVERDUE) como
+  re-entrega e nao liquidava — todo PIX/boleto de assinatura no Asaas ficaria sem
+  ativar ate ser cancelado pela varredura. Nunca aconteceu em prod (a unica
+  cobranca de assinatura foi cartao). Liquida com CAS em `paidAt IS NULL`.
+- **Vitalicia no MP** virou pagamento transparente (PIX ou cartao tokenizado com
+  a bandeira resolvida pelo BIN). Boleto do MP ficou de fora nesse caso: exige
+  endereco completo do pagador e nao ha plano vitalicio em prod.
+- **Invariante testada:** `src/lib/checkout/payment-link-coverage.test.ts` — lista
+  FECHADA de arquivos que podem ler `invoiceUrl`/`asaasInvoiceUrl`; `init_point`
+  e `ticket_url` so no tipo; `createPreference` em lugar nenhum; toda preapproval
+  com `card_token_id`. Verificada POR MUTACAO.
+- **Remediacao:** os 2 links do MP ja gerados (Conecta e EAD Cenatep) foram
+  cancelados no MP por `/api/cron/fix-subscription-mp-links`; a da Conecta foi
+  reemitida com o link da loja.
+
+### Curso exclusivo de algumas unidades vale na VENDA, nao so na vitrine (2026-09-15)
+
+O "Barbeiro Profissional" (`ea_250`) estava configurado em /admin/catalogo como
+"Ocultar para todas EXCETO as selecionadas" (`visibilityMode = ALLOWLIST`, so a
+Rota do Aprendizado) e oculto na vitrine da PMB (`hiddenMain`). A vitrine publica
+respeitava: a Rota mostrava o curso, as outras 170 unidades davam "curso nao
+encontrado". Mas a regra so existia nas LISTAGENS da loja.
+
+- **Onde ela nao chegava:** o painel de cursos das outras unidades mostrava o
+  curso como "visivel"; a venda direta o oferecia e o POST o aceitava (a
+  `escala-digital` chegou a liberar uma bolsa); o checkout por ID, a recompra do
+  aluno, a pagina de checkout, o sitemap e o `llms.txt` ignoravam; e tres
+  unidades (`escolaenfermed`, `futurocerto`, `pilarescursos`) tinham o curso
+  dentro de pacote proprio.
+- **Fonte unica:** `courseCuratedForTenant` (where) e `isCourseCuratedForTenant`
+  (em memoria) em `lib/catalog/visibility.ts`, com teste de PARIDADE. As duas
+  copias inline que existiam (`home/sections.ts`, `catalog/home.ts`) foram
+  apagadas. `visibilityFilter` = `COURSE_PROVISIONABLE` AND curadoria.
+- **Venda:** `authoredSaleGate` recusa com **403 `COURSE_NOT_AVAILABLE_FOR_TENANT`**
+  quando a unidade vendedora esta fora da lista. As colunas entraram no
+  `AUTHORED_COURSE_SELECT`, entao as portas que ja o espalham herdaram o gate. So
+  vale para venda de UNIDADE: na vitrine da PMB quem decide e `hiddenMain`.
+  **Fail-closed:** modo ausente/desconhecido nega — fixture de teste sem as tres
+  colunas faz a venda tomar 403 (foi o que quebrou `painel/vendas/route.test.ts`).
+- **Pacote perde o curso, nao sai do ar** (decisao do dono): listagem, pagina e
+  `getPackageForCheckout` descartam o curso nao liberado, e `fulfill.ts` pula a
+  satelite dele — a liberacao rele `course_package_items` no pagamento, entao
+  filtrar so a vitrine entregaria o curso que a pagina nem mostrou. O salvamento
+  do pacote no painel recusa o curso e o seletor nem o lista.
+- **O `TenantCourse` das unidades fora da lista NAO e apagado** — e onde mora o
+  preco/capa delas, e volta a valer se a PMB liberar o curso. So some das telas.
+- **`hiddenMain` e da vitrine da PMB, nunca da unidade.** O seletor de cursos do
+  editor da home do painel filtrava por ele: a unidade liberada nao conseguia
+  escolher o curso exclusivo (oculto na PMB justamente por ser exclusivo).
+- **Venda ja feita nao e tocada:** matricula existente segue com acesso, e o
+  pagamento de venda pendente (`/pagar/<id>` → `checkout/process`) nao passa pelo
+  gate.
+- Testes verificados POR MUTACAO (7 mutacoes, todas mortas): gate, predicado,
+  where, vitrine do pacote, checkout do pacote, fulfill e painel de cursos.
+
+### Valor da parcela na vitrine + unidade Asaas vende parcelado (2026-09-15)
+
+A vitrine dizia "10x sem juros" sem dizer de quanto, e a unidade que vende pelo
+Asaas nao parcelava nada: o formulario de cartao dela nao tinha campo de
+parcelas, entao a loja anunciava um parcelamento que a cobranca nao fazia.
+
+- **Fonte unica do numero anunciado:** `interestFreeInstallmentsFor(price, n)` e
+  `interestFreeInstallmentText` (`lib/mercadopago/installments.ts`) — o
+  configurado pela unidade, limitado a 12x e a **R$ 5 por parcela** (piso do
+  Asaas). A MESMA funcao alimenta o card, a pagina do curso, o resumo do pedido,
+  a previa do painel, o catalogo de recompra do aluno E o seletor do checkout:
+  anunciar mais do que o checkout aceita e oferta que obriga quem vende (CDC,
+  art. 30). Anunciar MENOS (caso do MP, que aceita parcela abaixo de R$ 5) e o
+  lado seguro.
+- **`tenantAdvertisedInterestFree`** (`lib/tenant/checkout-mode.ts`) decide se a
+  unidade pode anunciar: os dois gateways parcelam, so `NONE` nao. Quem lê
+  espalha `ADVERTISED_INSTALLMENTS_SELECT` — pegar so `interestFreeInstallments`
+  volta a anunciar parcela em loja sem cobranca.
+- **No Asaas nao existe juros para o aluno:** toda parcela e o total dividido e a
+  taxa sai da conta da unidade. Por isso o nº configurado E o teto do
+  parcelamento (no MP ele so separa o sem juros do com juros, e o teto segue 12x).
+- **Checkout:** `chargeCardInstallments` (`asaas/transparent-process.ts`) usa
+  `POST /installments/` na conta da unidade, no molde da vitrine PMB
+  (`issue-pmb-asaas-charge.ts`). O teto e revalidado no servidor ANTES de mexer
+  na cobranca anterior — pedido recusado nao pode ter removido o PIX em aberto
+  do aluno. Trocar de metodo remove o parcelamento INTEIRO (`deleteInstallment`),
+  nunca so a 1a cobranca. **Recusa 4xx desfaz** a marca de parcelado; **5xx/timeout
+  NAO** — o parcelamento pode ter sido criado, e marcadas como a vista as N
+  parcelas liberariam o curso N vezes.
+- **A referencia e fixada em `enr_<id>` no proprio parcelamento:** e o unico
+  vinculo das parcelas 2..N com a matricula (o casamento por `asaasPaymentId`
+  pega so a 1a), e o checkout de pacote nasce com referencia vazia.
+
+**Tres defeitos do parcelamento no cartao, que existia desde a vitrine PMB e
+NUNCA rodou em producao** (zero vendas CARD_INSTALLMENT). No Asaas cada parcela e
+uma cobranca e todas confirmam no dia da compra; os webhooks das unidades sao
+registrados NAO SEQUENCIAIS, entao chegam em paralelo:
+
+- **Curso liberado duas vezes.** O advisory lock do fulfill e por COBRANCA: a
+  parcela 2 via a matricula sem `startedAt` e seguia pelo ramo da 1a. Agora so a
+  1a libera (`isFirstCardInstallment`, por `installmentNumber` do Asaas com
+  fallback no `asaasPaymentId` gravado); as outras lancam
+  `CardInstallmentOutOfOrderError`, que e TRANSITORIO — o gateway reentrega e na
+  volta entram como parcela seguinte. Engolir perderia a parcela do extrato.
+- **Contagem perdida:** `installmentsPaid` era lido-e-regravado. Virou
+  `{ increment: 1 }` no proprio UPDATE (vale para mensalidade e carne tambem).
+- **`COMPLETED` no dia 1:** quitar a ultima parcela encerrava a matricula — e
+  `COMPLETED` significa curso concluido: `certificates/eligibility.ts` aceita
+  esse status sozinho e o cron de progresso so varre `ACTIVE`.
+  `closesOnLastInstallment` exclui CARD_INSTALLMENT (mensalidade e carne seguem
+  como eram; que eles liberem certificado ao quitar continua em aberto).
+- Cartao parcelado tambem nao dispara os avisos de "Parcela k/N confirmada": as
+  N confirmam no mesmo minuto.
+
+**Fix lateral:** os cards da home liam o `paymentType` CRU, entao mostravam
+"/mes" em curso que a vitrine cobra a vista (ammacursos, qualificamais) — e era
+justamente onde a parcela deveria aparecer. Passaram a usar
+`loadTenantDisplayPolicy` + `effectivePaymentType`, como a pagina do curso.
+
+**Nao validado contra o Asaas real** — nao ha nenhuma venda parcelada no cartao
+em producao (nem da PMB). Antes de anunciar as unidades: compra parcelada de
+verdade (ou sandbox) conferindo liberacao unica, N parcelas no extrato e
+matricula ACTIVE. Testes verificados POR MUTACAO (6 mutacoes, todas mortas).
+
+### Assinatura no boleto (carne) (2026-09-16)
+
+A estrutura do carne (venda parcelada no boleto) passou a valer para a
+assinatura, nos DOIS gateways. Antes, no Mercado Pago a assinatura so aceitava
+cartao — e as 4 unidades com o modulo de assinaturas ligado usam MP.
+
+**Decisoes do dono:** um boleto POR CICLO (mensal em 12 boletos = 12 meses);
+RENOVA SOZINHA depois do ultimo boleto do carne; valor = preco do plano (com o
+desconto manual e o teto do vendedor); disponivel na venda direta do /painel e
+do /admin E na vitrine (o aluno escolhe boleto).
+
+- **Quem emite e a plataforma, nas duas pontas.** O MP nao tem recorrencia no
+  boleto; para as duas se comportarem igual, o Asaas tambem deixou de usar a
+  assinatura nativa no boleto. `StudentSubscription.boletoCarne` e o
+  discriminador; os boletos sao as linhas NUMERADAS de `SubscriptionPayment`
+  (`number`, `digitableLine`, `generatedAt`, `emitAttempts`). Migration
+  `20260916_subscription_boleto_carne` (aditiva, idempotente, sem backfill).
+  **Toda escolha de BOLETO numa assinatura nova vira carne** — checkout da
+  unidade, da PMB, aluno logado e a pagina `/pagar/assinatura/<id>`.
+- **Emissao:** Asaas = todos os boletos do carne na venda (`POST /payments`, um
+  por ciclo, referencia `pmb_sub_<id>`); MP = so o que esta na janela de 7 dias,
+  o resto pelo cron. Nucleo em `lib/subscriptions/carne.ts`, agenda pura em
+  `carne-schedule.ts`. Lock por linha: venda e cron nunca emitem o mesmo boleto.
+  O Asaas nao tem chave de idempotencia — a emissao ADOTA a cobranca de uma
+  tentativa que caiu antes de gravar o id (`findOrphanAsaasCharge`).
+- **O fim do periodo sai da AGENDA, nao de "pagou, soma um ciclo":**
+  `carnePeriodEnd` = inicio + ciclos pagos, com o inicio no 1o vencimento (ou no
+  1o pagamento, se veio depois). Contar de hoje faria o acesso de quem pagou
+  adiantado acabar semanas antes do 2o boleto vencer. Conta todo pagamento,
+  inclusive fora de ordem. O 1o vencimento tem teto de **28 dias** — sem teto,
+  vencimento distante pago hoje daria acesso de graca ate la; e o MP so aceita
+  boleto vencendo em ate 30 dias da emissao.
+- **MP usa referencia POR LINHA (`subbol_<linha>`), nao `pmb_sub_`:** no MP o
+  boleto que vence sem pagamento chega como `cancelled`, e o tratamento de
+  assinatura le `cancelled` como ESTORNO e revoga tudo. `carne-webhook.ts` so
+  libera a linha para o cron reemitir; a chave de idempotencia do MP leva a
+  tentativa, senao o MP devolveria o pagamento ja cancelado.
+- **Atraso nao mexe no status no carne** (nem no Asaas): quem decide e o fim do
+  periodo, pela varredura de assinaturas — igual nas duas pontas, ja que o MP
+  nem avisa atraso. `markSubscriptionPastDue` passou a ignorar PENDING (nunca
+  pago nao esta "em atraso").
+- **Webhook nao cria linha de carne.** O PAYMENT_CREATED do Asaas chega
+  enquanto o id ainda esta sendo gravado; criar ali duplicaria o boleto e o id
+  unico derrubaria a emissao.
+- **Os dois processadores do Asaas decidem igual** (`asaas-events.ts`). A
+  copia da conta da UNIDADE so achava a assinatura pelo `subscription`, entao
+  cobranca avulsa de unidade (boleto do carne, **acesso vitalicio**) caia em
+  "matricula nao encontrada" — defeito latente do vitalicio, corrigido junto.
+- **Cron sem job novo:** a varredura (`carne-sweep.ts`) roda dentro do
+  `sweep-boleto-installments`, ja agendado. Ela encerra carne ABANDONADO (1o
+  boleto vencido ha mais que a carencia, nunca pago), cria o boleto de
+  RENOVACAO quando o ultimo entra na janela, emite/reemite e marca atraso.
+- **Cancelar a assinatura cancela os boletos em aberto** (`cancelOpenCarneRows`
+  dentro de `stopGatewayRecurrence`). DELETE do Asaas e soft: so `deleted:
+  true` prova — sem isso a linha nao e marcada e o admin e alertado.
+- **Carne de CURSO nao mudou:** continua com valor manual, 2+ parcelas e preso
+  ao "parcelado" da unidade. O da assinatura NAO depende dessa capability (nao
+  ha credito concedido) — quem libera e o modulo de assinaturas. O desconto
+  manual vale no carne da assinatura e passa pelo teto do vendedor (a rota do
+  painel pulava o teto para qualquer carne; teria vazado desconto sem limite).
+- Testes: `carne-schedule`, `carne`, `carne-webhook`, `carne-sweep`,
+  `asaas-events` + casos novos em `renew`, `cancel`, `direct-sale`,
+  `store-payment`, rota do painel e webhook MP. 15 mutacoes, todas mortas.
+- **Nao validado contra os gateways reais.** Antes de anunciar: uma venda de
+  assinatura no boleto em cada gateway (sandbox ou real), conferindo o boleto na
+  pagina, a liquidacao pelo webhook e, no MP, a reemissao de um boleto vencido.
+
+### Assinatura paga pela vitrine sumia do painel (2026-09-24)
+
+A Capacita Pro Brasil reclamou que "o sistema nao da baixa" nas assinaturas. O
+webhook estava certo: as 3 assinaturas liquidaram em menos de 1 min. O defeito
+era de VISIBILIDADE — a assinatura paga pela vitrine nao aparecia em tela
+nenhuma, nem para a unidade nem para o aluno.
+
+- **`/painel/vendas` filtrava `soldByUserId: { not: null }`** tambem nas
+  assinaturas: so venda direta. Venda de curso pela vitrine aparece em
+  Financeiro (vem de `Payment`); a assinatura nao aparecia em lugar nenhum.
+  Agora a lista traz todas as assinaturas ("Vendido por: Vitrine"). O recorte
+  de carteira (`ctx.scope.assinaturas`) continua valendo para quem nao tem
+  `vendas.viewAll`.
+- **Financeiro e dashboard so somavam `payments`.** O ciclo de assinatura mora em
+  `subscription_payments`. Predicado unico em `lib/subscriptions/revenue.ts`
+  (`SUBSCRIPTION_REVENUE_WHERE`: `paidAt` preenchido e status != REFUNDED),
+  somado a receita do mes/total, aos graficos (UNION no SQL cru), ao ticket
+  medio, as vendas recentes e a lista de pagamentos.
+- **Estorno nao marcava o ciclo.** `revokeSubscriptionForRefund` revogava o
+  acesso, mas a linha seguia CONFIRMED e contaria como receita. Agora recebe o
+  id do pagamento e grava `REFUNDED` (so em linha paga — o `cancelled` do MP
+  tambem passa por ali). A unica linha afetada em prod foi corrigida na mao.
+- **Ninguem era avisado na ativacao.** A assinatura nao cria matricula (ela
+  nasce quando o aluno escolhe o curso), entao o aluno entrava em `/aluno` e via
+  "Escolha seu primeiro curso" apontando para o catalogo de COMPRA. No 1o
+  pagamento (`startedAt` nulo) `settleSubscriptionCycle` notifica o aluno
+  (`/aluno/assinatura`) e a unidade (`/painel/vendas`). A home do aluno mostra
+  o card "Assinatura ativa -> Escolher cursos" e esconde o convite de compra.
+- `/painel/alunos`: assinante conta como "com curso" e ganha a marca
+  "Assinante" (antes aparecia com 0 cursos).
+- **Nao e defeito:** os ~190 avisos `matricula nao encontrada` da mesma conta
+  Asaas sao PIX direto na chave, faturas do NewGestor e outros produtos da
+  unidade — nenhum tem referencia `pmb_`/`enr_`.
+
+### Revisao da estrutura de assinatura (2026-09-25)
+
+Revisao em 3 frentes (pagamento, acesso, painel/admin) sobre o fluxo inteiro.
+Corrigido:
+
+- **Periodo pago acabava ANTES da proxima cobranca.** O Asaas agenda PIX/boleto
+  em D+3 e repete no mesmo dia do mes; o ciclo contava do PAGAMENTO. Quem pagava
+  antes do vencimento ficava com o periodo terminando 3 dias antes do proximo
+  boleto existir: a varredura marcava atraso sem nada vencido e cancelava
+  (revogando os cursos, e na EA apagando progresso) no meio da carencia de 7
+  dias. `cycleBase` (renew.ts) ancora no vencimento quando ele e posterior ao
+  pagamento, com teto de 31 dias. As 3 assinaturas ativas foram estendidas a
+  mao ate o proximo vencimento.
+- **Loja MP nao vendia assinatura no cartao** (400 "Dados do cartão
+  obrigatórios"): a rota exigia o cartao aberto, que so existe no Asaas; no MP
+  o browser manda so `cardToken`.
+- **Webhook MP `pmb_sub_`:** `cancelled` (PIX expirado, nunca pago) revogava a
+  assinatura ja paga no cartao; agora so revoga se aquele pagamento liquidou um
+  ciclo. E passou a conferir a loja dona (mesma trava do carne): o
+  `external_reference` e escolhido por quem cria o pagamento.
+- **Pendente abandonada** (`lib/subscriptions/abandoned.ts`): os checkouts
+  APAGAVAM a pendente anterior sem olhar o gateway — recorrencia viva orfa,
+  venda direta do vendedor sumindo com o link. Agora so se apaga o que nunca
+  chegou ao gateway (`externalReference` nulo) e nunca venda direta; o resto e
+  cancelado pelo nucleo. Fase 4 da `sweep-subscriptions`: pendente sem
+  pagamento ha 7 dias e cancelada (encerra a cobranca no gateway) — era o que
+  travava para sempre toda venda direta nova ao aluno.
+- Relatorio /painel/relatorios (financeiro) passou a somar assinatura, e o
+  "Destacar" de plano proprio da unidade mandava a chave errada (200 sem efeito).
+
+**Pendente, registrado e nao corrigido:** matricula avulsa PENDENTE reaproveitada
+ao abrir o curso pela assinatura (release.ts) fica presa a ela; o player nao
+reconfere a assinatura (ate 24h de acesso apos a carencia, ate a varredura);
+/admin nao lista assinaturas da vitrine PMB nem soma `subscription_payments`;
+slug de plano PMB e de plano da unidade podem colidir na mesma vitrine; trocar a
+periodicidade de plano PMB mantem o preco de override das unidades;
+/aluno/assinatura (aluno logado) segue sem a conta da unidade (502).
+
+### Checkout de assinatura travado + apagão de e-mail (2026-09-28)
+
+Video da Capacita Pro Brasil: "nao e possivel efetuar o pagamento" e o e-mail
+com os dados de acesso nao chegava. Tres defeitos nossos, um erro de
+configuracao da unidade.
+
+- **Plano a R$ 1 (config da unidade):** o Asaas recusa assinatura abaixo de
+  R$ 10 e a tela dizia "Tente novamente". Agora `MIN_SUBSCRIPTION_PRICE`
+  (`lib/subscriptions/schema.ts`, puro) barra na ESCRITA do plano, no override
+  da unidade, na venda direta com desconto (`SUBSCRIPTION_BELOW_MINIMUM`) e nos
+  dois formularios. Vale para os dois gateways: a loja pode trocar de MP para
+  Asaas depois do plano existir.
+- **Recusa 4xx do Asaas virou mensagem** (`rejectOnAsaasInputError` em
+  `subscriptions/checkout.ts`), so em volta das chamadas que CRIAM — um 4xx
+  depois (QR do PIX) deixaria a assinatura viva no gateway e a rota apagaria a
+  linha local. `/api/checkout/assinatura` e `/api/aluno/assinatura` ignoravam
+  `rejectedMessage` (cartao MP recusado passava como sucesso sem PIX).
+- **Gate de CPF prendia quem teve a cobranca recusada.** Os checkouts criam a
+  senha ANTES de cobrar (`provisionStudentAccess`), entao a 2a tentativa caia em
+  "faca login" com uma senha que o aluno talvez nem recebeu.
+  `cpfHasRegisteredLogin` agora exige senha E acesso ja liberado (matricula
+  liberada, assinatura iniciada ou certificado). O gate continua existindo
+  porque `upsertStudent` casa por CPF e REGRAVA o e-mail — sem ele, qualquer um
+  tomaria a conta de um cliente.
+- **`/aluno/assinatura` (aluno logado) respondia 502 para aluno de revenda** —
+  cobrava sem a chave da unidade e o assert de isolamento recusava. E o aluno da
+  vitrine PMB (tenant placeholder `__pmb__`) via lista vazia. Fonte unica:
+  `resolveStudentSubscriptionStore` (rota + pagina). No MP o cartao dessa tela
+  e recusado com mensagem (la o cartao e tokenizado so na pagina da loja).
+- **E-mail: o fallback nunca rodava.** O pool de caixas LANCAVA quando todas
+  falhavam, e `SMTP_*`/Resend so entravam quando o pool nao tinha VAGA. Com a
+  Hostinger suspendendo as 5 caixas (554 5.7.1, rajada de 25/09) foram 285
+  falhas e zero envios em 3 dias. Agora: pool -> `SMTP_*` -> Resend, cada um
+  tentado quando o anterior falha (destinatario recusado nao troca de
+  provedor). E o pool ganhou disjuntor: caixa com "Outbound sending is disabled"
+  nos ultimos 30 min fica fora da reserva.
+- **Disjuntor foi ao ar QUEBRADO** (hotfix `3f58f152`): `NOT (last_error_at >
+  ... AND ...)` da NULL com `last_error_at` nulo e o WHERE descartava TODA caixa
+  sem erro — o pool parou e tudo caiu no `SMTP_*` com senha velha (535). Em
+  filtro SQL sobre coluna anulavel, escreva o OR positivo (`IS NULL OR ...`) e
+  confira contra o banco real, nao so pelo texto da query no mock.
+- **Distribuicao no tempo** (`last_sent_at`, migration
+  `20260928_smtp_last_sent_at`): cada caixa espera `SMTP_MIN_GAP_SECONDS` (15s)
+  entre envios, sai sempre a ociosa ha mais tempo, e quando todas estao no
+  intervalo o envio ESPERA a proxima vaga (ate `SMTP_MAX_WAIT_MS`, 60s) dentro
+  da propria requisicao — sem fila. Teto: 20/min no dominio. Os picos reais sao
+  o cron das 03:01 UTC (~29 no minuto) e o das 11:00 UTC (~18), que agora levam
+  ~1-2 min em vez de sair numa rajada. Rajada maior que isso por mais de 1 min
+  estoura a espera e cai no `SMTP_*`.
+- **Recuperacao dos e-mails perdidos** (`lib/email/recovery.ts` +
+  `/api/cron/recover-lost-emails`, dry-run por padrao): `email_logs` nao guarda
+  o corpo, entao nada e reenviado — e GERADO de novo. Acesso perdido
+  (welcome/reset) vira link "crie sua senha" de 72h (`sendPasswordLink`, que
+  saiu da rota de forgot-password para `lib/auth/password-link.ts`) e NUNCA troca
+  senha: se o envio falhasse de novo, a pessoa ficaria com outra senha
+  desconhecida. Matricula perdida e refeita da matricula ATIVA com o mesmo
+  assunto (e o que a torna idempotente). `notification`, cobranca de unidade e
+  lead ficam de fora. Lotes de ate 6, 45s entre envios, disparados por um job
+  pg_cron TEMPORARIO (`pmb-recover-lost-emails`) — remover quando zerar.
+- **A suspensao e por CONTA/dominio na Hostinger, nao por caixa** — rodiziar
+  caixas nao protege. Provedor transacional (Amazon SES sa-east-1, ~US$ 0,16 a
+  cada mil) entra pelas `SMTP_*` da Vercel; para ele virar o PRIMARIO, desative
+  as caixas em /admin/configuracoes/email.
+
+### Assinatura no PIX nos dois gateways + Pix Automatico no Asaas (2026-09-29)
+
+A assinatura recorrente no Mercado Pago so aceitava cartao e boleto: a
+recorrencia do MP pela API (`preapproval`) so faz cartao, e as unidades de MP
+(6 das 8 com o modulo ligado) nao tinham PIX recorrente. No Asaas o PIX
+recorrente existia (assinatura nativa `billingType: PIX`), mas o aluno pagava
+cada ciclo na mao e ninguem o avisava de que o PIX do mes tinha saido.
+
+- **O carne deixou de ser so boleto.** PIX recorrente, nos dois gateways, e o
+  mesmo carne da plataforma (uma cobranca por ciclo, linhas numeradas de
+  `SubscriptionPayment`, renovacao pela varredura). `boletoCarne` passou a
+  significar "a plataforma emite cada ciclo" (o nome ficou do 1o uso) e
+  `billingType` diz o meio. Regra unica em `usesPlatformCycles`
+  (`carne-schedule.ts`, PURO): boleto sempre, PIX so na recorrente — o
+  vitalicio no PIX continua cobranca unica do gateway. As 3 rotas de checkout e
+  a pagina `/pagar/assinatura` passam por ela.
+- **Nenhum gateway emite o carne de PIX inteiro de uma vez** (o QR expira): a
+  linha sai na janela de 7 dias, como o boleto do MP. O QR nao e guardado — a
+  pagina le AO VIVO (`openCarnePix`) e emite na hora a linha cujo PIX expirou,
+  senao o aluno que chegasse depois do vencimento esperaria o cron. No MP o PIX
+  usa a mesma referencia por linha (`subbol_`) do boleto: o `cancelled` do PIX
+  expirado cai em `carne-webhook.ts`, que libera a linha para reemissao.
+- **Pix Automatico (so Asaas, Jornada 3, modo `MANUAL`).** A 1a cobranca do
+  carne de PIX no Asaas e o QR de uma autorizacao
+  (`POST /v3/pix/automatic/authorizations`): pagar o QR paga o 1o ciclo e pede
+  ao banco a autorizacao dos debitos seguintes. As linhas 2..N saem com
+  `pixAutomaticAuthorizationId` quando a autorizacao esta `ACTIVE`, **perguntado
+  ao vivo** a cada emissao — o aluno cancela pelo app do banco quando quiser.
+  Sem autorizacao ativa (recusada, cancelada, conta inelegivel, instrucao
+  recusada com 4xx) a cobranca sai como PIX comum, que o aluno paga na nossa
+  pagina. Por isso **nenhum evento novo de webhook e necessario**.
+  - `MANUAL` e nao `SUBSCRIPTION` de proposito: com `MANUAL` o Pix Automatico
+    reusa o carne inteiro (agenda, renovacao, periodo pago por `carnePeriodEnd`,
+    cancelamento) e o fallback para PIX comum e o mesmo codigo. O Asaas exige a
+    instrucao entre 2 e 10 dias uteis antes do vencimento; a janela de 7 dias
+    corridos da ~5 uteis.
+  - **Elegibilidade:** conta PJ aprovada, CNPJ ativo ha 6+ meses. Nao ha
+    endpoint de consulta: tenta-se criar a autorizacao e o 4xx cai no PIX
+    comum. **5xx NAO cai** — a venda falha e o chamador desfaz, senao uma
+    instabilidade do Asaas viraria PIX comum calado.
+  - **O pagamento do QR chega sem `externalReference` e sem `subscription`**
+    (o Asaas so o cria depois de pago). `linkPixAutomaticFirstPayment` o
+    reconhece pelo CLIENTE Asaas + autorizacao + 1a linha nao paga + mesmo
+    valor, escopado a loja, nos dois processadores (`process.ts` para a
+    vitrine PMB, `reseller-process.ts` para a unidade). Se a varredura ja tinha
+    emitido um PIX comum por cima da linha (QR expirado), ele e removido —
+    senao o aluno pagaria o ciclo em dobro.
+  - Cancelar a assinatura cancela tambem a autorizacao (`cancelOpenCarneRows`).
+- **Coluna nova:** `StudentSubscription.pixAutomaticAuthorizationId`
+  (migration `20260929_subscription_pix_recurring`, aditiva, idempotente, sem
+  backfill). As 2 assinaturas Asaas PIX ativas continuam na assinatura nativa
+  antiga, que segue funcionando.
+- **Telas:** os tres meios em toda loja (`SUBSCRIPTION_METHODS`);
+  `/pagar/assinatura` no carne de PIX mostra so o PIX em aberto; `/aluno/assinatura`
+  ganhou o aviso "PIX da assinatura vence em ..." com o link de pagamento (no
+  carne de PIX nao ha lista de cobrancas: o QR e gerado na hora).
+- Testes em `carne.test.ts` (16 casos novos) e `store-payment.test.ts`,
+  **verificados por mutacao** (6/6): vincular a 1a linha a autorizacao, ignorar
+  o status da autorizacao, engolir 5xx, nao remover o PIX comum duplicado, nao
+  conferir o valor no casamento e nao cancelar a autorizacao.
+- **NAO validado contra os gateways reais.** Antes de anunciar: no SANDBOX do
+  Asaas, (1) conferir que a conta de teste e elegivel e que o pagamento do QR
+  chega com o `customer` da autorizacao; (2) que a cobranca do 2o ciclo com
+  `pixAutomaticAuthorizationId` e aceita a 7 dias do vencimento; (3) que uma
+  cobranca com instrucao RECUSADA (sem saldo) ainda gera QR para o aluno pagar
+  na mao — se nao gerar, `openCarnePix` devolve "sem PIX em aberto" e o aluno
+  so regulariza pelo cartao. No MP, uma assinatura no PIX de verdade conferindo
+  a liquidacao e a reemissao do PIX expirado.
+
+### Chamado otymus: compra pendente com cupom + diagnostico EA (2026-09-29)
+
+Reuniao de suporte (Gilmar, unidade `otymus`). Tres relatos, um defeito real:
+
+- **Compra pendente sem saida (corrigido).** `/aluno/comprar` mostrava a compra
+  PENDING como selo morto; agora "Concluir compra" reabre o resumo com cupom e o
+  servidor reaproveita a MESMA compra (a vitrine PMB, que respondia 409, passou
+  a reaproveitar como o ramo da unidade). Por baixo havia o defeito caro: com o
+  cupom gravado, a pagina de pagamento reusava o PIX/boleto ja emitido pelo
+  valor CHEIO — `resolvePreviousCharge` (Asaas) nao comparava o valor e a chave
+  de idempotencia do MP (`matricula:metodo`) devolvia o pagamento antigo. Reuso
+  agora exige o mesmo valor e o valor entra na chave do MP. **Regra geral:
+  qualquer reuso de cobranca por idempotencia precisa incluir o VALOR.**
+- **Clicar num curso do LMS abria OUTRO curso (corrigido).** O SSO de
+  `/api/aluno/curso/[id]/acessar` so mandava `returnUrl` no e-book; curso comum
+  caia no `/inicio` do LMS, que destaca o ULTIMO curso estudado. Agora vai sempre
+  `/curso/<lmsSlug>/continuar` (retoma de onde parou NAQUELE curso; e-book segue
+  em `/ler`). Nada muda no LMS — a rota ja existia la.
+- **"Curso de PC abre Necropsia" (EA, nao e nosso).** A EA tem vinculado ao
+  login exatamente o que as matriculas dizem (verificado pela rota abaixo). Nosso
+  botao so abre `login.php`, sem curso: quem escolhe o curso aberto e a
+  plataforma — sessao antiga no navegador ou tela da fornecedora.
+- **"Macrame so abre uma aula" (nao e defeito).** Unidade sem regra gravada ja e
+  `FREE` (`DEFAULT_POLICY`); quem trava e a PROVA de cada aula no LMS. O suporte
+  explicou como "regra sequencial gravada na matricula" — isso nao existe.
+- **Rota de diagnostico `GET /api/cron/diagnostico-ea-vinculos?ids=<ea_aluno_id>`**
+  (Bearer CRON_SECRET, SOMENTE LEITURA): compara `usuarios/cursosvinculados` da EA
+  com as nossas matriculas (`soNaEa` / `soAqui`). Com `?cpf=`/`?email=` busca o
+  cadastro na EA (`usuarios/listar`) e diz se a senha de la e a do PMB, sem
+  devolve-la. Aluno inexistente na EA vem como `{ aviso: "Não foi encontrado..." }`,
+  nao como erro — `buscarAluno` nao trata esse formato. Segredos da EA sao Sensitive e
+  nao descem para a maquina: dispare por
+  `select app_internal.run_cron('/api/cron/diagnostico-ea-vinculos?ids=...')` e
+  leia `net._http_response`.
+
+### Ordem das aulas trocavel por aluno depois da venda (2026-09-30)
+
+A unidade troca livre / sequencial / gotejamento de UM aluno num curso ja
+vendido: /painel/alunos/[id] → "Matriculas & financeiro" → coluna "Liberacao
+das aulas" (`pedagogia.manage` + recorte `ctx.scope.alunos`).
+
+- **So a ORDEM e sobrescrita** (`Enrollment.pedagogyOrder`: `releaseMode`,
+  `dripDays`, `dripUnit`). Cota diaria e horario seguem herdando curso/unidade.
+  Precedencia: matricula > curso na vitrine > unidade
+  (`lib/pedagogia/order-override.ts`, PURO, sem gemeo no LMS — ele recebe a
+  politica ja resolvida por `PATCH /enrollments/:id/policy`).
+- **Consequencia no LMS:** matricula com ordem propria guarda la a politica
+  INTEIRA, entao nao herda o `PUT /tenants/:id`. Por isso
+  `syncTenantPedagogyToLms` re-empurra essas matriculas, `syncCoursePedagogyToLms`
+  mescla o override de cada uma e `pedagogyForNewEnrollment` o leva no
+  reprovisionamento ("Retomar" da assinatura).
+- **LMS antes do banco:** a rota so grava depois de o LMS aceitar (502 e nada
+  muda). So vale para matricula com `lmsEnrollmentId` e nao cancelada — a
+  fornecedora legada nao tem controle aula a aula.
+- Gotejamento conta da data da MATRICULA: ligar num aluno antigo libera na hora
+  o que ja "venceu". Revisao do que ja foi concluido nunca e barrada.
+- Migration `20260930_enrollment_pedagogy_order` (aditiva, idempotente, sem
+  backfill — NULL = segue a regra de hoje).
+- **Regra por CURSO ganhou tela:** `/painel/pedagogia/cursos/[courseId]`
+  (a API `/api/painel/cursos/[id]/pedagogia` existia sem UI). Em
+  /painel/pedagogia, o card "Regra propria por curso" lista os cursos com regra
+  e deixa escolher outro. Fica FORA do `WriteGate`: quem so tem
+  `pedagogia.view` navega para consultar. O formulario usa `key` pelo estado
+  "tem regra/nao tem" — sem isso, depois de "Voltar as regras da unidade" o
+  estado antigo continuava na tela e salvar recriava o override removido.
+
+**Revisao antes do commit: 5 defeitos, todos corrigidos.**
+- O "Retomar" da assinatura reprovisiona por `provisionCourseForStudent`, e
+  nao por `provisionLmsAccess`. So um dos dois levava a ordem propria.
+  Ao mexer no que viaja na matricula, confira os DOIS caminhos de
+  provisionamento.
+- Re-empurrar as matriculas com ordem propria saiu do PUT da unidade para
+  `afterResponse` (`syncOverriddenEnrollmentsToLms`): N PATCHes com retry
+  penduravam a tela.
+- Propagacao passou a usar `status != CANCELLED`, o mesmo recorte da rota. Com
+  so ACTIVE/COMPLETED, a matricula SUSPENDED voltava a ACTIVE com a regra velha.
+- Se o banco falha depois de o LMS aceitar, a rota devolve ao LMS a regra que o
+  banco ainda tem.
+
+### Aluno logado compra combo e ve assinatura em /aluno/comprar (2026-09-30)
+
+Chamado Capacita Pro Brasil: quem ja tinha cadastro nao comprava COMBO nem
+assinatura. O checkout anonimo de combo (`/api/loja/checkout/package`) recusa
+CPF com login ("faca login... recompra autenticada usa /api/aluno/comprar") — e
+`/api/aluno/comprar` so aceitava curso avulso. `/aluno/comprar` listava so cursos
+(busca "combo" vazia), e `/aluno/assinar` nao tinha link no menu.
+
+- **`/api/aluno/comprar` aceita `packageId`** (loja da unidade), via
+  `startStudentPackagePurchase` (`lib/packages/student-purchase.ts`): mesmas
+  regras do checkout de combo da loja (preco do escopo, matricula PRIMARIA,
+  cupom, 100% sem gateway, PENDING reaproveitada), com o aluno da SESSAO e sem
+  recoletar dados (menor sem responsavel e recusado). Vitrine PMB: recusa
+  explicita. `/api/aluno/cupom/validar` aceita `packageId` para a previa.
+- **Cuidado com `courseId` opcional:** o schema virou "curso OU combo", e o
+  `courseId` e estreitado ANTES de ramificar — `courseId: undefined` num `where`
+  do Prisma e IGNORADO e o filtro casaria qualquer curso.
+- **Tela:** combos entram na MESMA grade, categoria "COMBOS" (herdam busca,
+  filtro, resumo com cupom e "Concluir compra"); cartao "Assinaturas" no topo leva
+  a `/aluno/assinar` (ou `/aluno/assinatura` para quem ja assina). Pagamento do
+  combo mostra o combo no resumo e e a vista, como na loja.
+
+### Limpeza de cadastros de teste (2026-09-30)
+
+`/api/cron/limpar-cadastros-teste?tenant=<slug>&ids=<studentId>,...` (Bearer
+CRON_SECRET, dry-run; `apply=1` executa). So alcanca aluno SEM matricula,
+certificado ou ciclo de assinatura pago; cancela as assinaturas vivas no
+gateway da unidade e anonimiza pelo mesmo fluxo LGPD de `DELETE /api/aluno/conta`
+(agora em `lib/lgpd/anonymize-student.ts`). Cobranca que nao cai no gateway
+bloqueia a anonimizacao. Disparo por `app_internal.run_cron(...)`.
+
+Primeiro uso: 4 cadastros de teste da `capacitaprobrasil` (os 5 com pagamento
+ficaram, por decisao do dono). Descoberta no caminho: ao remover assinatura
+nativa do Asaas, as cobrancas abertas locais ficavam PENDING para sempre (o
+Asaas as exclui, mas `PAYMENT_DELETED` so e tratado no carne) — `cancel.ts`
+passou a marca-las CANCELLED.
+
+### Email de cobranca da unidade com retentativa (2026-10-01)
+
+Unidades reclamaram de nao receber email de cobranca. `email_logs` mostrou 87
+emails de cobranca de unidade falhados de 17 a 28/09 (apagoes da Hostinger), em
+56 unidades, e NENHUM foi tentado de novo: a janela e reivindicada em
+`TenantPaymentReminder` antes do disparo, o email saia em background pela ponte
+notificacao→email, e ninguem conferia o resultado. Cinco unidades foram
+canceladas com o email do ultimo aviso (D+5) falhado.
+
+- **`TenantPaymentReminder.emailedAt`** (migration
+  `20261001_tenant_payment_reminder_emailed_at`, idempotente, COM backfill
+  `emailed_at = sent_at` — sem ele todo aviso antigo de cobranca em aberto seria
+  reenviado no primeiro cron). NULL = email ainda nao saiu. A linha em si so
+  prova o aviso in-app.
+- **`deliverReminderEmail`** (`lib/tenant-billing/reminders.ts`): reivindica
+  `emailedAt` ANTES de enviar e DEVOLVE a nulo se nenhum provedor aceitar. Usado
+  pelos lembretes D-5/D-2/D0 e pelo ultimo aviso do `overdue-sweep`.
+- **`sendTenantNotificationEmails`** (`lib/notifications.ts`): mesmo destinatario,
+  preferencia e kill-switch da ponte, mas sincrono e devolvendo se saiu. Quem
+  precisa de retentativa chama `createNotification` com `suppressEmail: true` e
+  entrega o email por aqui.
+- **Lembrete:** fase 2 do cron entrega todo aviso pendente de cobranca ainda em
+  aberto e nao vencida, com o texto do DIA ("vence em 4 dias", "vence amanha"),
+  nao o da janela que falhou. D0 que falha nao e retentado no dia seguinte: a
+  cobranca ja venceu e quem fala e a regua de inadimplencia.
+- **Ultimo aviso:** o email e tentado em toda execucao da janela (D+5 e D+6); o
+  aviso in-app continua saindo uma vez so.
+- **Fora do alcance:** os emails de suspensao (D+3), cancelamento (D+7), "Sua
+  mensalidade venceu" (webhook) e pagamento confirmado seguem sem retentativa —
+  sao `sendEmail` direto, sem linha de estado para marcar.
+- **Nao explicado:** em 22/09 seis lembretes foram reivindicados as 11:00 UTC
+  sem notificacao in-app nem linha em `email_logs`. A fase 2 cobre o email desse
+  caso (linha pendente), nao o aviso in-app.
+- **Deploy:** nao subir perto das 11:00 UTC nem das 03:01 UTC. Linha criada pelo
+  codigo antigo entre a migration e a troca de versao nasce com `emailed_at`
+  nulo e ganha um email repetido no cron seguinte.
+- Testes verificados POR MUTACAO (7, todas mortas): nao devolver a janela,
+  voltar a usar a ponte, retentar email ja entregue, enviar sem reivindicar,
+  usar o texto da janela em vez do dia.
+
+### Pix Automatico: 1o pagamento nao computava (2026-10-01)
+
+Chamado Capacita Pro Brasil (audio): o aluno paga a assinatura no PIX pela
+pagina publica, a compra "nao computa", e so computa quando paga DE NOVO pelo
+link da area do aluno. Confirmado em producao na primeira assinatura real de
+Pix Automatico (`cmuoojmm2000g04jxjdjrjydt`): duas cobrancas de R$ 34,90 pagas.
+
+- **Causa:** `linkPixAutomaticFirstPayment` casava o pagamento do QR pelo
+  CLIENTE Asaas. O Asaas cria esse pagamento no cliente do PAGADOR (descricao
+  "Cobranca gerada automaticamente a partir de Pix recebido"), que so coincide
+  com o da autorizacao quando o aluno paga com o proprio CPF. Caia em
+  "matricula nao encontrada"; depois a area do aluno via a autorizacao fora de
+  `CREATED` e emitia um PIX comum por cima.
+- **Conserto:** `StudentSubscription.pixAutomaticQrId` guarda
+  `immediateQrCode.conciliationIdentifier` na criacao da autorizacao; o webhook
+  casa primeiro por `payment.pixQrCodeId`, e so depois pelo cliente. Migration
+  `20261001_subscription_pix_automatic_qr_id` (aditiva, idempotente, sem
+  backfill — assinatura criada antes do deploy segue casando so pelo cliente).
+- **Validado em producao (01/10):** duas assinaturas novas pagas pela pagina
+  publica ativaram sozinhas, e `pix_automatic_qr_id` bateu com o `pixQrCodeId`
+  do pagamento nas duas.
+- Sobrou no Asaas da unidade a cobranca orfa `pay_5plbsjtsjbvimpvr` (R$ 34,90,
+  teste da propria unidade).
+
+### Conta removida: assinatura viva e e-mail preso no LMS (2026-10-01)
+
+No reteste do parceiro o pagamento computou, mas o aluno lia "A plataforma de
+aulas nao respondeu. Tente novamente" ao abrir um curso. Tres defeitos, todos
+em volta de "Excluir minha conta":
+
+- **Excluir a conta nao cancelava a assinatura.** `anonymizeStudentAccount`
+  apagava os dados e a assinatura seguia ACTIVE — com a autorizacao de Pix
+  Automatico viva, o ciclo seguinte seria debitado de uma conta que nao existe
+  mais. So a limpeza de cadastros de teste cancelava antes. Agora o cancelamento
+  mora no NUCLEO (as duas portas herdam) e roda ANTES de apagar os dados. Nao
+  bloqueia a exclusao: se o gateway falhar, `cancelSubscriptionAccess` ja alerta
+  o SUPER_ADMIN com o id da assinatura.
+- **O e-mail ficava preso no LMS.** La o e-mail e unico por unidade
+  (`@@unique([tenantExternalId, email])`), e a conta removida continuava com
+  ele: o cadastro novo com o mesmo e-mail tomava 409 em `POST /enrollments`. O
+  LMS SEMPRE teve `DELETE /api/v1/students/:id` (anonimiza e libera o e-mail) —
+  o PMB e que nunca chamava, e registrava "LMS sem API de exclusao" como
+  pendencia manual. `eraseLmsStudent` + `propagateStudentErasure` passaram a
+  chamar, DEPOIS de revogar as matriculas. Pendencia manual do LMS so quando a
+  chamada falha; a EA segue manual (essa nao tem API mesmo).
+- **Recusa nao e queda.** `releaseSubscriptionCourse` devolvia `PROVIDER_FAILED`
+  para qualquer erro, e a tela mandava "tente novamente" numa recusa 4xx que
+  repetir nunca resolve. Entrou `PROVIDER_REFUSED` (LmsApiError 4xx) com
+  mensagem propria; 5xx e rede seguem como falha transitoria.
+- **Remediacao:** `/api/cron/limpar-cadastros-teste` passou a aceitar conta que
+  o titular JA removeu, mesmo com pagamento ou matricula — e o jeito de encerrar
+  a assinatura que ficou viva (6 em producao, todas da Capacita) e de apagar a
+  PII que restou no LMS.
+
+- **O assinante nao via o proprio pagamento.** `/aluno` e `/aluno/pagamentos`
+  so liam `payments`; o ciclo de assinatura mora em `subscription_payments`.
+  Assinatura paga e ativa aparecia como "Total pago R$ 0,00 — nenhum pagamento
+  confirmado" (o painel da unidade ja tinha sido corrigido em 24/09, o do aluno
+  nao). Fonte unica: `loadStudentPaymentHistory`
+  (`lib/students/payment-history.ts`), mesmo recorte da receita da unidade
+  (`SUBSCRIPTION_REVENUE_WHERE`). O carne de PIX saiu da secao "Boletos da
+  assinatura" de `/aluno/pagamentos`: nao ha boleto, e a linha em aberto ficava
+  em "Gerando boleto…" para sempre.
+
+### Remocao de curso na plataforma legada NUNCA funcionou (2026-10-01, em aberto)
+
+Achado ao cancelar as assinaturas das contas removidas: `unlinkCourseFromStudent`
+no ramo da legada (`DELETE usuarios/remover_curso_combo`) responde HTTP 403.
+
+- **Tamanho:** `audit_logs` (`enrollment.cancel` com `removeAccess: true`) —
+  **59 de 59** remocoes de curso da legada falharam, de 22/07 a 30/09. No LMS,
+  36 de 36 funcionaram. O aluno cancelado segue com o curso la; quem cancela ve
+  `platformError` na resposta, mas a matricula local vira CANCELLED mesmo assim.
+  Vale tambem para assinatura (cancelamento, "tirar da lista", troca de curso).
+- **Causa conhecida ate aqui:** a APLICACAO da fornecedora recusa, nao um
+  firewall. Corpo da resposta: `{"erro":"Token informado e invalido, tente
+  novamente.","resultado":[]}`. O MESMO token funciona em todo POST (campo
+  `token` do form-data). No DELETE ele vai no cabecalho `token`, como a
+  documentacao deles manda, e nao e reconhecido.
+- **Nao resolvido.** Falta saber como o token tem de ir no DELETE (nome/caixa do
+  cabecalho, corpo, ou outro metodo) — pergunta para a fornecedora, ou teste
+  feito por quem tem o token em maos.
+- **Instrumentacao que ficou:** o erro HTTP do cliente da legada leva o corpo da
+  resposta; `/api/cron/refazer-revogacao?enrollment=<id>&apply=1` repete a
+  remocao de UMA matricula ja cancelada (ou de assinatura encerrada) e devolve o
+  erro inteiro. Serve para conferir o conserto e para a remediacao.
+- **Remediacao pendente de decisao:** as 59 matriculas canceladas com pedido de
+  remocao seguem vinculadas la. Remover apaga o progresso — so depois de o dono
+  decidir.
+
+### Personalizacao da identidade por papel de cor (2026-10-01)
+
+A unidade so tinha DUAS cores e UMA logo, e a cor principal fazia tres papeis ao
+mesmo tempo: botao, fundo de faixa escura (rodape, banners) e titulo em fundo
+claro. O texto sobre a faixa era branco fixo. E a area do aluno (`/aluno`) so
+pintava o MENU — o conteudo das paginas seguia o verde da plataforma.
+
+- **Fonte unica:** `src/lib/tenant/theme.ts` (PURO — a previa do painel importa
+  dali, entao nunca mostra cor que a loja nao pinta). `Tenant.theme` (Json) +
+  `Tenant.logoDarkUrl`; migration `20261001_tenant_theme` (aditiva, idempotente,
+  sem backfill).
+- **Automatico e o padrao.** Todo campo nulo = o sistema decide: botao comum e
+  area escura herdam a cor principal, botao de destaque herda a de destaque, e
+  todo TEXTO sobre cor sai do contraste (`readableOn`). Quem nao mexe em nada
+  nao fica com texto ilegivel; quem ajusta na mao e avisado
+  (`themeWarnings` + "Corrigir para mim"), sem bloquear o salvamento.
+- **Papeis (variaveis em `:root`, defaults no globals.css):** `--brand-btn*`
+  (Entrar, Pagar, Continuar), `--brand-cta*` (Comprar, Quero estudar),
+  `--brand-dark*` (faixas escuras) e a TINTA — `--color-pmb-green*` continua
+  sendo titulo/link/borda em fundo claro, entao os ~600 usos de texto nao
+  precisaram mudar. So os FUNDOS foram reapontados.
+- **`<style>` em `:root`, nao `<div style>`** (`TenantThemeStyle`): dialogo e menu
+  suspenso renderizam em portal, fora de qualquer wrapper, e ficavam com o verde
+  da plataforma dentro da loja da unidade. O valor vai dentro de `<style>`:
+  `safeHex` DESCARTA o que nao e hex (mesma regra do LMS).
+- **Claro ou escuro:** topo da loja, rodape e menu do aluno
+  (`headerTone`/`footerTone`/`studentMenuTone`). `.tone-dark` remapeia a tinta
+  para o texto da area escura; `.tone-ink` devolve a tinta nas ilhas claras
+  (busca, menu de categorias). So o topo usa o remapeamento — em heroi com
+  cartao branco dentro ele quebraria o cartao, entao la a troca e explicita.
+- **Logo por fundo:** `logoForTone` — a area escura usa `logoDarkUrl` e cai na
+  logo principal COM placa branca (o comportamento historico do rodape).
+- **Limiar 2,5 e nao 3:1**, calibrado nas 119 unidades de producao: com 3,
+  laranja e azul-claro de marca trocariam o texto branco por tinta escura e a
+  unidade leria "mudaram meu site". Com 2,5 so os amarelos viram (2 unidades).
+- **O que muda para quem nao mexeu em nada:** o texto de "Comprar"/"Quero
+  estudar" deixa de ser a cor principal sobre a de destaque (81 das 119 unidades
+  estavam abaixo de 3:1 — as 53 no azul padrao tinham azul sobre azul-escuro);
+  o hover do botao escurece; e `/aluno` inteiro passa a seguir a marca.
+- **Layout novo que sirva unidade** entra na lista do teste de cobertura em
+  `theme.test.ts` (exige `TenantThemeStyle`, proibe montar cor a mao).
+- **Fora, de proposito:** o LMS (segue com as duas cores e a logo principal —
+  ja tem contraste automatico e tema proprio), e-mails, certificado e artes.
+  Tom claro/escuro por secao da home e os tons `lime` fixos de fundo claro
+  (`--color-pmb-lime-50`) tambem ficaram de fora.
+
+### API de parceiros — criar unidade (2026-10-02)
+
+`POST /api/v1/unidades` (escopo novo `unidades.create`) cria a unidade e devolve
+o link da 1a mensalidade. Para o sistema de automacao interno. Contrato em
+`docs/api/parceiros-v1.md` §6 e na doc copiavel da aba API de /admin/configuracoes.
+
+- **Mesmo nucleo do /admin e do painel** (`createReseller`): cobranca no Asaas da
+  PMB, e-mail de onboarding com a senha temporaria, vitrine semeada. O `actor`
+  aceita `userId: null`; a auditoria grava `actorRole: "API_KEY"` e
+  `actorEmail: "api:<prefixo da chave>"`.
+- **So o plano de tabela** (`pro` 239, de `RESELLER_PLANS`; o `profissionaliza`
+  209 saiu de venda em 2026-10-13 — unidade que ja esta nele segue igual). Cortesia, promocao e valor livre seguem so no /admin: uma
+  chave vazada nao abre unidade de graca. Com isso a trava de cortesia por
+  titular nunca dispara por aqui.
+- **O link e `/cobranca/<paymentId>`** (checkout transparente do PMB), nunca o
+  `invoiceUrl` do Asaas; ha teste travando. A API nunca devolve senha.
+- **Asaas falhou = unidade criada com `pagamento.url: null`** e o motivo em
+  `pagamento.erro` (mesmo comportamento do /admin). Repetir o POST da 409.
+- **Sem idempotencia por chave:** em timeout o integrador consulta
+  `/unidades/lookup?email=` antes de repetir.
+- **Portaria unica** em `lib/api-parceiros/gate.ts` (`autenticarParceiro`): teto
+  por IP, chave + escopo, teto por chave com bucket por escopo (consulta 120/min,
+  criacao 30/min). O lookup passou a usa-la — rota nova de /api/v1 tambem deve.
+- A chave nova nasce so com `unidades.read` marcado no formulario: antes o
+  default era "todos os escopos", e criar viria junto sem ninguem pedir.
+
+### Webhooks de saida (2026-10-02)
+
+O PMB passa a AVISAR sistemas integrados (automacao interna) quando algo
+acontece com uma unidade. Cadastro em /admin/configuracoes -> aba API ->
+"Webhooks de saida": URL https + eventos escolhidos. Contrato em
+`docs/api/parceiros-v1.md` §8.
+
+- **Catalogo fechado** em `lib/webhooks-saida/core.ts` (PURO — a tela importa
+  os rotulos dali; criptografia mora em `secret.ts`): `unidade.criada`,
+  `unidade.pagamento.{confirmado,vencido,estornado}`,
+  `unidade.{ativada,suspensa,cancelada}`, mais `webhook.teste` (so pelo botao).
+- **Outbox:** o evento vira `WebhookDelivery` (uma por endpoint) ANTES de
+  qualquer rede. 1a tentativa via `afterResponse`; as seguintes pelo cron
+  `/api/cron/webhooks-entregas` (pg_cron `pmb-webhooks-entregas`, 5 min) com
+  backoff 1m/5m/30m/2h/6h/24h, depois FAILED (reenvio manual na tela).
+  **Sem o job agendado, entrega que falhar na 1a tentativa fica PENDING.**
+- **Dedupe por fato** (`@@unique([endpointId, dedupeKey])` +
+  `createManyAndReturn({ skipDuplicates })`): pagamento confirmado chega por
+  CONFIRMED e RECEIVED, pelo webhook E pela reconciliacao/baixa manual — sai UM
+  evento por cobranca (`asaasPaymentId`). Eventos de status NAO tem dedupe (a
+  unidade pode ser suspensa e reativada varias vezes): quem chama passa o status
+  anterior e `emitUnidadeStatus` so emite em transicao real.
+- **Pontos de disparo** (nao ha funcao central de "status mudou" no repo):
+  `asaas/process.ts` (confirmado/vencido/estornado, suspensao por overdue, por
+  refund e por assinatura cancelada, mensalidade parcelada), `asaas/reconcile.ts`,
+  `tenants/overdue-sweep.ts`, `resellers/cancel.ts` (`origem` nas opcoes),
+  cron `reactivate-paid`, rotas admin de status, de detalhe (ativacao no GET),
+  baixa/pagamento manual, mark-paid e estorno; `createReseller` (campo `origem`
+  OBRIGATORIO no input — chamador novo nao compila sem ele) e o cadastro publico.
+  **Escrita nova de `Tenant.status` ou de pagamento de unidade precisa chamar o
+  emissor**, senao o integrador nunca fica sabendo.
+- `emitWebhookEvent` **nunca lanca** e so monta o payload se algum endpoint
+  assina o evento — sem webhook cadastrado o custo e uma consulta indexada.
+- **Payload:** o bloco `unidade` e o MESMO de `GET /unidades/lookup`
+  (`serializarUnidade`); `pagamento.url` e `/cobranca/<id>` (checkout do PMB),
+  `null` em mensalidade parcelada no cartao.
+- **Assinatura** igual a do webhook de entrada do LMS:
+  `HMAC-SHA256(segredo, "<timestamp>.<corpo>")`, header `X-PMB-Signature:
+  sha256=<hex>`. O segredo (`whsec_`) e mostrado uma vez e guardado CIFRADO
+  (AES-256-GCM, `lib/crypto`) — nao da para guardar so o hash, precisamos dele
+  em claro para assinar.
+- **SSRF:** so `https`, sem credencial na URL, sem hostname/IP interno, e
+  `redirect: "manual"` (redirect conta como falha). Limite conhecido: dominio que
+  RESOLVE para IP privado passa (marcado com `ponytail:` em `core.ts`).
+- Permissao: `integracoes.view` para ver, `integracoes.manage` para mexer;
+  criar/editar/excluir auditado (`webhook_endpoint.*`, sem o segredo).
+- **Deploy:** migration `20261002_outbound_webhooks` (aditiva, idempotente, RLS
+  ligada, sem backfill) e **agendar `pmb-webhooks-entregas`** no pg_cron
+  (`prisma/sql/pg_cron_jobs.sql`) — job novo nao se agenda sozinho.
+- **Log dos disparos** na mesma aba (`GET /api/admin/webhooks/log`): enviados
+  (`webhook_deliveries`) e recebidos (`webhook_logs`: LMS, Asaas, MP), com
+  filtro de sucesso/erro. Nos recebidos o erro e `processed = false` — o campo
+  `error` tambem guarda observacao de evento que deu CERTO no Asaas.
+- **Achado no caminho: o PMB recusava TODO `lesson.completed` do LMS** (1776 de
+  01/07 a 02/10): o schema exigia `completedAt` string e o LMS manda `null` em
+  aula de curso nao concluido — exatamente o exemplo do contrato. Agora
+  `nullish()`. O progresso nao se perdeu (o delta horario `day-update` cobre),
+  so a latencia era de ate 1h e a cota de aulas reagia atrasada.
+
+### Estorno MP revogava a matricula errada (2026-10-13)
+
+Chamado educasobral: aluna com matricula paga (LDB para professores) apareceu
+cancelada sem ninguem ter cancelado. O PIX abandonado da 1a tentativa
+(mesma `external_reference`) expirou dias depois e chegou `cancelled`; o webhook
+revogou a matricula que um 2o PIX ja tinha pago.
+
+- **Dois defeitos em `mercadopago/process.ts`.** (1) O revoke nao conferia se o
+  pagamento avisado era o que LIBEROU a matricula. (2) O Passo 1 descartava todo
+  webhook de pagamento com linha em `payments` — entao estorno/chargeback de
+  pagamento PAGO nunca chegou ao revoke (as 147 linhas MP estavam `APPROVED`).
+  O revoke so rodava para pagamento nunca pago: o branch inteiro so acertava o
+  caso errado.
+- **Agora:** o Passo 1 so encerra se a linha ja foi revertida; o revoke exige
+  `payments.enrollmentId === enrollmentId` para aquele `mpPaymentId`; aprovado
+  repetido nao refaz fulfill nem re-avisa HMAC. No topico de
+  `subscription_authorized_payment` a linha e re-buscada pelo id real.
+- **Muda comportamento:** estorno/chargeback feito no painel do MP passa a tirar
+  o acesso; venda PENDENTE com PIX expirado deixa de virar CANCELLED (o aluno
+  ainda pode pagar em `/pagar/<id>`).
+- **Raio medido:** dos 20 revokes por `cancelled` desde julho, so a matricula da
+  Regina era paga — reativada no LMS (mesmo `enrollmentId`, progresso mantido) e
+  no banco, com `audit_logs` `enrollment.reactivate`.
+- Testes em `process.test.ts`, verificados POR MUTACAO (3/3).
+
+### Banco de artes organizado por mês (2026-10-15)
+
+`MarketingArt.month` (1..12; null = vale o ano todo) organiza as artes em
+pastas no /painel/artes e no /admin/artes (`components/shared/artes/month-folders.tsx`:
+Todas · Ano todo · Janeiro..Dezembro, mês corrente marcado). O painel abre na
+pasta do mês corrente quando ela tem arte (`defaultMonthFilter`); o mês é o do
+calendário de Brasília (`currentBrMonth`), não UTC. No admin, as setas de
+reordenar só aparecem em "Todas": com uma pasta aberta o vizinho visível não é
+o vizinho real.
+
+- **Ordem = ordem de postagem.** Arte nova entra no topo (`position` menor que
+  todas). Num lote, poste por ÚLTIMO o que deve aparecer primeiro (data de
+  hoje, depois o tema do mês). Não existe "fixar no topo" — decisão do dono.
+- Migration `20261015_marketing_art_month` (aditiva, idempotente) faz backfill
+  só das categorias sazonais (Dia dos Professores, Mês das Crianças, Outubro
+  Rosa → 10; Novembro Azul, Black Friday → 11).
+- Artes de data NUNCA levam o número do ano: são reaproveitadas todo ano.
+
+### Teste de cartao roubado no checkout publico (2026-10-20)
+
+Robo usou a vitrine da `profissionalizantes` (Certifica Pro) de 23h28 de 19/10 a
+00h34 de 20/10 (BRT): 1.281 cadastros + matriculas, 496 tentativas de cartao, 8
+aprovadas (R$ 719,20, "MEI na Pratica"). Chamava `POST /api/loja/checkout`
+DIRETO (1.281 POSTs x 10 aberturas de /checkout), IPs de 30+ paises, mesmo
+user-agent — o limite de 10/min POR IP nao pegou nada (zero 429).
+
+**Efeito colateral pior que a fraude:** cada cadastro disparava o e-mail de
+boas-vindas ANTES do pagamento. ~1.280 e-mails em 1h e a Hostinger suspendeu as
+5 caixas (554); `SMTP_*` da Vercel com senha velha (535). E-mail da rede inteira
+fora do ar desde 02:49 UTC de 20/10.
+
+- **Contencao (feita em prod):** as 8 matriculas CANCELLED + revogadas no LMS
+  (`/api/cron/refazer-revogacao`); 1.273 pendentes CANCELLED; 1.280 leads LOST
+  (senao `pmb-sweep-abandoned-leads` mandaria 1.272 recuperacoes 24h depois);
+  1.281 alunos BLOQUEADO, sem senha, `obs` "SUSPEITO". `audit_logs` com
+  `actorEmail = incidente-fraude-cartao-2026-10-20`. Nada apagado.
+- **Nenhum checkout publico cria senha/e-mail antes de pagar.** O fulfill ja
+  gerava senha + boas-vindas na aprovacao; a assinatura (que nao passa pelo
+  fulfill) ganhou `provisionSubscriberAccess` no 1o ciclo (`renew.ts`).
+  Perda aceita: quem nao pagou nao entra em /aluno (paga por `/pagar/<id>`).
+- **Vercel BotID (basico) nos 13 POST de `/api/loja/checkout/**` e
+  `/api/checkout/**`** — `lib/checkout/bot-guard.ts` + `src/instrumentation-client.ts`
+  + `withBotId` no next.config. BotID e nao Turnstile: Turnstile pede cada host
+  no widget e temos dezenas de dominios proprios. O proxy deixa passar o prefixo
+  `/149e9513-01fa-4fb0-aad4-566afd725d1b/` — reescrever para /loja quebra a prova.
+  Fail-open se o servico cair.
+- **Trava de cartao no CLIENTE do gateway** (`lib/checkout/card-guard.ts`,
+  chamada por `asaas/client.ts` e `mercadopago/client.ts`): disjuntor por CONTA
+  (10 recusas/10 min fecham o cartao 30 min naquela conta + alerta SUPER_ADMIN
+  sem `category`), mesmo cartao com outro CPF recusado (24h), mais de 4
+  tentativas do mesmo cartao/hora recusadas. Impressao = HMAC do PAN, nunca o
+  numero. No MP o cartao vem tokenizado: so o disjuntor. Bloqueio vira
+  `AsaasApiError` 400 — as portas ja sabem mostrar e desfazer. Fail-open no Redis.
+- **Caixinha "Nao sou um robo" (reCAPTCHA v2)** em cima do BotID
+  (`lib/checkout/human-check.ts` + `components/loja/recaptcha-box.tsx`). UMA
+  chave para todos os dominios: a "verificacao de origem" fica DESLIGADA no
+  console do Google e a origem e conferida no servidor (hostname do token ==
+  host da requisicao). Cadastro (`"issue"`) exige token e emite passe de uso
+  unico (cookie `pmb_hc`, 2 min, `SET NX` no Redis) para o pagamento do mesmo
+  envio; pagamento/assinatura (`"consume"`) aceita passe ou token novo; parcelas
+  (`null`) nao pedem. Nova tentativa de cartao = caixinha nova. Desligada ate
+  `RECAPTCHA_SITE_KEY` (mapeada para `NEXT_PUBLIC_` no next.config) e
+  `RECAPTCHA_SECRET_KEY` existirem (a do site
+  e de BUILD: mudar exige redeploy). Google fora = fail-open. Formularios do
+  aluno logado (`/api/aluno/*`) nao mostram a caixinha (`isPublicCheckoutPath`).
+- Invariante: `checkout/bot-guard-coverage.test.ts` (rota nova sem BotID ou com
+  `provisionStudentAccess` quebra). Verificado POR MUTACAO (4/4).
+- **Pendente:** liberar as caixas com a Hostinger / trocar `SMTP_*`; estorno das
+  8 cobrancas e feito pelo dono da unidade no Asaas dele.
+
+### Assinatura de unidade no Asaas: cartao recorrente ou Pix Automatico (2026-10-22)
+
+Pedido do dono: unidade no Asaas vende assinatura como assinatura do Asaas no
+cartao ou como PIX recorrente (Pix Automatico). As quatro portas de checkout ja
+faziam isso; o que fugia era o carne.
+
+- **Venda direta de unidade Asaas nao gera mais carne de boleto**
+  (`CARNE_NOT_AVAILABLE` em `direct-sale.ts`, opcao escondida em
+  /painel/vendas). O link leva ao checkout e o ALUNO escolhe cartao, PIX ou
+  boleto. A vitrine PMB (`tenantId` null) e o MP seguem como eram.
+- **Carne do Asaas nunca pago + aluno escolhe cartao = assinatura do Asaas no
+  cartao** (`convertCarneToCard` em `store-payment.ts`). Antes o cartao pagava
+  so aquele ciclo e a assinatura seguia no boleto/PIX. Fail-closed contra
+  cobranca em dobro: recusa (`CARNE_PAYMENT_IN_FLIGHT`) se a autorizacao do Pix
+  Automatico ja nao esta `CREATED` ou se alguma cobranca do carne nao sai do
+  Asaas. Carne com ciclo ja pago continua pagando so a cobranca aberta.
+- A pagina `/pagar/assinatura` passou a oferecer cartao no carne de PIX do
+  Asaas ainda nao pago.
+- Fora: a venda de 21/10 da eadcenatep (carne PENDING) ficou como estava, por
+  decisao do dono.
+
+### Fatura da unidade nunca some do PMB (2026-10-26)
+
+Chamado PraxisPb: "Dar baixa" respondia 404 "Cobranca nao encontrada". A fatura
+(criada pela reativacao da unidade) existia so no Asaas: a tela leu a lista de
+la antes de o webhook espelhar, a linha saiu com o id `pay_...` e a baixa busca
+pelo id do banco. O fix de 23/10 (`519a3369`) so cobria fatura ja espelhada.
+
+- **Toda acao do admin sobre fatura** (baixa, estorno, cancelar, editar) passa
+  por `resolveTenantPayment` (`lib/tenant-billing/resolve-payment.ts`): aceita
+  id do banco OU do Asaas e, sem espelho, reconcilia a unidade com o Asaas e
+  cria o vinculo antes de agir. Asaas fora = 503, nunca 404.
+- **O GET do detalhe espelha** tudo o que o Asaas lista (`mirrorAsaasPayments`
+  em `lib/asaas/reconcile.ts`, o mesmo do cron): toda linha da tela tem id do
+  banco.
+- **Regra do dono: nada e excluido do PMB.** Fatura cancelada (DELETED) aparece
+  na lista com o historico; antes o select a escondia. Fatura em aberto SEM par
+  no Asaas nao aparece (lista paginada nao prova o cancelamento, e ela
+  ofereceria "Dar baixa" numa fatura que pode nao existir).
+- **Historico em `TenantPayment.notes`** (`lib/tenant-billing/change-log.ts`,
+  PURO): "Cancelada/Baixa/Estornada/Valor/Vencimento ... direto no Asaas" (pelo
+  espelho e pelo webhook PAYMENT_DELETED) e "Cancelada/Editada no PMB por X".
+  As acoes do PMB gravam DELETING/nota ANTES de chamar o Asaas e desfazem se ele
+  recusar — senao o webhook ou um espelho no meio registraria "direto no Asaas".
+- **Bug corrigido:** o espelho regravava o status do Asaas por cima de baixa
+  manual/estorno do PMB (cancelamento no Asaas falhou = fatura voltava a "em
+  aberto"). Linha com `markedPaidAt`/`refundedAt` agora e `locked`.
+- Data civil (00:00 UTC) era formatada no fuso do navegador: vencimento 26/10
+  aparecia como 25/10. Historico e dialogo usam `timeZone: "UTC"`.
+- **Limite:** `PAYMENT_UPDATED` segue ignorado no webhook; edicao feita no Asaas
+  so entra quando alguem abre a unidade ou no cron de reconciliacao.
+
+### Assinatura parcelada no cartão (2026-10-28)
+
+Pedido de unidade: vender assinatura (ex.: anual) parcelada no cartão, "como se
+comprasse um curso". Nenhum gateway parcela na recorrência nativa, e o MP não
+cobra cartão salvo sem CVV — então cada PERÍODO é uma compra parcelada que o
+aluno faz na página da loja. Desenho em
+`docs/superpowers/specs/2026-10-28-assinatura-cartao-parcelado-design.md`.
+
+- **Mora no carnê da plataforma** (`boletoCarne` + `billingType =
+  CARD_INSTALLMENT`): agenda, renovação, período pago, carência e cancelamento
+  são os do carnê. A linha NUNCA é emitida pelo cron (`emitCarneRow` pula, fase
+  C filtra); a cobrança nasce quando o aluno paga. Núcleo em
+  `src/lib/subscriptions/card-installments.ts`.
+- **O nº de parcelas decide o modo**: 1x = cartão de hoje (recorrência do
+  gateway); 2x+ = parcelado. Só assinatura NOVA e sem nada no gateway (decisão
+  do dono) — converter uma viva poderia cobrar em dobro. Na renovação de uma
+  parcelada, 1x é compra à vista do período, sem ligar débito automático.
+- **Teto igual ao curso** (`subscriptionCardInstallmentsCap`): Asaas = nº sem
+  juros da unidade (lá não há juros para o aluno); MP = até 12x, juros do
+  aluno acima do sem juros. Piso de R$ 5 por parcela nos dois.
+- **Asaas: só a 1ª parcela vale como período.** O parcelamento vira N cobranças
+  com `pmb_sub_<id>`, confirmadas juntas e entregues em paralelo;
+  `applyAsaasSubscriptionEvent` desvia toda cobrança com `installment` para
+  `applyAsaasCardInstallmentEvent`. Sem isso 12x dariam 12 períodos. Verificado
+  por mutação. O período é liquidado pelo valor CHEIO (receita soma uma vez).
+- **MP: referência por linha (`subbol_<linha>`)**, como o boleto do carnê —
+  `cancelled`/`rejected` só reabre a linha, nunca vira estorno.
+- **Renovação não é automática:** a varredura avisa o aluno uma vez, no dia em
+  que o período entra na janela de 7 dias (fase C2, sem coluna de marca).
+- **Fora:** vitrine PMB (recusa `installments > 1`), `/api/aluno/assinatura`
+  (aluno logado) e o card da lista de planos.
+- **Não validado contra os gateways reais.** Antes de anunciar: uma compra
+  parcelada de assinatura em cada gateway, conferindo UM período concedido e a
+  receita somada uma vez.
+
+### Venda direta com valor zero vira bolsa (2026-10-28)
+
+Chamado Convicta: a unidade zerava o valor com desconto manual de 100% e a
+venda seguia o caminho paralelo de "desconto integral" (`releaseFreeEnrollment`),
+que libera o curso mas, ao contrario da bolsa, nao marca `Student.bolsista`, nao
+cancela a compra PENDENTE substituida e barra em 409 quem tem pendente. A
+unidade nao sabia qual dos dois tinha usado e acabou cancelando e refazendo
+vendas (o aluno ficou horas com o curso "Cancelado").
+
+- `manualDiscountZeroesPrice` (`lib/checkout/free-enrollment.ts`): desconto
+  MANUAL que zera o preco (100% ou percentual que arredonda a R$ 0,00) e
+  convertido para o ramo da bolsa em `/api/painel/vendas` e `/api/admin/vendas`.
+- **O teto do vendedor e conferido NA conversao**: o ramo da bolsa nao passa
+  pelo bloco do desconto manual, entao sem isso o consultor com teto de 30%
+  viraria bolsista mandando 100%. No /admin nao se exige tambem `vendas.bolsa`:
+  quem tem teto de 100% ja da o curso de graca.
+- No painel a conversao vem ANTES do gate de rateio (`freeGrant`). No /admin ela
+  vem depois do preco e antes da duplicidade; o gate de rateio ja roda depois.
+- Cupom de 100% NAO vira bolsa (cupom promocional nao e bolsa institucional) e
+  segue em `releaseFreeEnrollment`.
+- Tela do painel marca "Bolsista" sozinha quando o desconto zera o total. A do
+  /admin nao (la a caixa exige `vendas.bolsa`); o servidor converte do mesmo jeito.
+- Testes verificados POR MUTACAO: tirar a conversao ou a checagem do teto
+  derruba o teste correspondente em `painel/vendas/route.test.ts`.
+
+### Carne com valores por parcela + edicao depois da venda (2026-10-29)
+
+O carne de curso nascia com UM valor para todas as parcelas, e parcela criada
+nao mudava mais. Pedido: entrada diferente, parcelas com valores proprios e
+renegociacao depois, "como e feito nas faturas da unidade".
+
+- **Na venda** (`/painel/vendas` e `/admin/vendas`): "Personalizar valores" abre
+  um campo por parcela (`amounts`). O parcelamento nativo do Asaas so nasce com
+  valor unico, entao `createAsaasCarne` cria o carne e REPRECIFICA uma a uma as
+  parcelas que diferem (`PUT /payments/{id}`); se alguma falhar, apaga o carne
+  inteiro no Asaas (carne com valor errado cobrando o aluno e pior que nenhum).
+  Piso de R$ 5 por parcela (`MIN_INSTALLMENT_AMOUNT`, boleto do Asaas).
+- **`/admin/vendas` passou a vender curso/pacote no carne** (antes so assinatura),
+  sempre no Asaas da PMB. Total abaixo do preco da vitrine conta como desconto e
+  passa pelo teto do vendedor (`effectiveSalesCap`) — sem isso o carne seria o
+  atalho para furar o cap. O carne do PAINEL continua sem esse teto (divida).
+- **Depois da venda**: botao "Parcelas" na ficha do aluno (admin e painel,
+  `student-management/installments-dialog.tsx`) edita valor e vencimento de
+  parcela em aberto. Nucleo em `lib/installments/edit.ts`; rotas
+  `.../enrollments/[enrollmentId]/parcelas` (GET lista, PATCH edita).
+  - Gateway ANTES do banco. Antes de alterar, o gateway e consultado: parcela
+    paga la (webhook perdido) e recusada com "use Verificar pagamento".
+  - Asaas: `PUT /payments/{id}` (omitir `split` preserva o rateio).
+  - MP: boleto emitido nao muda de valor — e CANCELADO, a linha volta a
+    SCHEDULED e sai boleto novo na hora se ja esta na janela de 7 dias. A chave
+    de idempotencia do boleto MP passou a levar o `updatedAt` da linha
+    (`parc_<id>:<ts>`): com `parc_<id>` puro o MP devolveria o boleto antigo,
+    cancelado, com o valor velho.
+  - Parcela vencida so e renegociada com vencimento NOVO (boleto nao nasce
+    vencido); ao sair do atraso, `maybeReactivate` devolve o acesso.
+  - `finalAmount` da matricula e recalculado pela soma das parcelas; toda edicao
+    vai para `audit_logs` (`enrollment.installment.edit`, antes/depois).
+  - Permissao: painel exige `alunos.manage` E `vendas.create` (Secretaria cuida
+    de cadastro, nao de preco) + recorte `ctx.scope.alunos`; admin segue a
+    matriz de `verificar-pagamento` (`alunos.*` na PMB, `unidades.*` +
+    `canAccessTenant` na unidade).
+- `edit.ts` entrou na lista fechada de `payment-link-coverage.test.ts`: ele
+  regrava a coluna `invoiceUrl` da parcela com o `bankSlipUrl` (PDF), nunca a
+  fatura hospedada.
+- **Nao validado contra os gateways reais.**
+
+### 1a mensalidade paga fora da plataforma (marketplace) (2026-10-29)
+
+Aluno compra curso MENSAL num marketplace de cursos, a 1a mensalidade vai para
+o marketplace e as seguintes precisam ser cobradas aqui. Opcao "1a mensalidade
+ja paga fora" na venda direta de curso mensal (`/painel/vendas` e
+`/admin/vendas`), com a data do pagamento.
+
+- **A baixa e um `Payment` comum** gravado pelo MESMO `fulfillEnrollment` do
+  webhook (libera o curso, manda o acesso, conta a 1a parcela), com id
+  `ext_<matricula>` e `mpPaymentType = "pagamento_externo"`. Conta como receita
+  da unidade. Nucleo: `lib/enrollment/external-first-payment.ts` (puro) e
+  `-server.ts` (`sellWithExternalFirstPayment`, `registerExternalFirstPayment`).
+- **`ext_` nao existe em gateway nenhum.** O fulfill carimba o id na matricula
+  (`asaasPaymentId`/`mpPaymentId`), que e onde verificacao e cancelamento
+  procuram a cobranca — `registerExternalFirstPayment` limpa isso logo depois.
+  O estorno do cancelamento pula `isExternalPaymentId` ("estorne no
+  marketplace"). Fluxo novo que mande id de pagamento ao gateway tem que pular
+  o `ext_` tambem.
+- **Asaas: a mesma assinatura de quando a 1a e paga na plataforma.** A matricula
+  ja nasce ACTIVE; `/pagar/<id>` (loja e PMB) reabre para ela enquanto
+  `recurringSetupPending` (mensal + Asaas + baixa externa + sem assinatura).
+  A assinatura nasce com o 1o vencimento UM MES depois do pagamento no
+  marketplace (nunca no passado) e `maxPayments` = so as restantes. Ate o aluno
+  cadastrar, nada e cobrado — o link fica na ficha do aluno (`checkoutUrl`).
+  Nao ha alerta para quem nunca cadastra.
+- **MP: carne do sistema** (`createMpPlanAfterExternalFirst`): parcela 1 ja
+  PAGA e sem boleto, parcelas 2..N agendadas; o cron emite cada boleto. Exige
+  endereco do aluno. Vitrine PMB so pelo Asaas.
+- Ordem no MP: o carne e criado ANTES da baixa — liberar o curso sem as
+  cobrancas seguintes e o estado que nao pode existir. Falha desfaz a matricula.
+
+### Carne para matricula liberada sem cobranca (2026-10-29)
+
+Caso Lorena (vitrine PMB): a 1a mensalidade foi paga num marketplace e, sem a
+opcao acima, liberaram o curso com desconto de 100% — matricula ACTIVE de R$ 0,
+sem cobranca nenhuma. Remediacao generica:
+
+- `/api/cron/carne-matricula-liberada?enrollment=&boletos=&valor=&vencimento=&pagaForaEm=`
+  (Bearer CRON_SECRET, dry-run por padrao, `apply=1` executa). So aceita
+  matricula ACTIVE, de valor 0, sem pagamento, carne ou assinatura (senao
+  cobraria em dobro). Converte em carne de boletos no Asaas SEM mexer no
+  acesso, registra a 1a paga fora (opcional), tira a flag de bolsista e audita
+  (`enrollment.carne_from_free`). Falha do Asaas desfaz tudo e apaga o carne
+  orfao. Disparo por `app_internal.run_cron(...)`, resposta em
+  `net._http_response`.
+- `createBoletoInstallmentPlan` ganhou `paidBefore`: a parcela 1 nasce PAGA sem
+  boleto e os boletos do Asaas viram as parcelas 2..N+1.
+- **Aplicado em 29/10** (Lorena, `cmvs5vxvt000208jqjdcyyrwq`): 1a paga em 28/10
+  + 6 boletos de R$ 53,84, todo dia 28 de 28/11/2026 a 28/04/2027 (7
+  mensalidades, R$ 376,88). A venda de 27/10 (assinatura no PIX, cancelada)
+  ficou como estava.
+- O token Asaas local (`~/.asaas_token`) NAO e da conta-mae: correcao que
+  precise do Asaas da PMB passa por rota em producao, nao por chamada local.
+
+### CNPJ da unidade (2026-11-04)
+
+Chamado Meraki: a unidade digitava o CNPJ no campo "CPF" de /painel/configuracoes
+e o PUT respondia 400 "CPF inválido". O PMB não tinha onde guardar CNPJ: o único
+documento era `User.cpf` (login de pessoa física, que de propósito nunca aceita
+CNPJ), e o CNPJ do cadastro ia só para o cliente Asaas da mensalidade.
+
+- `Tenant.cnpj` (14 dígitos) + `Tenant.razaoSocial`, migration
+  `20261104_tenant_cnpj` (aditiva, idempotente, sem backfill). Editáveis em
+  "Dados da conta" por quem tem `configuracoes.manage`; auditado como
+  `tenant.cnpj.update`. Validação em `lib/validation/cnpj.ts` (puro).
+- **Salvar CNPJ atualiza o cliente Asaas da mensalidade** (`updateCustomer`,
+  conta-mãe) ANTES de gravar no banco: recusa do Asaas = nada muda. Razão social
+  vira o `name` do cliente. Apagar o CNPJ só tira do PMB; o Asaas fica como está.
+- Rodapé da vitrine mostra "razão social · CNPJ" quando informado. CPF nunca vai
+  para o rodapé (página pública).
+- Fora: /admin não edita esses campos, e a API de parceiros não os devolve.
+
+### Curso mensal: mensalidade so na venda direta (2026-11-05)
+
+Chamado RL Qualifica ("Auxiliar de Consultorio Odontologico", configurado "3x
+de R$ 53"): a vitrine vendia o curso como recorrencia do gateway — so cartao —,
+mas a tela oferecia PIX e boleto, e o pagamento respondia "Assinatura mensal
+exige cartao de credito".
+
+- **Regra do dono:** mensalidade (cartao recorrente) e carne so existem na VENDA
+  DIRETA. Na vitrine (loja da unidade, vitrine da PMB, recompra do aluno
+  logado) o curso e sempre pagamento UNICO pelo TOTAL: o "3x de R$ 53" sai por
+  R$ 159, no PIX, no boleto ou parcelado no cartao. "Assinatura" e so o produto
+  de planos (`StudentSubscription`), que ja aceita PIX/boleto/cartao.
+- **Fonte unica:** `lib/tenant/monthly-policy.ts` — `monthlyAllowedOn(_, "vitrine")`
+  e sempre false; `tenantCourseMonths` (numero da unidade > catalogo > 12) e
+  `vitrineCoursePrice` (mensalidade x meses, tambem no "De R$"). Toda porta que
+  monta preco de vitrine passa por ela: listagens/cards/pagina do curso,
+  checkout da loja e da PMB, recompra, catalogo do aluno e as duas rotas de
+  validacao de cupom (o cupom incide sobre o total).
+- `Tenant.monthlyScope` continua no banco, mas nao abre mais a vitrine; o
+  seletor sumiu de /admin/revendedores.
+- **A venda direta ignorava o numero da unidade:** lia so
+  `Course.monthlyMonthsMain` (null em todos os cursos mensais de unidade) e toda
+  venda mensal nascia com **12** mensalidades. Agora usa `tenantCourseMonths`.
+- `/pagar/<id>` de matricula MONTHLY (venda direta) mostra so cartao
+  (`cardOnly` nos formularios MP e Asaas).
