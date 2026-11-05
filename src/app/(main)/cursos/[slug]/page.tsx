@@ -10,6 +10,7 @@ import {
   type EbookDetailData,
 } from "@/components/shared/ebook-detail-view"
 import { isEbook } from "@/lib/catalog/content-type"
+import { vitrineCoursePrice } from "@/lib/tenant/monthly-policy"
 import { LeadInquiryCard } from "@/components/loja/lead-inquiry-card"
 import { JsonLd } from "@/components/seo/json-ld"
 import { courseJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld"
@@ -42,10 +43,16 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
     })
     if (!c || c.status === "INATIVO" || c.hiddenMain) return null
 
-    const price =
+    // Curso mensal sai na vitrine pelo TOTAL (monthly-policy.ts): mensalidade
+    // e carne so existem na venda direta.
+    const months = c.monthlyMonthsMain ?? 12
+    const price = vitrineCoursePrice(
+      c.paymentTypeMain,
       Number(c.precoVitrineMain ?? 0) ||
-      Number(c.precoPromocional ?? 0) ||
-      Number(c.precoOriginal ?? 0)
+        Number(c.precoPromocional ?? 0) ||
+        Number(c.precoOriginal ?? 0),
+      months,
+    )
 
     // Regra de negocio: curso sem valor nao pode ser exibido — 404 inclusive no
     // detalhe (mesmo por link direto). Antes exibia a pagina com CTA "/contato".
@@ -54,19 +61,18 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
     // "De R$ X" riscado: SO o preco de tabela curado em /admin/catalogo. Nao
     // cai mais em `precoOriginal` — aquele e o preco-base do feed, reescrito
     // pelo sync diario, e por isso nunca foi editavel. Vazio => sem "De".
-    const originalPrice =
-      c.precoDeVitrineMain && Number(c.precoDeVitrineMain) > price
-        ? Number(c.precoDeVitrineMain)
-        : null
+    const precoDe = c.precoDeVitrineMain
+      ? vitrineCoursePrice(c.paymentTypeMain, Number(c.precoDeVitrineMain), months)
+      : null
+    const originalPrice = precoDe != null && precoDe > price ? precoDe : null
 
     // Pagamento único: "Nx sem juros" vem do nº GLOBAL da PMB (não por curso).
     const settings = await getSystemSettings()
 
     // Parcelamento no boleto (carnê, só no gateway Asaas): "em até Nx de R$X".
     // Regra: parcela mínima R$50, máx 6 boletos — mesma dos seletores/rotas.
-    const isMonthlyCourse = c.paymentTypeMain === "MONTHLY"
     const maxBoleto =
-      settings.pmbDirectSaleGateway === "ASAAS" && !isMonthlyCourse
+      settings.pmbDirectSaleGateway === "ASAAS"
         ? pmbMaxBoletoInstallments(price)
         : 1
     const boletoParcelas =

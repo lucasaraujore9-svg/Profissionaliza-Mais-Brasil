@@ -6,8 +6,20 @@
  * - monthlyEnabled: revendedor liga/desliga o uso (dentro do que foi liberado).
  * - monthlyScope: onde o parcelado vale (definido pelo Admin Master).
  *
- * Efetivo = monthlyAllowed && monthlyEnabled. O escopo decide em quais canais
- * o MONTHLY e honrado; quando nao for, o curso cai para ONE_TIME naquele canal.
+ * Efetivo = monthlyAllowed && monthlyEnabled.
+ *
+ * REGRA DE CANAL (2026-11-05, decisao do dono): mensalidade e carne so existem
+ * na VENDA DIRETA. Na vitrine (loja da unidade, vitrine da PMB, recompra do
+ * aluno) o curso e sempre PAGAMENTO UNICO pelo TOTAL — o aluno paga tudo ali,
+ * no PIX, no boleto ou parcelado no cartao. Um curso configurado como "3x de
+ * R$ 53" e vendido na vitrine por R$ 159 (`vitrineCoursePrice`).
+ *
+ * Antes, `monthlyScope = DIRECT_AND_VITRINE` fazia a vitrine vender o curso
+ * como recorrencia do gateway (so cartao): a tela oferecia PIX/boleto e o
+ * pagamento recusava "Assinatura mensal exige cartao de credito". E com
+ * `DIRECT_ONLY` era pior: o curso caia para pagamento unico pelo valor de UMA
+ * mensalidade. `monthlyScope` segue no banco, mas nao abre mais a vitrine.
+ * "Assinatura" de verdade e o produto de planos (`StudentSubscription`).
  */
 
 import type { PaymentType } from "@prisma/client"
@@ -38,11 +50,9 @@ export function monthlyActive(t: MonthlyPolicy): boolean {
   return t.monthlyAllowed && t.monthlyEnabled
 }
 
-/** O parcelado e honrado no canal informado. */
+/** O parcelado e honrado no canal informado — so na venda direta. */
 export function monthlyAllowedOn(t: MonthlyPolicy, channel: MonthlyChannel): boolean {
-  if (!monthlyActive(t)) return false
-  if (channel === "direct") return true
-  return t.monthlyScope === "DIRECT_AND_VITRINE"
+  return channel === "direct" && monthlyActive(t)
 }
 
 /**
@@ -59,4 +69,31 @@ export function effectivePaymentType(
     return "ONE_TIME"
   }
   return base
+}
+
+/**
+ * Quantidade de mensalidades de um curso MONTHLY de unidade: o que a unidade
+ * definiu em /painel/cursos ("Quantidade de mensalidades"), senao o do catalogo
+ * da PMB. Fonte unica para o que a vitrine soma e o que a venda direta cobra —
+ * antes a venda direta ignorava o numero da unidade e criava 12 mensalidades.
+ */
+export function tenantCourseMonths(
+  customParcelas: number | null | undefined,
+  monthlyMonthsMain: number | null | undefined,
+): number {
+  return customParcelas ?? monthlyMonthsMain ?? 12
+}
+
+/**
+ * Preco que a VITRINE cobra por um curso. O preco de um curso MONTHLY e o valor
+ * da MENSALIDADE; na vitrine ele vira o TOTAL (mensalidade x meses), pago de uma
+ * vez. Vale tambem para o "De R$" riscado, que a unidade digita na mesma base.
+ */
+export function vitrineCoursePrice(
+  paymentType: PaymentType,
+  price: number,
+  months: number,
+): number {
+  if (coursePaymentType(paymentType) !== "MONTHLY") return price
+  return Math.round(price * months * 100) / 100
 }

@@ -11,7 +11,7 @@ import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import { resolveVitrinePlans } from "@/lib/subscriptions/plans"
 import { SubscriptionCheckout } from "@/components/loja/subscription-checkout"
 import { SubscriptionOrderSummary } from "@/components/loja/subscription-order-summary"
-import { coursePaymentType } from "@/lib/tenant/monthly-policy"
+import { vitrineCoursePrice } from "@/lib/tenant/monthly-policy"
 import {
   MAX_CARD_INSTALLMENTS,
   displayInterestFreeInstallments,
@@ -333,11 +333,17 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     )
   }
 
-  const basePrice = Number(
-    course.precoVitrineMain ??
-      course.precoPromocional ??
-      course.precoOriginal ??
-      0,
+  // Vitrine: sempre pagamento ÚNICO pelo TOTAL — curso mensal sai por
+  // mensalidade x meses (monthly-policy.ts). Mesma conta de /api/checkout.
+  const basePrice = vitrineCoursePrice(
+    course.paymentTypeMain,
+    Number(
+      course.precoVitrineMain ??
+        course.precoPromocional ??
+        course.precoOriginal ??
+        0,
+    ),
+    course.monthlyMonthsMain ?? 12,
   )
 
   if (basePrice <= 0) {
@@ -380,17 +386,12 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           processPath: "/api/checkout/mp/process",
           statusPath: "/api/checkout/status",
           confirmacaoPath: "/checkout/confirmacao",
-          // Mensal = recorrência (1 cobrança/mês); à vista parcela até 12x.
-          maxInstallments:
-            course.paymentTypeMain === "MONTHLY" ? 1 : MAX_CARD_INSTALLMENTS,
+          maxInstallments: MAX_CARD_INSTALLMENTS,
           interestFreeInstallments: settings.pmbInterestFreeInstallments,
           installmentsPath: "/api/checkout/installments",
         } as const)
       : null
-    : ({
-        kind: "pmb",
-        isMonthly: course.paymentTypeMain === "MONTHLY",
-      } as const)
+    : ({ kind: "pmb" } as const)
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -422,14 +423,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
               courseHours: course.cargaHoraria,
               courseImageUrl: course.capaOverride ?? course.capaImageUrl,
               basePrice,
-              parcelasSugeridas:
-                course.paymentTypeMain === "MONTHLY"
-                  ? course.monthlyMonthsMain
-                  : displayInterestFreeInstallments(
-                      settings.pmbInterestFreeInstallments,
-                    ),
-              paymentType: coursePaymentType(course.paymentTypeMain),
-              monthlyMonths: course.monthlyMonthsMain,
+              parcelasSugeridas: displayInterestFreeInstallments(
+                settings.pmbInterestFreeInstallments,
+              ),
+              paymentType: "ONE_TIME",
+              monthlyMonths: null,
             }}
           />
         ) : (
@@ -452,15 +450,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
                 discountAmount={discountAmount}
                 finalPrice={finalPrice}
                 couponCode={validatedCoupon?.code ?? null}
-                parcelasSugeridas={
-                  course.paymentTypeMain === "MONTHLY"
-                    ? course.monthlyMonthsMain
-                    : displayInterestFreeInstallments(
-                        settings.pmbInterestFreeInstallments,
-                      )
-                }
-                paymentType={coursePaymentType(course.paymentTypeMain)}
-                monthlyMonths={course.monthlyMonthsMain}
+                parcelasSugeridas={displayInterestFreeInstallments(
+                  settings.pmbInterestFreeInstallments,
+                )}
+                paymentType="ONE_TIME"
+                monthlyMonths={null}
               />
             </aside>
           </div>

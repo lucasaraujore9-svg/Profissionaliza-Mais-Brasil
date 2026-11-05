@@ -166,6 +166,7 @@ export default async function StudentPagarPage({ params }: PagarPageProps) {
               interestFreeInstallments={
                 isMonthly || pkg ? 1 : enrollment.tenant.interestFreeInstallments
               }
+              cardOnly={isMonthly}
               defaultNome={enrollment.student.nome ?? undefined}
               defaultEmail={payerEmail}
               processPath="/api/aluno/comprar/process"
@@ -178,6 +179,7 @@ export default async function StudentPagarPage({ params }: PagarPageProps) {
               amount={Number(enrollment.finalAmount)}
               maxInstallments={maxInstallments}
               interestFreeInstallments={enrollment.tenant.interestFreeInstallments}
+              cardOnly={isMonthly}
               enrollmentId={enrollment.id}
               defaultNome={enrollment.student.nome ?? undefined}
               defaultEmail={payerEmail}

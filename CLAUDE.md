@@ -2819,6 +2819,32 @@ CNPJ), e o CNPJ do cadastro ia só para o cliente Asaas da mensalidade.
   para o rodapé (página pública).
 - Fora: /admin não edita esses campos, e a API de parceiros não os devolve.
 
+### Curso mensal: mensalidade so na venda direta (2026-11-05)
+
+Chamado RL Qualifica ("Auxiliar de Consultorio Odontologico", configurado "3x
+de R$ 53"): a vitrine vendia o curso como recorrencia do gateway — so cartao —,
+mas a tela oferecia PIX e boleto, e o pagamento respondia "Assinatura mensal
+exige cartao de credito".
+
+- **Regra do dono:** mensalidade (cartao recorrente) e carne so existem na VENDA
+  DIRETA. Na vitrine (loja da unidade, vitrine da PMB, recompra do aluno
+  logado) o curso e sempre pagamento UNICO pelo TOTAL: o "3x de R$ 53" sai por
+  R$ 159, no PIX, no boleto ou parcelado no cartao. "Assinatura" e so o produto
+  de planos (`StudentSubscription`), que ja aceita PIX/boleto/cartao.
+- **Fonte unica:** `lib/tenant/monthly-policy.ts` — `monthlyAllowedOn(_, "vitrine")`
+  e sempre false; `tenantCourseMonths` (numero da unidade > catalogo > 12) e
+  `vitrineCoursePrice` (mensalidade x meses, tambem no "De R$"). Toda porta que
+  monta preco de vitrine passa por ela: listagens/cards/pagina do curso,
+  checkout da loja e da PMB, recompra, catalogo do aluno e as duas rotas de
+  validacao de cupom (o cupom incide sobre o total).
+- `Tenant.monthlyScope` continua no banco, mas nao abre mais a vitrine; o
+  seletor sumiu de /admin/revendedores.
+- **A venda direta ignorava o numero da unidade:** lia so
+  `Course.monthlyMonthsMain` (null em todos os cursos mensais de unidade) e toda
+  venda mensal nascia com **12** mensalidades. Agora usa `tenantCourseMonths`.
+- `/pagar/<id>` de matricula MONTHLY (venda direta) mostra so cartao
+  (`cardOnly` nos formularios MP e Asaas).
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

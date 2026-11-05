@@ -43,8 +43,7 @@ export const GET = withRequestContext(
             nome: true,
             descricao: true,
             descricaoOverride: true,
-            parcelasSugeridas: true,
-            parcelasOverride: true,
+            monthlyMonthsMain: true,
             aprendizado: true,
           },
         },
@@ -59,8 +58,7 @@ export const GET = withRequestContext(
         precoDe: tc.precoDe != null ? Number(tc.precoDe) : null,
         paymentType: tc.paymentType,
         customParcelas: tc.customParcelas,
-        defaultParcelas:
-          tc.course.parcelasOverride ?? tc.course.parcelasSugeridas,
+        defaultParcelas: tc.course.monthlyMonthsMain,
         customDescription: tc.customDescription,
         defaultDescription:
           tc.course.descricaoOverride ?? tc.course.descricao,

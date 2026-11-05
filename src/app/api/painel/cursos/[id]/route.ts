@@ -102,8 +102,9 @@ export const GET = withRequestContextParams<{ id: string }>(
         customAprendizado: tc.customAprendizado,
         // Defaults vindos do catálogo (úteis pro form mostrar "valor padrão")
         defaultCapaUrl: tc.course.capaOverride ?? tc.course.capaImageUrl,
-        defaultParcelas:
-          tc.course.parcelasOverride ?? tc.course.parcelasSugeridas,
+        // Padrão de "Quantidade de mensalidades" — o mesmo que a venda e a
+        // vitrine usam quando a unidade não define (tenantCourseMonths).
+        defaultParcelas: tc.course.monthlyMonthsMain,
         defaultDescription: tc.course.descricaoOverride ?? tc.course.descricao,
         // Padrão definido pela PMB no catálogo mãe (vazio => texto genérico,
         // que o painel exibe como placeholder).

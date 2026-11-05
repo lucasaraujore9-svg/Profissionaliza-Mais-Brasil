@@ -428,10 +428,18 @@ export function CourseEditDrawer({
                       Mensalidade
                     </div>
                     <div className="mt-0.5 text-[11px] text-gray-500">
-                      Cobrança recorrente no mesmo dia
+                      Só na venda direta
                     </div>
                   </button>
                 </div>
+                {paymentType === "MONTHLY" && (
+                  <p className="mt-1.5 text-[11px] text-gray-500">
+                    Mensalidade (cartão recorrente) e carnê só existem na venda
+                    direta. Na vitrine o aluno paga o <strong>total</strong>{" "}
+                    (mensalidade × quantidade) de uma vez — no PIX, no boleto ou
+                    parcelado no cartão.
+                  </p>
+                )}
                 {!detail?.monthlyAvailable && (
                   <p className="mt-1.5 text-[11px] text-gray-500">
                     Pagamento parcelado/mensalidade não está habilitado para sua

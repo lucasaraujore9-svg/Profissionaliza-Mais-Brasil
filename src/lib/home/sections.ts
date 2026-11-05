@@ -8,7 +8,11 @@ import {
   courseCuratedForTenant,
 } from "@/lib/catalog/visibility"
 import { interestFreeInstallmentText } from "@/lib/mercadopago/installments"
-import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import {
+  effectivePaymentType,
+  tenantCourseMonths,
+  vitrineCoursePrice,
+} from "@/lib/tenant/monthly-policy"
 import { loadTenantDisplayPolicy } from "@/lib/tenant/courses"
 
 // ---------------------------------------------------------------------------
@@ -738,21 +742,22 @@ async function fetchTenantCoursesByIds(
     // que a vitrine cobra a vista, e escondia justamente a parcela sem juros.
     const paymentType = effectivePaymentType(tc.paymentType, policy, "vitrine")
     const isMonthly = paymentType === "MONTHLY"
-    const monthlyMonths =
-      tc.customParcelas ?? c.parcelasOverride ?? c.parcelasSugeridas ?? c.monthlyMonthsMain
+    const monthlyMonths = tenantCourseMonths(tc.customParcelas, c.monthlyMonthsMain)
+    // Curso mensal vai para a vitrine pelo TOTAL (monthly-policy.ts).
+    const price = vitrineCoursePrice(tc.paymentType, Number(tc.price), monthlyMonths)
     return {
       slug: c.slug,
       categoria:
         c.categoriaLoja ?? (c.contentType === "EBOOK" ? "E-book" : "Curso profissionalizante"),
       titulo: c.nome,
       horas: contentCardMeta(c),
-      preco: formatTenantPrice(Number(tc.price)),
+      preco: formatTenantPrice(price),
       // Pagamento único: valor da parcela sem juros da unidade ("10x de R$ 10,00").
       parcelas: isMonthly
         ? monthlyMonths
           ? `${monthlyMonths} mensalidades`
           : "mensalidade"
-        : interestFreeInstallmentText(Number(tc.price), policy.advertisedInterestFree) ?? "",
+        : interestFreeInstallmentText(price, policy.advertisedInterestFree) ?? "",
       paymentType,
       selo: null,
       accent: idx % 2 === 0 ? "gold" : "green",

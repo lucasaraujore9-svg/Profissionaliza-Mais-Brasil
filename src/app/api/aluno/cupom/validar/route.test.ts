@@ -133,7 +133,12 @@ describe("aluno/cupom/validar", () => {
 
   it("aluno de revenda busca cupom DA UNIDADE e usa o preço da unidade", async () => {
     studentFindUnique.mockResolvedValue({ tenant: { id: "t_1", slug: "revenda1" } })
-    tenantCourseFindFirst.mockResolvedValue({ price: 300 })
+    tenantCourseFindFirst.mockResolvedValue({
+      price: 300,
+      paymentType: "ONE_TIME",
+      customParcelas: null,
+      course: { monthlyMonthsMain: null },
+    })
     couponFindFirst.mockResolvedValue(validCoupon({ code: "UNIDADE10", discountValue: 10 }))
 
     const res = await POST(req({ code: "UNIDADE10", courseId: "c1" }))
@@ -148,12 +153,34 @@ describe("aluno/cupom/validar", () => {
     expect(courseFindFirst).not.toHaveBeenCalled()
   })
 
+  it("curso mensal: cupom incide sobre o TOTAL que a vitrine cobra (3x de 53 = 159)", async () => {
+    studentFindUnique.mockResolvedValue({ tenant: { id: "t_1", slug: "revenda1" } })
+    tenantCourseFindFirst.mockResolvedValue({
+      price: 53,
+      paymentType: "MONTHLY",
+      customParcelas: 3,
+      course: { monthlyMonthsMain: null },
+    })
+    couponFindFirst.mockResolvedValue(validCoupon({ code: "UNIDADE10", discountValue: 10 }))
+
+    const res = await POST(req({ code: "UNIDADE10", courseId: "c1" }))
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.data).toMatchObject({ basePrice: 159, finalPrice: 143.1 })
+  })
+
   it("escopo vem de Student.tenantId, NÃO do claim do JWT", async () => {
     // JWT sem tenantId (caso que já causou vazamento de receita no /comprar):
     // ainda assim o cupom tem de ser procurado no escopo da unidade do aluno.
     sessionMock.mockResolvedValue({ studentId: "stu_1", email: "a@b.com", tenantId: null })
     studentFindUnique.mockResolvedValue({ tenant: { id: "t_1", slug: "revenda1" } })
-    tenantCourseFindFirst.mockResolvedValue({ price: 100 })
+    tenantCourseFindFirst.mockResolvedValue({
+      price: 100,
+      paymentType: "ONE_TIME",
+      customParcelas: null,
+      course: { monthlyMonthsMain: null },
+    })
     couponFindFirst.mockResolvedValue(null)
 
     const res = await POST(req({ code: "SUPER50", courseId: "c1" }))

@@ -64,6 +64,11 @@ export interface AsaasCheckoutFormProps {
    * mensalidade e parcela de carnê passam 1. O servidor revalida o teto.
    */
   interestFreeInstallments?: number
+  /**
+   * Só cartão: mensalidade da venda direta vira assinatura do gateway, que só
+   * cobra cartão. Oferecer PIX/boleto levava a "Assinatura mensal exige cartão".
+   */
+  cardOnly?: boolean
   defaultNome?: string
   defaultEmail?: string
 }
@@ -155,6 +160,7 @@ export function AsaasCheckoutForm({
   defaultNome,
   defaultEmail,
   interestFreeInstallments = 1,
+  cardOnly = false,
 }: AsaasCheckoutFormProps) {
   const successUrlFor = useCallback(
     (id: string): string => {
@@ -177,7 +183,7 @@ export function AsaasCheckoutForm({
     blCep: "",
     blNumero: "",
   })
-  const [method, setMethod] = useState<Method>("PIX")
+  const [method, setMethod] = useState<Method>(cardOnly ? "CREDIT_CARD" : "PIX")
   // Parcelas no cartão. O teto sai do valor JÁ com cupom: a mesma regra
   // (`interestFreeInstallmentsFor`) que a vitrine anuncia e o servidor valida.
   const [cardInstallments, setCardInstallments] = useState(1)
@@ -504,9 +510,13 @@ export function AsaasCheckoutForm({
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
         <SectionHeader n="02" title="Forma de pagamento" />
         <div className="mt-6 space-y-3">
-          <MethodButton active={method === "PIX"} onClick={() => setMethod("PIX")} icon={QrCode} label="PIX" hint="Aprovação imediata" />
+          {!cardOnly && (
+            <MethodButton active={method === "PIX"} onClick={() => setMethod("PIX")} icon={QrCode} label="PIX" hint="Aprovação imediata" />
+          )}
           <MethodButton active={method === "CREDIT_CARD"} onClick={() => setMethod("CREDIT_CARD")} icon={CreditCard} label="Cartão de Crédito" hint="Aprovação na hora" />
-          <MethodButton active={method === "BOLETO"} onClick={() => setMethod("BOLETO")} icon={Receipt} label="Boleto Bancário" hint="Compensa em até 3 dias úteis" />
+          {!cardOnly && (
+            <MethodButton active={method === "BOLETO"} onClick={() => setMethod("BOLETO")} icon={Receipt} label="Boleto Bancário" hint="Compensa em até 3 dias úteis" />
+          )}
         </div>
 
         {method === "CREDIT_CARD" && (

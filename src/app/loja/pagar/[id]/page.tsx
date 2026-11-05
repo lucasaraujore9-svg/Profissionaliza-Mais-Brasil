@@ -327,7 +327,9 @@ export default async function PagarPage({ params }: PagarPageProps) {
               ? `Pague a parcela ${currentInstallment.number} de ${installmentCount}. Escolha PIX, cartão ou boleto.`
               : recurring
                 ? `A 1ª mensalidade já está paga e seu curso está liberado. Cadastre o cartão para as ${recurring.remaining} mensalidades seguintes — a próxima é cobrada em ${recurring.nextDueDate.split("-").reverse().join("/")}.`
-                : "Escolha a forma de pagamento. É seguro e processado aqui mesmo."}
+                : isMonthly
+                  ? "Mensalidade cobrada no cartão de crédito, uma vez por mês."
+                  : "Escolha a forma de pagamento. É seguro e processado aqui mesmo."}
           </p>
         </header>
 
@@ -352,6 +354,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
                     ? `Pagar parcela ${currentInstallment.number}`
                     : undefined
                 }
+                cardOnly={isMonthly}
                 defaultNome={enrollment.student.nome ?? undefined}
                 defaultEmail={payerEmail}
               />
@@ -363,6 +366,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
                 interestFreeInstallments={
                   enrollment.tenant.interestFreeInstallments
                 }
+                cardOnly={isMonthly}
                 enrollmentId={enrollment.id}
                 defaultNome={enrollment.student.nome ?? undefined}
                 defaultEmail={payerEmail}

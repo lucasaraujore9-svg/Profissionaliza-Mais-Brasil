@@ -1,7 +1,12 @@
 import { prisma } from "@/lib/prisma"
 import type { ContentType, Prisma } from "@prisma/client"
 import { contextLogger } from "@/lib/logger"
-import { effectivePaymentType, type MonthlyPolicy } from "@/lib/tenant/monthly-policy"
+import {
+  effectivePaymentType,
+  tenantCourseMonths,
+  vitrineCoursePrice,
+  type MonthlyPolicy,
+} from "@/lib/tenant/monthly-policy"
 import {
   ADVERTISED_INSTALLMENTS_SELECT,
   tenantAdvertisedInterestFree,
@@ -151,15 +156,16 @@ function mapTenantCourseItem(
   tc: TenantCourseWithCourse,
   policy: TenantDisplayPolicy,
 ): TenantCourseListItem {
-  // Quantidade de mensalidades (MONTHLY) configurada pela unidade. Para MONTHLY o
-  // painel edita customParcelas como "quantidade de mensalidades"; por isso
-  // monthlyMonths o respeita, com fallback no override admin/global.
-  const effectiveParcelas =
-    tc.customParcelas ??
-    tc.course.parcelasOverride ??
-    tc.course.parcelasSugeridas
+  // A vitrine sempre vende pelo TOTAL (ver monthly-policy.ts): curso MONTHLY
+  // aparece como pagamento único de mensalidade x meses.
   const paymentType = effectivePaymentType(tc.paymentType, policy, "vitrine")
-  const monthlyMonths = effectiveParcelas ?? tc.course.monthlyMonthsMain
+  const months = tenantCourseMonths(tc.customParcelas, tc.course.monthlyMonthsMain)
+  const price = vitrineCoursePrice(tc.paymentType, Number(tc.price), months)
+  const precoDe =
+    tc.precoDe != null
+      ? vitrineCoursePrice(tc.paymentType, Number(tc.precoDe), months)
+      : null
+  const monthlyMonths = paymentType === "MONTHLY" ? months : null
   return {
     id: tc.id,
     courseId: tc.courseId,
@@ -171,15 +177,12 @@ function mapTenantCourseItem(
       tc.course.descricao,
     categoria: tc.course.categoriaLoja ?? tc.course.categoriaInterna,
     horas: tc.course.cargaHoraria,
-    price: Number(tc.price),
+    price,
     // "De R$ X" da vitrine DESTA unidade. Vem de `tc.precoDe` (editavel em
     // /painel/cursos), nao do `precoOriginal` do catalogo mae — aquele e o
     // preco-base do fornecedor, reescrito pelo sync e nunca escolhido por quem
     // vende. Vazio ou <= price => sem "De".
-    originalPrice:
-      tc.precoDe && Number(tc.precoDe) > Number(tc.price)
-        ? Number(tc.precoDe)
-        : null,
+    originalPrice: precoDe != null && precoDe > price ? precoDe : null,
     imageUrl:
       tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
     // Pagamento único: parcelas sem juros da unidade (não por curso), só quando
@@ -401,14 +404,15 @@ export async function getTenantCourseBySlug(
 
     const monthly = await loadTenantDisplayPolicy(tenantId)
 
-    // Quantidade de mensalidades (MONTHLY). Em pagamento único o "Nx sem juros"
-    // vem do nº global da unidade — ver mapTenantCourseItem.
-    const effectiveParcelas =
-      tc.customParcelas ??
-      tc.course.parcelasOverride ??
-      tc.course.parcelasSugeridas
+    // Vitrine vende pelo TOTAL — ver mapTenantCourseItem.
     const paymentType = effectivePaymentType(tc.paymentType, monthly, "vitrine")
-    const monthlyMonths = effectiveParcelas ?? tc.course.monthlyMonthsMain
+    const months = tenantCourseMonths(tc.customParcelas, tc.course.monthlyMonthsMain)
+    const price = vitrineCoursePrice(tc.paymentType, Number(tc.price), months)
+    const precoDe =
+      tc.precoDe != null
+        ? vitrineCoursePrice(tc.paymentType, Number(tc.precoDe), months)
+        : null
+    const monthlyMonths = paymentType === "MONTHLY" ? months : null
     const displayParcelas =
       paymentType === "MONTHLY" ? monthlyMonths : monthly.advertisedInterestFree
 
@@ -424,11 +428,8 @@ export async function getTenantCourseBySlug(
         tc.course.descricao,
       categoria: tc.course.categoriaLoja ?? tc.course.categoriaInterna,
       horas: tc.course.cargaHoraria,
-      price: Number(tc.price),
-      originalPrice:
-        tc.precoDe && Number(tc.precoDe) > Number(tc.price)
-          ? Number(tc.precoDe)
-          : null,
+      price,
+      originalPrice: precoDe != null && precoDe > price ? precoDe : null,
       imageUrl:
         tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
       parcelas: displayParcelas,

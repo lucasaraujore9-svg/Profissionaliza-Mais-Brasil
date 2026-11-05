@@ -41,7 +41,11 @@ import {
 } from "@/lib/checkout/free-enrollment"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
-import { effectivePaymentType, monthlyActive } from "@/lib/tenant/monthly-policy"
+import {
+  effectivePaymentType,
+  monthlyActive,
+  tenantCourseMonths,
+} from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { storeBaseUrl } from "@/lib/tenant/urls"
 import { tenantPolo } from "@/lib/tenant/slug"
@@ -599,7 +603,12 @@ export const POST = withRequestContext(
       enrollmentCoursePackageId = null
       bundleCourseIds = tenantCourses.slice(1).map((tc) => tc.courseId)
       rawPaymentType = primary.paymentType
-      monthlyMonthsMain = primary.course.monthlyMonthsMain
+      // O número que a unidade definiu em /painel/cursos ("3x de R$ 53"). Antes
+      // só o do catálogo era lido e toda venda mensal nascia com 12 meses.
+      monthlyMonthsMain = tenantCourseMonths(
+        primary.customParcelas,
+        primary.course.monthlyMonthsMain,
+      )
       saleCourseIds = tenantCourses.map((tc) => tc.courseId)
     }
     if (basePrice <= 0) {

@@ -1,3 +1,4 @@
+import type { PaymentType } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
 import {
@@ -8,7 +9,11 @@ import {
 import { contentCardMeta } from "@/lib/catalog/content-type"
 import { interestFreeInstallmentText } from "@/lib/mercadopago/installments"
 import { getSystemSettings } from "@/lib/system-settings"
-import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import {
+  effectivePaymentType,
+  tenantCourseMonths,
+  vitrineCoursePrice,
+} from "@/lib/tenant/monthly-policy"
 import { loadTenantDisplayPolicy } from "@/lib/tenant/courses"
 
 interface RawCourse {
@@ -26,6 +31,8 @@ interface RawCourse {
   capaOverride: string | null
   parcelasSugeridas: number | null
   parcelasOverride: number | null
+  paymentTypeMain: PaymentType
+  monthlyMonthsMain: number | null
 }
 
 function formatPrice(value: number | null): string {
@@ -33,12 +40,22 @@ function formatPrice(value: number | null): string {
   return `R$ ${value.toFixed(2).replace(".", ",")}`
 }
 
-function pickPrice(c: Pick<RawCourse, "precoVitrineMain" | "precoPromocional" | "precoOriginal">): number {
-  return (
+/** Preço que a vitrine da PMB cobra: curso mensal sai pelo TOTAL (monthly-policy.ts). */
+function pickPrice(
+  c: Pick<
+    RawCourse,
+    | "precoVitrineMain"
+    | "precoPromocional"
+    | "precoOriginal"
+    | "paymentTypeMain"
+    | "monthlyMonthsMain"
+  >,
+): number {
+  const unit =
     Number(c.precoVitrineMain ?? 0) ||
     Number(c.precoPromocional ?? 0) ||
     Number(c.precoOriginal ?? 0)
-  )
+  return vitrineCoursePrice(c.paymentTypeMain, unit, c.monthlyMonthsMain ?? 12)
 }
 
 function toCourse(
@@ -78,6 +95,8 @@ const SELECT = {
   capaOverride: true,
   parcelasSugeridas: true,
   parcelasOverride: true,
+  paymentTypeMain: true,
+  monthlyMonthsMain: true,
 } as const
 
 type DbRow = {
@@ -95,6 +114,8 @@ type DbRow = {
   capaOverride: string | null
   parcelasSugeridas: number | null
   parcelasOverride: number | null
+  paymentTypeMain: PaymentType
+  monthlyMonthsMain: number | null
 }
 
 function normalize(c: DbRow): RawCourse {
@@ -110,6 +131,8 @@ function normalize(c: DbRow): RawCourse {
     capaOverride: c.capaOverride,
     parcelasSugeridas: c.parcelasSugeridas,
     parcelasOverride: c.parcelasOverride,
+    paymentTypeMain: c.paymentTypeMain,
+    monthlyMonthsMain: c.monthlyMonthsMain,
     precoVitrineMain: c.precoVitrineMain ? Number(c.precoVitrineMain) : null,
     precoPromocional: c.precoPromocional ? Number(c.precoPromocional) : null,
     precoOriginal: c.precoOriginal ? Number(c.precoOriginal) : null,
@@ -367,7 +390,14 @@ async function loadTenantShowcase(tenantId: string): Promise<ShowcaseCard[]> {
       take: 3,
       include: {
         course: {
-          select: { slug: true, nome: true, categoriaLoja: true, capaImageUrl: true, capaOverride: true },
+          select: {
+            slug: true,
+            nome: true,
+            categoriaLoja: true,
+            capaImageUrl: true,
+            capaOverride: true,
+            monthlyMonthsMain: true,
+          },
         },
       },
     })
@@ -382,17 +412,23 @@ async function loadTenantShowcase(tenantId: string): Promise<ShowcaseCard[]> {
       // unidade nao liberou para a vitrine e cobrada a vista. O tipo cru
       // mostrava "/mes" num curso que o checkout cobra inteiro.
       const paymentType = effectivePaymentType(tc.paymentType, policy, "vitrine")
+      // Curso mensal vai para a vitrine pelo TOTAL (monthly-policy.ts).
+      const price = vitrineCoursePrice(
+        tc.paymentType,
+        Number(tc.price),
+        tenantCourseMonths(tc.customParcelas, tc.course.monthlyMonthsMain),
+      )
       return {
         slug: tc.course.slug,
         titulo: tc.course.nome,
         categoria: tc.course.categoriaLoja ?? "Curso profissionalizante",
-        preco: formatPrice(Number(tc.price)),
+        preco: formatPrice(price),
         imageUrl: tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
         selo: selos[idx] ?? "novo",
         accent: accents[idx] ?? "gold",
         paymentType,
         installmentNote: showcaseInstallmentNote({
-          price: Number(tc.price),
+          price,
           monthly: paymentType === "MONTHLY",
           interestFree: policy.advertisedInterestFree,
           cardInstallments: policy.checkoutMode !== "NONE",

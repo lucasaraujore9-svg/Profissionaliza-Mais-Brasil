@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server"
+import {
+  tenantCourseMonths,
+  vitrineCoursePrice,
+} from "@/lib/tenant/monthly-policy"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
@@ -98,6 +102,8 @@ export const POST = withRequestContext(
           precoVitrineMain: true,
           precoPromocional: true,
           precoOriginal: true,
+          paymentTypeMain: true,
+          monthlyMonthsMain: true,
         },
       })
       if (!course) {
@@ -106,8 +112,13 @@ export const POST = withRequestContext(
           { status: 404 },
         )
       }
-      basePrice = Number(
-        course.precoVitrineMain ?? course.precoPromocional ?? course.precoOriginal ?? 0,
+      // Mesmo TOTAL que /api/aluno/comprar cobra (monthly-policy.ts).
+      basePrice = vitrineCoursePrice(
+        course.paymentTypeMain,
+        Number(
+          course.precoVitrineMain ?? course.precoPromocional ?? course.precoOriginal ?? 0,
+        ),
+        course.monthlyMonthsMain ?? 12,
       )
     } else {
       const tenantCourse = await prisma.tenantCourse.findFirst({
@@ -118,7 +129,12 @@ export const POST = withRequestContext(
           price: { gt: 0 },
           course: { status: "ATIVO" },
         },
-        select: { price: true },
+        select: {
+          price: true,
+          paymentType: true,
+          customParcelas: true,
+          course: { select: { monthlyMonthsMain: true } },
+        },
       })
       if (!tenantCourse) {
         return NextResponse.json(
@@ -126,7 +142,14 @@ export const POST = withRequestContext(
           { status: 404 },
         )
       }
-      basePrice = Number(tenantCourse.price)
+      basePrice = vitrineCoursePrice(
+        tenantCourse.paymentType,
+        Number(tenantCourse.price),
+        tenantCourseMonths(
+          tenantCourse.customParcelas,
+          tenantCourse.course.monthlyMonthsMain,
+        ),
+      )
     }
 
     if (basePrice <= 0) {

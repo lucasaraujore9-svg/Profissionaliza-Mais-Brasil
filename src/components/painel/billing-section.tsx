@@ -403,13 +403,11 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
         <p className="mt-1 text-xs text-gray-600">
           Quando ativado, você pode marcar cursos como mensalidade em
           Catálogo → Editar curso e gerar <strong>carnês no boleto</strong> na
-          venda direta. O alcance do parcelado é definido pela PMB:{" "}
+          venda direta. Na vitrine, o curso mensal é vendido pelo{" "}
           <strong className="text-[var(--color-pmb-green-900)]">
-            {data.tenant.monthlyScope === "DIRECT_AND_VITRINE"
-              ? "vendas diretas e vitrine"
-              : "apenas vendas diretas"}
-          </strong>
-          .
+            total, em pagamento único
+          </strong>{" "}
+          (PIX, boleto ou cartão parcelado).
         </p>
 
         {data.tenant.monthlyAllowed ? (

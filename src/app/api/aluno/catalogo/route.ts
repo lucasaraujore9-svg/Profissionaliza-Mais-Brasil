@@ -4,7 +4,7 @@ import { requireStudentSession } from "@/lib/auth/student-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "@/lib/catalog/visibility"
 import { listTenantCourses } from "@/lib/tenant/courses"
-import { coursePaymentType } from "@/lib/tenant/monthly-policy"
+import { vitrineCoursePrice } from "@/lib/tenant/monthly-policy"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { getSystemSettings } from "@/lib/system-settings"
 import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
@@ -182,8 +182,11 @@ export const GET = withRequestContext(
     data: {
       ...pmbExtras,
       courses: courses.map((c): CatalogCourse => {
-        const price = Number(
-          c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0,
+        // Recompra é vitrine: curso mensal sai pelo TOTAL (monthly-policy.ts).
+        const price = vitrineCoursePrice(
+          c.paymentTypeMain,
+          Number(c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0),
+          c.monthlyMonthsMain ?? 12,
         )
         return {
           id: c.id,
@@ -193,12 +196,9 @@ export const GET = withRequestContext(
           capa: c.capaOverride ?? c.capaImageUrl ?? null,
           categoria: c.categoriaLoja ?? null,
           price,
-          installments:
-            c.paymentTypeMain === "MONTHLY"
-              ? null
-              : displayInterestFreeInstallments(pmbInterestFree),
-          paymentType: coursePaymentType(c.paymentTypeMain),
-          monthlyMonths: c.monthlyMonthsMain,
+          installments: displayInterestFreeInstallments(pmbInterestFree),
+          paymentType: "ONE_TIME",
+          monthlyMonths: null,
           ownedStatus: ownedMap.get(c.id) ?? null,
         }
       }),

@@ -5,6 +5,10 @@ import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
+import {
+  tenantCourseMonths,
+  vitrineCoursePrice,
+} from "@/lib/tenant/monthly-policy"
 
 const bodySchema = z.object({
   code: z.string().trim().min(1).max(64).transform((v) => v.toUpperCase()),
@@ -57,7 +61,13 @@ export const POST = withRequestContext(
     const tenantCourse = await prisma.tenantCourse.findFirst({
       // course.status="ATIVO": curso desativado na origem (EA/LMS) nao valida cupom.
       where: { id: courseId, tenantId, isVisible: true, course: { status: "ATIVO" } },
-      select: { id: true, price: true },
+      select: {
+        id: true,
+        price: true,
+        paymentType: true,
+        customParcelas: true,
+        course: { select: { monthlyMonthsMain: true } },
+      },
     })
 
     if (!tenantCourse) {
@@ -128,7 +138,15 @@ export const POST = withRequestContext(
       )
     }
 
-    const basePrice = Number(tenantCourse.price)
+    // Mesmo TOTAL que /api/loja/checkout cobra (monthly-policy.ts).
+    const basePrice = vitrineCoursePrice(
+      tenantCourse.paymentType,
+      Number(tenantCourse.price),
+      tenantCourseMonths(
+        tenantCourse.customParcelas,
+        tenantCourse.course.monthlyMonthsMain,
+      ),
+    )
     const discountValue = Number(coupon.discountValue)
     let discountAmount = 0
 

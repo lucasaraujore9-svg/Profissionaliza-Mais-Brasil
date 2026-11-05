@@ -25,7 +25,10 @@ import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { resolveSaleGateway } from "@/lib/checkout/sale-gateway"
-import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import {
+  tenantCourseMonths,
+  vitrineCoursePrice,
+} from "@/lib/tenant/monthly-policy"
 import { isSellablePrice } from "@/lib/checkout/price-guard"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import {
@@ -170,7 +173,15 @@ async function handleResellerInit(
       )
     }
 
-    const basePrice = Number(tenantCourse.price)
+    // Recompra é vitrine: pagamento ÚNICO pelo TOTAL (monthly-policy.ts).
+    const basePrice = vitrineCoursePrice(
+      tenantCourse.paymentType,
+      Number(tenantCourse.price),
+      tenantCourseMonths(
+        tenantCourse.customParcelas,
+        tenantCourse.course.monthlyMonthsMain,
+      ),
+    )
     if (!isSellablePrice(basePrice)) {
       return NextResponse.json(
         { error: "Curso sem valor para venda", code: "COURSE_NO_PRICE" },
@@ -278,9 +289,6 @@ async function handleResellerInit(
       consumedCouponId = couponToReserve
     }
 
-    const effectiveType = effectivePaymentType(tenantCourse.paymentType, tenant, "vitrine")
-    const isMonthly = effectiveType === "MONTHLY"
-    const monthlyMonths = isMonthly ? tenantCourse.course.monthlyMonthsMain ?? 12 : null
 
     // Bloqueio/reaproveitamento de matrícula existente (mesma regra da loja):
     // ACTIVE/COMPLETED → 409; PENDING → reaproveita (permite trocar cartão/método).
@@ -364,14 +372,13 @@ async function handleResellerInit(
         studentId: student.id,
         tenantCourseId: tenantCourse.id,
         courseId: tenantCourse.courseId,
-        paymentType: effectiveType,
+        paymentType: "ONE_TIME",
         status: "PENDING",
         gateway,
         originalAmount: basePrice,
         discountAmount,
         finalAmount,
         couponId,
-        installmentsTotal: monthlyMonths,
         authorSplitSnapshot: splitSnapshot
           ? (splitSnapshot as unknown as Prisma.InputJsonValue)
           : undefined,
@@ -620,11 +627,16 @@ export const POST = withRequestContext(
   }
   const pending = existingActive
 
-  const basePrice = Number(
-    course.precoVitrineMain ??
-      course.precoPromocional ??
-      course.precoOriginal ??
-      0,
+  // Recompra é vitrine: pagamento ÚNICO pelo TOTAL (monthly-policy.ts).
+  const basePrice = vitrineCoursePrice(
+    course.paymentTypeMain,
+    Number(
+      course.precoVitrineMain ??
+        course.precoPromocional ??
+        course.precoOriginal ??
+        0,
+    ),
+    course.monthlyMonthsMain ?? 12,
   )
   if (basePrice <= 0) {
     return NextResponse.json(
@@ -721,11 +733,6 @@ export const POST = withRequestContext(
 
   const finalAmount = finalAmountFromHelper ?? basePrice
 
-  const isMonthly = course.paymentTypeMain === "MONTHLY"
-  const monthlyMonths = isMonthly ? course.monthlyMonthsMain ?? 12 : null
-
-  // MP+MONTHLY agora suportado via preapproval
-
   let splitSnapshot = gate.split
   if (splitSnapshot && discountAmount > 0) {
     const recomputed = await resolveSaleSplit({
@@ -798,14 +805,13 @@ export const POST = withRequestContext(
       studentId: student.id,
       tenantCourseId: null,
       courseId: course.id,
-      paymentType: course.paymentTypeMain,
+      paymentType: "ONE_TIME",
       status: "PENDING",
       gateway: effectiveGateway,
       originalAmount: basePrice,
       discountAmount,
       finalAmount,
       couponId,
-      installmentsTotal: monthlyMonths,
       authorSplitSnapshot: splitSnapshot
         ? (splitSnapshot as unknown as Prisma.InputJsonValue)
         : undefined,

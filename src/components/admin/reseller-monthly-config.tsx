@@ -23,15 +23,13 @@ export function ResellerMonthlyConfig({
   onSaved,
 }: ResellerMonthlyConfigProps) {
   const [allowed, setAllowed] = useState(monthlyAllowed)
-  const [scope, setScope] = useState<MonthlyScope>(monthlyScope)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setAllowed(monthlyAllowed)
-    setScope(monthlyScope)
-  }, [monthlyAllowed, monthlyScope])
+  }, [monthlyAllowed])
 
-  const dirty = allowed !== monthlyAllowed || scope !== monthlyScope
+  const dirty = allowed !== monthlyAllowed
 
   async function save() {
     setSaving(true)
@@ -39,7 +37,7 @@ export function ResellerMonthlyConfig({
       const res = await fetch(`/api/admin/tenants/${tenantId}/mensalidade`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ monthlyAllowed: allowed, monthlyScope: scope }),
+        body: JSON.stringify({ monthlyAllowed: allowed, monthlyScope }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -108,47 +106,10 @@ export function ResellerMonthlyConfig({
         </div>
       </label>
 
-      <div className="mt-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-          Escopo do parcelado
-        </p>
-        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => setScope("DIRECT_ONLY")}
-            disabled={!allowed}
-            className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${
-              scope === "DIRECT_ONLY"
-                ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
-                : "border-gray-200 bg-white hover:border-gray-300"
-            } ${!allowed ? "cursor-not-allowed opacity-50" : ""}`}
-          >
-            <div className="font-bold text-[var(--color-pmb-green-900)]">
-              Apenas venda direta
-            </div>
-            <div className="mt-0.5 text-[11px] text-gray-500">
-              Só nas vendas criadas pelo revendedor.
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setScope("DIRECT_AND_VITRINE")}
-            disabled={!allowed}
-            className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${
-              scope === "DIRECT_AND_VITRINE"
-                ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
-                : "border-gray-200 bg-white hover:border-gray-300"
-            } ${!allowed ? "cursor-not-allowed opacity-50" : ""}`}
-          >
-            <div className="font-bold text-[var(--color-pmb-green-900)]">
-              Venda direta + vitrine
-            </div>
-            <div className="mt-0.5 text-[11px] text-gray-500">
-              Também nas compras self-service do lead.
-            </div>
-          </button>
-        </div>
-      </div>
+      <p className="mt-4 text-xs text-gray-500">
+        Mensalidade e carnê valem só na venda direta. Na vitrine o curso mensal
+        é vendido pelo total (mensalidade × quantidade), em pagamento único.
+      </p>
 
       <div className="mt-5 flex justify-end">
         <Button

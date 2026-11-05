@@ -6,7 +6,10 @@ import { subscriptionCardInstallmentsCap } from "@/lib/subscriptions/carne-sched
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { prisma } from "@/lib/prisma"
 import { visibilityFilter } from "@/lib/tenant/courses"
-import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import {
+  tenantCourseMonths,
+  vitrineCoursePrice,
+} from "@/lib/tenant/monthly-policy"
 import {
   tenantAdvertisedInterestFree,
   tenantCheckoutMode,
@@ -381,13 +384,6 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           capaImageUrl: true,
         },
       },
-      tenant: {
-        select: {
-          monthlyAllowed: true,
-          monthlyEnabled: true,
-          monthlyScope: true,
-        },
-      },
     },
   })
 
@@ -430,20 +426,16 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     mpPublicKey: tenantGateway?.mpPublicKey,
   })
 
-  const basePrice = Number(tenantCourse.price)
-  // Tipo efetivo na vitrine: se a unidade nao tem parcelado habilitado para a
-  // vitrine, MONTHLY cai para ONE_TIME (coerente com /api/loja/checkout).
-  const effectiveType = effectivePaymentType(
+  // Vitrine: sempre pagamento ÚNICO pelo TOTAL — curso mensal sai por
+  // mensalidade x meses (monthly-policy.ts, mesma conta de /api/loja/checkout).
+  const basePrice = vitrineCoursePrice(
     tenantCourse.paymentType,
-    tenantCourse.tenant,
-    "vitrine",
+    Number(tenantCourse.price),
+    tenantCourseMonths(
+      tenantCourse.customParcelas,
+      tenantCourse.course.monthlyMonthsMain,
+    ),
   )
-  // Quantidade de mensalidades da unidade (customParcelas tem prioridade) — só
-  // usada quando MONTHLY. Em pagamento único o "Nx sem juros" vem do nº global.
-  const effectiveParcelas =
-    tenantCourse.customParcelas ??
-    tenantCourse.course.parcelasOverride ??
-    tenantCourse.course.parcelasSugeridas
   // Pagamento único: nº GLOBAL de parcelas sem juros da unidade (fonte do resumo),
   // só quando o checkout parcela — no Asaas o cartão da unidade sai à vista.
   const oneTimeParcelas = tenantGateway
@@ -462,19 +454,14 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     checkoutMode === "ASAAS"
       ? ({
           kind: "asaas",
-          // Mensal = recorrência (1 cobrança/mês); à vista parcela até o nº da
-          // unidade — no Asaas toda parcela é sem juros.
-          interestFreeInstallments:
-            effectiveType === "MONTHLY"
-              ? 1
-              : tenantGateway?.interestFreeInstallments ?? 1,
+          // Parcela até o nº da unidade — no Asaas toda parcela é sem juros.
+          interestFreeInstallments: tenantGateway?.interestFreeInstallments ?? 1,
         } as const)
       : checkoutMode === "MP" && courseMpPublicKey
         ? ({
             kind: "mp",
             publicKey: courseMpPublicKey,
-            // Mensal = recorrência (1 cobrança/mês); à vista parcela até 12x.
-            maxInstallments: effectiveType === "MONTHLY" ? 1 : MAX_CARD_INSTALLMENTS,
+            maxInstallments: MAX_CARD_INSTALLMENTS,
             interestFreeInstallments: tenantGateway?.interestFreeInstallments ?? 1,
           } as const)
         : ({
@@ -528,11 +515,9 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
               tenantCourse.course.capaOverride ??
               tenantCourse.course.capaImageUrl,
             basePrice,
-            parcelasSugeridas:
-              effectiveType === "MONTHLY" ? effectiveParcelas : oneTimeParcelas,
-            paymentType: effectiveType,
-            monthlyMonths:
-              effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain,
+            parcelasSugeridas: oneTimeParcelas,
+            paymentType: "ONE_TIME",
+            monthlyMonths: null,
           }}
         />
       </div>

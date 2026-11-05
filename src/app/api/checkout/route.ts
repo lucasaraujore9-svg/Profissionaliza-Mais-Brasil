@@ -49,6 +49,7 @@ import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { resolvePayer } from "@/lib/checkout/payer"
+import { vitrineCoursePrice } from "@/lib/tenant/monthly-policy"
 import {
   buildGuardianWrite,
   guardianShape,
@@ -264,14 +265,18 @@ export const POST = withRequestContext(
       )
     }
 
-    const isMonthly = course.paymentTypeMain === "MONTHLY"
-    const monthlyMonths = isMonthly ? course.monthlyMonthsMain ?? 12 : null
-
-    const basePrice = Number(
-      course.precoVitrineMain ??
-        course.precoPromocional ??
-        course.precoOriginal ??
-        0,
+    // Vitrine: sempre pagamento ÚNICO pelo TOTAL. Curso mensal sai por
+    // mensalidade x meses; mensalidade e carnê só na venda direta
+    // (monthly-policy.ts).
+    const basePrice = vitrineCoursePrice(
+      course.paymentTypeMain,
+      Number(
+        course.precoVitrineMain ??
+          course.precoPromocional ??
+          course.precoOriginal ??
+          0,
+      ),
+      course.monthlyMonthsMain ?? 12,
     )
     if (basePrice <= 0) {
       return NextResponse.json(
@@ -506,12 +511,6 @@ export const POST = withRequestContext(
           "INSTALLMENTS_UNSUPPORTED",
         )
       }
-      if (isMonthly) {
-        return rejectInstallments(
-          "Cursos com mensalidade não aceitam parcelamento adicional",
-          "INSTALLMENTS_NOT_ALLOWED",
-        )
-      }
       if (data.paymentMethod === "BOLETO") {
         const cap = pmbMaxBoletoInstallments(finalAmount)
         if (installmentsChosen > cap) {
@@ -563,7 +562,7 @@ export const POST = withRequestContext(
         studentId: student.id,
         tenantCourseId: null,
         courseId: course.id,
-        paymentType: course.paymentTypeMain,
+        paymentType: "ONE_TIME",
         status: "PENDING",
         // Rateio so existe no Asaas: a config global de gateway da vitrine PMB
         // e ignorada quando a venda precisa repassar ao produtor.
@@ -572,7 +571,7 @@ export const POST = withRequestContext(
         discountAmount,
         finalAmount,
         couponId,
-        installmentsTotal: monthlyMonths,
+        installmentsTotal: null,
         authorSplitSnapshot: splitSnapshot
           ? (splitSnapshot as unknown as Prisma.InputJsonValue)
           : undefined,
@@ -698,8 +697,8 @@ export const POST = withRequestContext(
         payer: resolvePayer(student),
         courseNome: course.nome,
         finalAmount,
-        isMonthly,
-        monthlyMonths,
+        isMonthly: false,
+        monthlyMonths: null,
         billingType,
         installments: installmentsChosen,
         creditCard: data.creditCard,

@@ -62,6 +62,11 @@ export interface MpCheckoutFormProps {
   maxInstallments?: number
   /** Até quantas parcelas a loja anuncia como sem juros (informativo). */
   interestFreeInstallments?: number
+  /**
+   * Só cartão: mensalidade da venda direta vira recorrência do gateway, que só
+   * cobra cartão. Oferecer PIX/boleto levava a "Assinatura mensal exige cartão".
+   */
+  cardOnly?: boolean
   /** Endpoint que devolve os payer_costs reais do MP (por BIN+valor). */
   installmentsPath?: string
   // Vitrine
@@ -163,6 +168,7 @@ export function MpCheckoutForm({
   amount,
   maxInstallments = MAX_CARD_INSTALLMENTS,
   interestFreeInstallments = 1,
+  cardOnly = false,
   installmentsPath = "/api/loja/checkout/installments",
   courseId,
   packageId,
@@ -206,10 +212,12 @@ export function MpCheckoutForm({
     blCidade: "",
     blUf: "",
   })
-  const [method, setMethod] = useState<Method>("PIX")
+  const [method, setMethod] = useState<Method>(cardOnly ? "CREDIT_CARD" : "PIX")
   // Métodos que a CONTA MP da unidade realmente aceita. null = ainda não sabido
   // (ou consulta falhou) → mostra os 3, preservando o comportamento anterior.
-  const [availableMethods, setAvailableMethods] = useState<Method[] | null>(null)
+  const [availableMethods, setAvailableMethods] = useState<Method[] | null>(
+    cardOnly ? ["CREDIT_CARD"] : null,
+  )
   // Parcelamento do cartão: opções vindas do MP (payer_costs reais) + escolha.
   const [installments, setInstallments] = useState(1)
   const [installmentOptions, setInstallmentOptions] = useState<
@@ -249,7 +257,9 @@ export function MpCheckoutForm({
         if (!res.ok) return
         const data: unknown = await res.json()
         if (cancelled || !Array.isArray(data)) return
-        const available = availableStoreMethods(data)
+        const available = availableStoreMethods(data).filter(
+          (m) => !cardOnly || m === "CREDIT_CARD",
+        )
         if (available.length === 0) return // não zera o checkout — cai no fallback
         setAvailableMethods(available)
         setMethod((prev) =>
@@ -262,7 +272,7 @@ export function MpCheckoutForm({
     return () => {
       cancelled = true
     }
-  }, [publicKey])
+  }, [publicKey, cardOnly])
 
   // BIN do cartão (6 primeiros dígitos) — define as parcelas/juros reais no MP.
   const cardBin = form.ccNumber.replace(/\D/g, "").slice(0, 8)

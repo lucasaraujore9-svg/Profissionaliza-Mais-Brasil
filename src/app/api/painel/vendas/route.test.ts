@@ -500,6 +500,38 @@ describe("venda direta com vários cursos", () => {
     expect(p.enrollment.create).not.toHaveBeenCalled()
   })
 
+  // "3x de R$ 53" definido pela unidade em /painel/cursos: a venda tem de nascer
+  // com 3 mensalidades. Antes só o número do catálogo era lido e caía em 12.
+  it("curso mensal usa a quantidade de mensalidades da UNIDADE", async () => {
+    p.tenant.findUnique.mockResolvedValue({
+      ...asaasTenant(),
+      salesGateway: "MP",
+      mpAccessToken: "enc-token",
+      mpPublicKey: "pk",
+      monthlyAllowed: true,
+      monthlyEnabled: true,
+    })
+    p.tenantCourse.findMany.mockResolvedValue([
+      {
+        id: "tc1",
+        price: 53,
+        courseId: "c1",
+        paymentType: "MONTHLY",
+        customParcelas: 3,
+        course: { id: "c1", nome: "Curso A", slug: "a", monthlyMonthsMain: null, status: "ATIVO", ...SEM_AUTORIA },
+      },
+    ])
+    mockStudent()
+
+    await POST(bodyExistingStudent({ tenantCourseIds: ["tc1"] }))
+    const created = p.enrollment.create.mock.calls[0][0] as {
+      data: { paymentType: string; installmentsTotal: number | null; finalAmount: number }
+    }
+    expect(created.data.paymentType).toBe("MONTHLY")
+    expect(created.data.installmentsTotal).toBe(3)
+    expect(created.data.finalAmount).toBe(53)
+  })
+
   // A duplicidade tem que olhar TODOS os cursos da venda: cobrar de novo um
   // curso que o aluno já tem só porque ele não era o primeiro da lista seria
   // cobrança indevida.

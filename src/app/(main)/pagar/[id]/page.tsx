@@ -275,6 +275,7 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
               // Mensal = recorrência (1 cobrança/mês); à vista parcela até 12x.
               maxInstallments={isMonthly ? 1 : MAX_CARD_INSTALLMENTS}
               interestFreeInstallments={settings.pmbInterestFreeInstallments}
+              cardOnly={isMonthly}
               installmentsPath="/api/checkout/installments"
               enrollmentId={enrollment.id}
               defaultNome={s.nome ?? undefined}

@@ -21,7 +21,10 @@ import { upsertLeadFromCheckout } from "@/lib/automation/leads"
 import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
-import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import {
+  tenantCourseMonths,
+  vitrineCoursePrice,
+} from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import {
   AUTHORED_COURSE_SELECT,
@@ -255,7 +258,18 @@ export const POST = withRequestContext(
     // silenciosamente venderia o curso sem repasse nenhum ao produtor.
     const requiresSplit = saleRequiresSplit(tenantCourse.course, tenantId)
 
-    const basePrice = Number(tenantCourse.price)
+    // Vitrine: sempre pagamento ÚNICO pelo TOTAL. Curso mensal sai por
+    // mensalidade x meses — mensalidade e carnê só na venda direta
+    // (monthly-policy.ts). Antes a vitrine criava recorrência no cartão e a tela
+    // oferecia PIX/boleto que o gateway recusava.
+    const basePrice = vitrineCoursePrice(
+      tenantCourse.paymentType,
+      Number(tenantCourse.price),
+      tenantCourseMonths(
+        tenantCourse.customParcelas,
+        tenantCourse.course.monthlyMonthsMain,
+      ),
+    )
 
     // SAAS-004: trava explícita do preço positivo no caminho de receita.
     // Redundante com o `price: { gt: 0 }` da query (que já devolve 404), mas
@@ -532,17 +546,6 @@ export const POST = withRequestContext(
       })
     }
 
-    // Tipo efetivo: se a unidade nao tem parcelado habilitado para a vitrine,
-    // o curso MONTHLY cai para ONE_TIME na compra self-service do lead.
-    const effectiveType = effectivePaymentType(
-      tenantCourse.paymentType,
-      tenant,
-      "vitrine",
-    )
-    const isMonthly = effectiveType === "MONTHLY"
-    const monthlyMonths = isMonthly
-      ? tenantCourse.course.monthlyMonthsMain ?? 12
-      : null
 
     const enrollment = await prisma.enrollment.create({
       data: {
@@ -550,14 +553,13 @@ export const POST = withRequestContext(
         studentId: student.id,
         tenantCourseId: tenantCourse.id,
         courseId: tenantCourse.courseId,
-        paymentType: effectiveType,
+        paymentType: "ONE_TIME",
         status: "PENDING",
         gateway,
         originalAmount: basePrice,
         discountAmount,
         finalAmount,
         couponId,
-        installmentsTotal: monthlyMonths,
         // Termos CONGELADOS: um carnê paga ao longo de meses e o produtor pode
         // editar a comissão no meio. As parcelas seguintes seguem o acordo
         // desta venda, não o do dia do pagamento.
@@ -637,25 +639,23 @@ export const POST = withRequestContext(
       data: { externalReference },
     })
 
-    // Parcelas máximas oferecidas no cartão (one-time). Mensal = recorrência,
-    // sempre 1 parcela por cobrança.
-    const maxInstallments = isMonthly
-      ? 1
-      : tenantCourse.customParcelas ??
-        tenantCourse.course.parcelasOverride ??
-        tenantCourse.course.parcelasSugeridas ??
-        12
+    // Parcelas máximas oferecidas no cartão.
+    const maxInstallments =
+      tenantCourse.customParcelas ??
+      tenantCourse.course.parcelasOverride ??
+      tenantCourse.course.parcelasSugeridas ??
+      12
 
     return NextResponse.json({
       data: {
         enrollmentId: enrollment.id,
-        mode: isMonthly ? "subscription" : "one_time",
+        mode: "one_time",
         gateway,
         amount: finalAmount,
         publicKey: tenant.mpPublicKey,
         payerEmail: student.email ?? data.email,
         maxInstallments,
-        installmentsTotal: monthlyMonths,
+        installmentsTotal: null,
       },
     })
   } catch (error) {
