@@ -69,6 +69,13 @@ export interface AsaasCheckoutFormProps {
    * cobra cartão. Oferecer PIX/boleto levava a "Assinatura mensal exige cartão".
    */
   cardOnly?: boolean
+  /**
+   * Meios oferecidos (default: todos). `cardOnly` equivale a ["CREDIT_CARD"] e
+   * tem precedência se os dois forem passados. A 1ª entrada é a aba inicial.
+   */
+  methods?: ("PIX" | "BOLETO" | "CREDIT_CARD")[]
+  /** Linha discreta sob o cartão (só aparece se o cartão estiver visível). */
+  cardNote?: string
   defaultNome?: string
   defaultEmail?: string
 }
@@ -161,7 +168,10 @@ export function AsaasCheckoutForm({
   defaultEmail,
   interestFreeInstallments = 1,
   cardOnly = false,
+  methods,
+  cardNote,
 }: AsaasCheckoutFormProps) {
+  const allowed: Method[] = cardOnly ? ["CREDIT_CARD"] : (methods?.length ? methods : ["PIX", "CREDIT_CARD", "BOLETO"])
   const successUrlFor = useCallback(
     (id: string): string => {
       const base =
@@ -183,7 +193,7 @@ export function AsaasCheckoutForm({
     blCep: "",
     blNumero: "",
   })
-  const [method, setMethod] = useState<Method>(cardOnly ? "CREDIT_CARD" : "PIX")
+  const [method, setMethod] = useState<Method>(allowed[0])
   // Parcelas no cartão. O teto sai do valor JÁ com cupom: a mesma regra
   // (`interestFreeInstallmentsFor`) que a vitrine anuncia e o servidor valida.
   const [cardInstallments, setCardInstallments] = useState(1)
@@ -510,11 +520,16 @@ export function AsaasCheckoutForm({
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
         <SectionHeader n="02" title="Forma de pagamento" />
         <div className="mt-6 space-y-3">
-          {!cardOnly && (
+          {allowed.includes("PIX") && (
             <MethodButton active={method === "PIX"} onClick={() => setMethod("PIX")} icon={QrCode} label="PIX" hint="Aprovação imediata" />
           )}
-          <MethodButton active={method === "CREDIT_CARD"} onClick={() => setMethod("CREDIT_CARD")} icon={CreditCard} label="Cartão de Crédito" hint="Aprovação na hora" />
-          {!cardOnly && (
+          {allowed.includes("CREDIT_CARD") && (
+            <MethodButton active={method === "CREDIT_CARD"} onClick={() => setMethod("CREDIT_CARD")} icon={CreditCard} label="Cartão de Crédito" hint="Aprovação na hora" />
+          )}
+          {allowed.includes("CREDIT_CARD") && cardNote && (
+            <p className="px-1 text-xs text-gray-500">{cardNote}</p>
+          )}
+          {allowed.includes("BOLETO") && (
             <MethodButton active={method === "BOLETO"} onClick={() => setMethod("BOLETO")} icon={Receipt} label="Boleto Bancário" hint="Compensa em até 3 dias úteis" />
           )}
         </div>

@@ -67,6 +67,13 @@ export interface MpCheckoutFormProps {
    * cobra cartão. Oferecer PIX/boleto levava a "Assinatura mensal exige cartão".
    */
   cardOnly?: boolean
+  /**
+   * Meios oferecidos (default: todos). `cardOnly` equivale a ["CREDIT_CARD"] e
+   * tem precedência se os dois forem passados. A 1ª entrada é a aba inicial.
+   */
+  methods?: ("PIX" | "BOLETO" | "CREDIT_CARD")[]
+  /** Linha discreta sob o cartão (só aparece se o cartão estiver visível). */
+  cardNote?: string
   /** Endpoint que devolve os payer_costs reais do MP (por BIN+valor). */
   installmentsPath?: string
   // Vitrine
@@ -77,6 +84,8 @@ export interface MpCheckoutFormProps {
   initPath?: string
   // Link de pagamento (matrícula já existe)
   enrollmentId?: string
+  /** Parcela do plano flex sendo paga: vai no POST e no polling (installment_id). */
+  boletoInstallmentId?: string
   // Pré-preenchimento (payMode)
   defaultNome?: string
   defaultEmail?: string
@@ -169,6 +178,9 @@ export function MpCheckoutForm({
   maxInstallments = MAX_CARD_INSTALLMENTS,
   interestFreeInstallments = 1,
   cardOnly = false,
+  methods,
+  cardNote,
+  boletoInstallmentId,
   installmentsPath = "/api/loja/checkout/installments",
   courseId,
   packageId,
@@ -185,6 +197,9 @@ export function MpCheckoutForm({
   // (ex.: `/aluno/pagamentos`) são honrados como estão.
   confirmacaoPath,
 }: MpCheckoutFormProps) {
+  const allowed: Method[] = cardOnly ? ["CREDIT_CARD"] : (methods?.length ? methods : ["PIX", "CREDIT_CARD", "BOLETO"])
+  const restricted = allowed.length < 3
+  const allowedKey = allowed.join(",")
   // Teto efetivo: nunca acima de 12x; mensal/à vista chega como 1.
   const installmentCeiling = Math.min(
     Math.max(1, maxInstallments),
@@ -212,11 +227,11 @@ export function MpCheckoutForm({
     blCidade: "",
     blUf: "",
   })
-  const [method, setMethod] = useState<Method>(cardOnly ? "CREDIT_CARD" : "PIX")
+  const [method, setMethod] = useState<Method>(allowed[0])
   // Métodos que a CONTA MP da unidade realmente aceita. null = ainda não sabido
   // (ou consulta falhou) → mostra os 3, preservando o comportamento anterior.
   const [availableMethods, setAvailableMethods] = useState<Method[] | null>(
-    cardOnly ? ["CREDIT_CARD"] : null,
+    restricted ? allowed : null,
   )
   // Parcelamento do cartão: opções vindas do MP (payer_costs reais) + escolha.
   const [installments, setInstallments] = useState(1)
@@ -258,7 +273,7 @@ export function MpCheckoutForm({
         const data: unknown = await res.json()
         if (cancelled || !Array.isArray(data)) return
         const available = availableStoreMethods(data).filter(
-          (m) => !cardOnly || m === "CREDIT_CARD",
+          (m) => allowed.includes(m),
         )
         if (available.length === 0) return // não zera o checkout — cai no fallback
         setAvailableMethods(available)
@@ -272,7 +287,8 @@ export function MpCheckoutForm({
     return () => {
       cancelled = true
     }
-  }, [publicKey, cardOnly])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicKey, allowedKey])
 
   // BIN do cartão (6 primeiros dígitos) — define as parcelas/juros reais no MP.
   const cardBin = form.ccNumber.replace(/\D/g, "").slice(0, 8)
@@ -567,7 +583,11 @@ export function MpCheckoutForm({
       const res = await fetch(processPath, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...captcha.headers() },
-        body: JSON.stringify({ enrollmentId: ensured.enrollmentId, formData }),
+        body: JSON.stringify({
+          enrollmentId: ensured.enrollmentId,
+          ...(boletoInstallmentId ? { boletoInstallmentId } : {}),
+          formData,
+        }),
       })
       const payload = await res.json()
 
@@ -629,7 +649,11 @@ export function MpCheckoutForm({
       if (cancelled) return
       try {
         const res = await fetch(
-          `${statusPath}?enrollment_id=${encodeURIComponent(id)}`,
+          `${statusPath}?enrollment_id=${encodeURIComponent(id)}${
+            boletoInstallmentId
+              ? `&installment_id=${encodeURIComponent(boletoInstallmentId)}`
+              : ""
+          }`,
           { cache: "no-store" },
         )
         const data = await res.json()
@@ -646,7 +670,7 @@ export function MpCheckoutForm({
       clearInterval(interval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, activeEnrollmentId, statusPath, confirmacaoPath])
+  }, [status, activeEnrollmentId, statusPath, confirmacaoPath, boletoInstallmentId])
 
   const submitting = status.kind === "submitting"
 
@@ -755,6 +779,9 @@ export function MpCheckoutForm({
           )}
           {(!availableMethods || availableMethods.includes("CREDIT_CARD")) && (
             <MethodButton active={method === "CREDIT_CARD"} onClick={() => setMethod("CREDIT_CARD")} icon={CreditCard} label="Cartão de Crédito" hint="Aprovação na hora" />
+          )}
+          {cardNote && (!availableMethods || availableMethods.includes("CREDIT_CARD")) && (
+            <p className="px-1 text-xs text-gray-500">{cardNote}</p>
           )}
           {(!availableMethods || availableMethods.includes("BOLETO")) && (
             <MethodButton active={method === "BOLETO"} onClick={() => setMethod("BOLETO")} icon={Receipt} label="Boleto Bancário" hint="Compensa em até 3 dias úteis" />
