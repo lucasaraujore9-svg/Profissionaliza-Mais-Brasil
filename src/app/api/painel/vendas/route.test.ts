@@ -769,6 +769,26 @@ describe("venda de assinatura no boleto", () => {
     expect(sale.mock.calls[0][0].discountPercent).toBe(10)
   })
 
+  it("formulário velho: carnê de curso com amounts → 400 explícito, sem matrícula", async () => {
+    const res = await POST(
+      bodyExistingStudent({
+        boletoInstallment: { count: 3, amounts: [50, 30, 30], firstDueDate: "2099-10-10" },
+      }),
+    )
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { fields: Record<string, string[]> }
+    expect(json.fields.boletoInstallment?.[0]).toContain("recarregue")
+    expect(p.enrollment.create).not.toHaveBeenCalled()
+  })
+
+  it("assinatura no boleto com amounts (campo de curso) → 400, não descarta", async () => {
+    const res = await POST(
+      planBody({ boletoInstallment: { ...carne, amounts: [59.9, 59.9] } }),
+    )
+    expect(res.status).toBe(400)
+    expect(sale).not.toHaveBeenCalled()
+  })
+
   it("carnê (boletoInstallment) de CURSO deixou de existir → 400", async () => {
     const res = await POST(
       bodyExistingStudent({

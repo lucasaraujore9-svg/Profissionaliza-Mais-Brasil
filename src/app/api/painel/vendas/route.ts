@@ -123,6 +123,10 @@ const createSchema = withGuardianRule(
     .object({
       count: z.number().int().min(1).max(MAX_BOLETO_INSTALLMENTS),
       firstDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+      // Campos do carnê de CURSO antigo: declarados só para recusar (400) o
+      // formulário velho em vez de o Zod descartá-los em silêncio.
+      installmentValue: z.unknown().optional(),
+      amounts: z.unknown().optional(),
     })
     .optional(),
   // Venda PARCELADA de curso/pacote: entrada opcional + N parcelas iguais + 1º
@@ -171,10 +175,16 @@ const createSchema = withGuardianRule(
       "Assinatura não aceita cupom nem bolsa de estudo — use desconto manual.",
     path: ["planId"],
   })
-  .refine((v) => !v.boletoInstallment || !!v.planId, {
-    message: "Carnê no boleto só vale para assinatura — para curso, use o parcelado.",
-    path: ["boletoInstallment"],
-  })
+  // Carnê de CURSO virou `parcelado`: o formulário antigo (aberto antes do
+  // deploy) recebe 400 em vez de a venda mudar de forma sem aviso.
+  .refine(
+    (v) =>
+      !v.boletoInstallment ||
+      (!!v.planId &&
+        v.boletoInstallment.installmentValue === undefined &&
+        v.boletoInstallment.amounts === undefined),
+    { message: "Carnê de curso virou Parcelado — recarregue a página.", path: ["boletoInstallment"] },
+  )
   // Parcelado: o valor é o das parcelas, digitado pelo vendedor — cupom,
   // desconto e bolsa não se somam a ele. Total abaixo da vitrine passa pelo
   // teto do vendedor no handler.

@@ -194,6 +194,9 @@ const createSchema = z
     // vencimento. Nada é cobrado na venda: o aluno escolhe o meio (PIX, boleto
     // ou cartão) em /pagar/<id>, no gateway da venda direta.
     parcelado: parceladoSchema.optional(),
+    // Carnê de curso antigo: declarado só para recusar (400) o formulário velho
+    // — sem isto o Zod o descartava e a venda saía à vista pelo total.
+    carneCurso: z.unknown().optional(),
     // 1ª parcela paga FORA (marketplace): dentro do parcelado, a linha 1 nasce
     // paga e o curso é liberado agora.
     primeiraMensalidadeExterna: z
@@ -223,6 +226,10 @@ const createSchema = z
   .refine((v) => !v.boletoCarne || !!v.planId, {
     message: "Carnê no boleto só vale para assinatura.",
     path: ["boletoCarne"],
+  })
+  .refine((v) => v.carneCurso === undefined, {
+    message: "Carnê de curso virou Parcelado — recarregue a página.",
+    path: ["carneCurso"],
   })
   // Parcelado: o valor é o das parcelas, digitado pelo vendedor — cupom,
   // desconto e bolsa não se somam a ele (mesma regra do /painel/vendas).

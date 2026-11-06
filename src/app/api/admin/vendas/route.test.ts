@@ -215,6 +215,16 @@ describe("admin: venda direta parcelada", () => {
     expect(p.enrollment.delete).toHaveBeenCalledWith({ where: { id: "e1" } })
   })
 
+  it("formulário velho: carneCurso → 400 explícito, sem matrícula (não vira à vista)", async () => {
+    const res = await POST(
+      req({ parcelado: undefined, carneCurso: { amounts: [50, 50], firstDueDate: "2099-01-10" } }),
+    )
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { fields: Record<string, string[]> }
+    expect(json.fields.carneCurso?.[0]).toContain("recarregue")
+    expect(p.enrollment.create).not.toHaveBeenCalled()
+  })
+
   it("gateway da venda direta MP → matrícula gateway MP (não força mais o Asaas)", async () => {
     settings.mockResolvedValue({ pmbDirectSaleGateway: "MP" })
     const res = await POST(req())
