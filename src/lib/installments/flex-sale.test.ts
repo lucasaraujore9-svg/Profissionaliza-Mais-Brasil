@@ -17,7 +17,7 @@ import { prisma } from "@/lib/prisma"
 import { registerExternalFirstPayment } from "@/lib/enrollment/external-first-payment-server"
 import * as asaas from "@/lib/asaas/client"
 import * as mp from "@/lib/mercadopago/client"
-import { createFlexPlan } from "./flex-sale"
+import { createFlexPlan, flexSalePlan } from "./flex-sale"
 
 const p = prisma as unknown as {
   enrollment: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
@@ -87,5 +87,38 @@ describe("createFlexPlan", () => {
     await expect(createFlexPlan({ enrollmentId: "enr1", tenant, schedule })).rejects.toThrow()
     expect(p.boletoInstallment.createMany).not.toHaveBeenCalled()
     expect(p.enrollment.update).not.toHaveBeenCalled()
+  })
+})
+
+describe("flexSalePlan", () => {
+  const now = new Date("2026-11-06T15:00:00Z")
+  const p = { count: 3, installmentValue: 30, downPayment: 10, firstDueDate: "2026-12-06" }
+
+  it("monta a agenda com a venda em `now` e sem paidBefore", () => {
+    const r = flexSalePlan(p, undefined, now)
+    expect(r).toEqual({
+      schedule: {
+        count: 3,
+        installmentValue: 30,
+        downPayment: 10,
+        firstDueDate: new Date("2026-12-06T12:00:00Z"),
+        saleDate: now,
+      },
+    })
+  })
+
+  it("1º vencimento no passado → erro; hoje passa", () => {
+    expect(flexSalePlan({ ...p, firstDueDate: "2026-11-05" }, undefined, now)).toHaveProperty("error")
+    expect(flexSalePlan({ ...p, firstDueDate: "2026-11-06" }, undefined, now)).toHaveProperty("schedule")
+  })
+
+  it("parcela abaixo do piso → erro", () => {
+    expect(flexSalePlan({ ...p, installmentValue: 4 }, undefined, now)).toHaveProperty("error")
+  })
+
+  it("1ª paga fora: futura → erro; passada → paidBefore", () => {
+    expect(flexSalePlan(p, "2026-11-07", now)).toHaveProperty("error")
+    const r = flexSalePlan(p, "2026-11-01", now)
+    expect(r).toMatchObject({ paidBefore: { paidAt: new Date("2026-11-01T12:00:00Z") } })
   })
 })

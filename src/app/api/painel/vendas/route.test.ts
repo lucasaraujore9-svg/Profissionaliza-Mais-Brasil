@@ -34,8 +34,18 @@ vi.mock("@/lib/prisma", () => ({
     tenantCourse: { findMany: vi.fn() },
     tenantMember: { findFirst: vi.fn() },
     student: { findFirst: vi.fn(), update: vi.fn() },
-    enrollment: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    enrollment: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+    },
   },
+}))
+vi.mock("@/lib/installments/flex-sale", async (orig) => ({
+  ...(await orig<typeof import("@/lib/installments/flex-sale")>()),
+  createFlexPlan: vi.fn(),
 }))
 vi.mock("@/lib/enrollment/fulfill", () => ({
   fulfillScholarshipEnrollment: vi.fn().mockResolvedValue(undefined),
@@ -60,6 +70,7 @@ import { getPlanForCheckout } from "@/lib/subscriptions/plans"
 import { createDirectSubscriptionSale } from "@/lib/subscriptions/direct-sale"
 import { saveBoletoAddress } from "@/lib/subscriptions/carne"
 import { cancelPendingSupersededByScholarship } from "@/lib/enrollment/cancel"
+import { createFlexPlan } from "@/lib/installments/flex-sale"
 import { POST } from "./route"
 
 const p = prisma as unknown as {
@@ -74,6 +85,8 @@ const p = prisma as unknown as {
     findFirst: ReturnType<typeof vi.fn>
     create: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
+    delete: ReturnType<typeof vi.fn>
+    deleteMany: ReturnType<typeof vi.fn>
   }
 }
 const resellerSession = requirePainel as unknown as ReturnType<typeof vi.fn>
@@ -463,9 +476,9 @@ describe("venda direta com vários cursos", () => {
     expect(created.data.finalAmount).toBe(315)
   })
 
-  // Mensalidade é contrato recorrente de UM curso: somá-la ao preço à vista de
-  // outros cobraria só o 1º mês pela venda inteira.
-  it("curso mensal junto de outro → 400 e nenhuma matrícula", async () => {
+  // Curso mensal não cria mais MONTHLY na venda direta (sem `parcelado` ele é
+  // pagamento único pelo total da vitrine), então pode ir junto de outro.
+  it("curso mensal junto de outro → uma cobrança única pelo total da vitrine", async () => {
     p.tenant.findUnique.mockResolvedValue({
       ...asaasTenant(),
       salesGateway: "MP",
@@ -494,15 +507,17 @@ describe("venda direta com vários cursos", () => {
     mockStudent()
 
     const res = await POST(bodyExistingStudent({ tenantCourseIds: ["tc1", "tc2"] }))
-    expect(res.status).toBe(400)
-    const json = (await res.json()) as { error: string }
-    expect(json.error).toContain("Curso A")
-    expect(p.enrollment.create).not.toHaveBeenCalled()
+    expect(res.status).toBe(200)
+    const created = p.enrollment.create.mock.calls[0][0] as {
+      data: { paymentType: string; finalAmount: number }
+    }
+    expect(created.data.paymentType).toBe("ONE_TIME")
+    expect(created.data.finalAmount).toBe(1450)
   })
 
-  // "3x de R$ 53" definido pela unidade em /painel/cursos: a venda tem de nascer
-  // com 3 mensalidades. Antes só o número do catálogo era lido e caía em 12.
-  it("curso mensal usa a quantidade de mensalidades da UNIDADE", async () => {
+  // "3x de R$ 53" definido pela unidade em /painel/cursos: sem `parcelado` a
+  // venda sai como pagamento único pelo TOTAL (53 x 3), a regra da vitrine.
+  it("curso mensal sem parcelado → pagamento único pelo total com os meses da UNIDADE", async () => {
     p.tenant.findUnique.mockResolvedValue({
       ...asaasTenant(),
       salesGateway: "MP",
@@ -527,9 +542,9 @@ describe("venda direta com vários cursos", () => {
     const created = p.enrollment.create.mock.calls[0][0] as {
       data: { paymentType: string; installmentsTotal: number | null; finalAmount: number }
     }
-    expect(created.data.paymentType).toBe("MONTHLY")
-    expect(created.data.installmentsTotal).toBe(3)
-    expect(created.data.finalAmount).toBe(53)
+    expect(created.data.paymentType).toBe("ONE_TIME")
+    expect(created.data.installmentsTotal).toBeNull()
+    expect(created.data.finalAmount).toBe(159)
   })
 
   // A duplicidade tem que olhar TODOS os cursos da venda: cobrar de novo um
@@ -754,25 +769,112 @@ describe("venda de assinatura no boleto", () => {
     expect(sale.mock.calls[0][0].discountPercent).toBe(10)
   })
 
-  it("carnê de CURSO continua exigindo o valor da parcela e 2+ parcelas", async () => {
-    const semValor = await POST(
-      bodyExistingStudent({ boletoInstallment: { count: 3, firstDueDate: "2026-10-10" } }),
-    )
-    expect(semValor.status).toBe(400)
-    const umaParcela = await POST(
-      bodyExistingStudent({
-        boletoInstallment: { count: 1, installmentValue: 50, firstDueDate: "2026-10-10" },
-      }),
-    )
-    expect(umaParcela.status).toBe(400)
-  })
-
-  it("carnê de CURSO continua preso ao parcelado da unidade", async () => {
+  it("carnê (boletoInstallment) de CURSO deixou de existir → 400", async () => {
     const res = await POST(
       bodyExistingStudent({
-        boletoInstallment: { count: 3, installmentValue: 50, firstDueDate: "2026-10-10" },
+        boletoInstallment: { count: 3, installmentValue: 50, firstDueDate: "2099-10-10" },
       }),
     )
+    expect(res.status).toBe(400)
+  })
+})
+
+// ── Venda direta parcelada (entrada opcional + N parcelas iguais) ───────────
+// Nada é cobrado na venda: a matrícula nasce PENDING com o plano de linhas e o
+// aluno escolhe o meio (PIX/boleto/cartão) em /pagar/<id>.
+describe("venda direta parcelada", () => {
+  const flex = createFlexPlan as unknown as ReturnType<typeof vi.fn>
+  const parcelado = { count: 3, installmentValue: 30, downPayment: 10, firstDueDate: "2099-01-10" }
+
+  beforeEach(() => {
+    p.tenant.findUnique.mockResolvedValue(
+      asaasTenant({ monthlyAllowed: true, monthlyEnabled: true }),
+    )
+    mockSellableCourse()
+    mockStudent()
+    flex.mockResolvedValue({ rows: 4, total: 100 })
+  })
+
+  it("cria a matrícula BOLETO_INSTALLMENT e o plano com a agenda", async () => {
+    const res = await POST(bodyExistingStudent({ parcelado }))
+    expect(res.status).toBe(200)
+    const created = p.enrollment.create.mock.calls[0][0] as {
+      data: Record<string, unknown>
+    }
+    expect(created.data).toMatchObject({
+      paymentType: "BOLETO_INSTALLMENT",
+      status: "PENDING",
+      gateway: "ASAAS",
+      originalAmount: 100,
+      discountAmount: 0,
+      finalAmount: 100,
+    })
+    expect(p.enrollment.update).toHaveBeenCalledWith({
+      where: { id: "e1" },
+      data: { externalReference: "enr_e1" },
+    })
+    expect(flex).toHaveBeenCalledTimes(1)
+    const arg = flex.mock.calls[0][0]
+    expect(arg.enrollmentId).toBe("e1")
+    expect(arg.tenant).toMatchObject({ id: "t1", isPmbVitrine: false })
+    expect(arg.schedule).toMatchObject({ count: 3, installmentValue: 30, downPayment: 10 })
+    expect(arg.schedule.firstDueDate.toISOString()).toBe("2099-01-10T12:00:00.000Z")
+    expect(arg.paidBefore).toBeUndefined()
+    const json = (await res.json()) as { data: Record<string, unknown> }
+    expect(json.data).toMatchObject({
+      enrollmentId: "e1",
+      studentId: "s1",
+      mode: "parcelado",
+      finalAmount: 100,
+      discountAmount: 0,
+      installment: { count: 3, installmentValue: 30, downPayment: 10, total: 100 },
+    })
+    expect(json.data.paymentUrl).toMatch(/\/pagar\/e1$/)
+  })
+
+  it("total abaixo do teto do consultor → 403 DISCOUNT_CAP, sem matrícula", async () => {
+    p.tenantMember.findFirst.mockResolvedValue({ maxDiscount: 10, role: "consultant", status: "ATIVO" })
+    const res = await POST(
+      bodyExistingStudent({ parcelado: { count: 2, installmentValue: 40, firstDueDate: "2099-01-10" } }),
+    )
     expect(res.status).toBe(403)
+    expect(((await res.json()) as { code: string }).code).toBe("DISCOUNT_CAP")
+    expect(p.enrollment.create).not.toHaveBeenCalled()
+  })
+
+  it("parcela abaixo do piso (R$ 4) → 400", async () => {
+    const res = await POST(bodyExistingStudent({ parcelado: { ...parcelado, installmentValue: 4 } }))
+    expect(res.status).toBe(400)
+    expect(p.enrollment.create).not.toHaveBeenCalled()
+  })
+
+  it("1ª paga fora → createFlexPlan com paidBefore", async () => {
+    const res = await POST(
+      bodyExistingStudent({ parcelado, primeiraMensalidadeExterna: { paidAt: "2026-01-05" } }),
+    )
+    expect(res.status).toBe(200)
+    expect(flex.mock.calls[0][0].paidBefore.paidAt.toISOString()).toBe("2026-01-05T12:00:00.000Z")
+  })
+
+  it("1ª paga fora sem parcelado → 400", async () => {
+    const res = await POST(
+      bodyExistingStudent({ primeiraMensalidadeExterna: { paidAt: "2026-01-05" } }),
+    )
+    expect(res.status).toBe(400)
+    expect(p.enrollment.create).not.toHaveBeenCalled()
+  })
+
+  it("createFlexPlan lança → matrícula removida e 502", async () => {
+    flex.mockRejectedValue(new Error("boom"))
+    const res = await POST(bodyExistingStudent({ parcelado }))
+    expect(res.status).toBe(502)
+    expect(p.enrollment.delete).toHaveBeenCalledWith({ where: { id: "e1" } })
+  })
+
+  it("unidade sem o parcelado liberado → 403", async () => {
+    p.tenant.findUnique.mockResolvedValue(asaasTenant())
+    const res = await POST(bodyExistingStudent({ parcelado }))
+    expect(res.status).toBe(403)
+    expect(p.enrollment.create).not.toHaveBeenCalled()
   })
 })

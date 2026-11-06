@@ -1,7 +1,55 @@
+import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { brDayIso } from "@/lib/dates"
 import type { TenantContext } from "@/lib/enrollment/fulfill"
 import { registerExternalFirstPayment } from "@/lib/enrollment/external-first-payment-server"
 import { buildFlexSchedule, flexScheduleError, flexTotal, type FlexScheduleInput } from "./flex"
+import { MAX_BOLETO_INSTALLMENTS } from "./schedule"
+
+/** Campo `parcelado` das rotas de venda direta (/painel/vendas e /admin/vendas). */
+export const parceladoSchema = z.object({
+  count: z.number().int().min(1).max(MAX_BOLETO_INSTALLMENTS),
+  installmentValue: z.number().positive(),
+  downPayment: z.number().positive().nullable().optional(),
+  firstDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+})
+
+export interface FlexSalePlan {
+  schedule: FlexScheduleInput
+  paidBefore?: { paidAt: Date }
+}
+
+/**
+ * Agenda da venda a partir do corpo da rota, ou a mensagem do 400. Roda antes
+ * de qualquer escrita: 1º vencimento hoje ou futuro, "1ª paga fora" nunca no
+ * futuro (dias no fuso de Brasília), e as regras puras de `flexScheduleError`.
+ */
+export function flexSalePlan(
+  p: z.infer<typeof parceladoSchema>,
+  paidAtYmd: string | undefined,
+  now: Date = new Date(),
+): FlexSalePlan | { error: string } {
+  const today = brDayIso(now)
+  const firstDueDate = new Date(`${p.firstDueDate}T12:00:00Z`)
+  if (Number.isNaN(firstDueDate.getTime()) || p.firstDueDate < today) {
+    return { error: "O 1º vencimento deve ser hoje ou uma data futura." }
+  }
+  const schedule: FlexScheduleInput = {
+    count: p.count,
+    installmentValue: p.installmentValue,
+    downPayment: p.downPayment ?? null,
+    firstDueDate,
+    saleDate: now,
+  }
+  const err = flexScheduleError(schedule)
+  if (err) return { error: err }
+  if (paidAtYmd === undefined) return { schedule }
+  const paidAt = new Date(`${paidAtYmd}T12:00:00Z`)
+  if (Number.isNaN(paidAt.getTime()) || paidAtYmd > today) {
+    return { error: "A data do pagamento feito fora não pode ser futura." }
+  }
+  return { schedule, paidBefore: { paidAt } }
+}
 
 export interface CreateFlexPlanInput {
   enrollmentId: string

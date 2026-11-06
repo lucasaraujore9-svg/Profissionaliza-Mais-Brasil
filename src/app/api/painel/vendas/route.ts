@@ -42,21 +42,21 @@ import {
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import {
-  effectivePaymentType,
   monthlyActive,
   tenantCourseMonths,
+  vitrineCoursePrice,
 } from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { storeBaseUrl } from "@/lib/tenant/urls"
 import { tenantPolo } from "@/lib/tenant/slug"
-import { createBoletoInstallmentPlan } from "@/lib/installments/plan"
-import { sellWithExternalFirstPayment } from "@/lib/enrollment/external-first-payment-server"
+import { MAX_BOLETO_INSTALLMENTS } from "@/lib/installments/schedule"
 import {
-  MIN_BOLETO_INSTALLMENTS,
-  MAX_BOLETO_INSTALLMENTS,
-  installmentAmountsError,
-  sumAmounts,
-} from "@/lib/installments/schedule"
+  createFlexPlan,
+  flexSalePlan,
+  parceladoSchema,
+  type FlexSalePlan,
+} from "@/lib/installments/flex-sale"
+import { flexTotal } from "@/lib/installments/flex"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import { MAX_SALE_COURSES, dedupeIds } from "@/lib/enrollment/multi-course"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
@@ -116,29 +116,22 @@ const createSchema = withGuardianRule(
     manualDiscountPercent: z.number().positive().max(100).optional(),
     // Bolsa de estudo: matricula sem cobranca no Mercado Pago.
     bolsista: z.boolean().optional(),
-  // Venda parcelada no boleto (carnê): a revenda define nº de parcelas + valor
-  // de cada parcela + 1º vencimento. Só válido quando a unidade tem a capability.
-  // Na ASSINATURA o carnê é "um boleto por ciclo": o vendedor escolhe quantos
-  // boletos gerar agora e o 1º vencimento; o valor é o da assinatura (e por isso
-  // `installmentValue` não vem).
+  // ASSINATURA no boleto (carnê): "um boleto por ciclo" — o vendedor escolhe
+  // quantos boletos gerar agora e o 1º vencimento; o valor é o da assinatura.
+  // Só com `planId` (o carnê de CURSO virou `parcelado`).
   boletoInstallment: z
     .object({
       count: z.number().int().min(1).max(MAX_BOLETO_INSTALLMENTS),
-      installmentValue: z.number().positive().optional(),
-      // Um valor por parcela (entrada diferente, parcelas com valores
-      // próprios). Substitui `installmentValue`. Só no carnê de CURSO.
-      amounts: z
-        .array(z.number().positive())
-        .min(MIN_BOLETO_INSTALLMENTS)
-        .max(MAX_BOLETO_INSTALLMENTS)
-        .optional(),
       firstDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
     })
     .optional(),
-  // Curso MENSAL cuja 1ª mensalidade foi paga FORA da plataforma (marketplace
-  // de cursos): dá baixa nela, libera o curso agora e deixa as próximas
-  // configuradas — Asaas pela assinatura (o aluno cadastra o pagamento no link),
-  // Mercado Pago pelo carnê que o próprio sistema emite mês a mês.
+  // Venda PARCELADA de curso/pacote: entrada opcional + N parcelas iguais + 1º
+  // vencimento. Nada é cobrado na venda: o aluno escolhe o meio (PIX, boleto ou
+  // cartão) em /pagar/<id>. Exige o parcelado liberado para a unidade.
+  parcelado: parceladoSchema.optional(),
+  // 1ª parcela paga FORA da plataforma (marketplace de cursos): dentro do
+  // parcelado, a linha 1 nasce paga, o curso é liberado agora e o aluno escolhe
+  // o meio das seguintes no link.
   primeiraMensalidadeExterna: z
     .object({
       paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
@@ -178,27 +171,29 @@ const createSchema = withGuardianRule(
       "Assinatura não aceita cupom nem bolsa de estudo — use desconto manual.",
     path: ["planId"],
   })
-  // Carnê de CURSO: o vendedor define o valor de cada parcela, e parcelamento
-  // é de 2 parcelas para cima. (Na assinatura o valor vem do plano.)
+  .refine((v) => !v.boletoInstallment || !!v.planId, {
+    message: "Carnê no boleto só vale para assinatura — para curso, use o parcelado.",
+    path: ["boletoInstallment"],
+  })
+  // Parcelado: o valor é o das parcelas, digitado pelo vendedor — cupom,
+  // desconto e bolsa não se somam a ele. Total abaixo da vitrine passa pelo
+  // teto do vendedor no handler.
   .refine(
     (v) =>
-      !v.boletoInstallment ||
-      !!v.planId ||
-      ((v.boletoInstallment.installmentValue !== undefined ||
-        v.boletoInstallment.amounts !== undefined) &&
-        v.boletoInstallment.count >= MIN_BOLETO_INSTALLMENTS),
+      !v.parcelado ||
+      (!v.planId && !v.couponCode && !v.manualDiscountPercent && !v.bolsista),
     {
-      message: `Informe o valor de cada parcela (mínimo de ${MIN_BOLETO_INSTALLMENTS} parcelas).`,
-      path: ["boletoInstallment", "installmentValue"],
+      message: "Parcelado não aceita assinatura, cupom, desconto nem bolsa.",
+      path: ["parcelado"],
     },
   )
   .refine(
     (v) =>
       !v.primeiraMensalidadeExterna ||
-      (!v.planId && !v.bolsista && !v.boletoInstallment && !v.packageId),
+      (!!v.parcelado && !v.planId && !v.bolsista && !v.packageId),
     {
       message:
-        "1ª mensalidade paga fora só vale para venda de curso mensal (sem bolsa, carnê ou assinatura).",
+        "1ª parcela paga fora só vale para venda parcelada de curso (sem bolsa ou assinatura).",
       path: ["primeiraMensalidadeExterna"],
     },
   )
@@ -362,6 +357,12 @@ export const POST = withRequestContext(
       )
     }
     const data = parsed.data
+    let flexPlan: FlexSalePlan | null = null
+    if (data.parcelado) {
+      const r = flexSalePlan(data.parcelado, data.primeiraMensalidadeExterna?.paidAt)
+      if ("error" in r) return NextResponse.json({ error: r.error }, { status: 400 })
+      flexPlan = r
+    }
     // `let`: desconto manual que zera o valor vira bolsa mais abaixo, depois
     // que o preço e o teto do vendedor são conhecidos.
     let isBolsista = data.bolsista === true
@@ -410,16 +411,11 @@ export const POST = withRequestContext(
     // não está pronto; nunca há fallback para o outro (REGRA DE OURO).
     const mode = tenantCheckoutMode(tenant)
 
-    const isInstallment = !isBolsista && !!data.boletoInstallment
-    // Carnê de CURSO: valor manual por parcela, sem cupom nem desconto. O da
-    // ASSINATURA é outra coisa — cobra o preço do plano, e por isso o desconto
-    // manual (com o teto do vendedor) continua valendo para ele.
-    const isCourseInstallment = isInstallment && !data.planId
-    // Carnê de CURSO usa a MESMA capability de "Pagamento parcelado
-    // (mensalidade)". A assinatura no boleto não passa por ela: ali não há
-    // crédito concedido (cada boleto paga o ciclo dele) e quem libera a venda de
-    // assinatura é o módulo de assinaturas da unidade.
-    if (isCourseInstallment && !monthlyActive(tenant)) {
+    // Parcelado de curso usa a capability "Pagamento parcelado" (desde
+    // 2026-11-05 ela só vale na venda direta). A assinatura no boleto não passa
+    // por ela: ali não há crédito concedido (cada boleto paga o ciclo dele) e
+    // quem libera a venda de assinatura é o módulo de assinaturas da unidade.
+    if (flexPlan && !monthlyActive(tenant)) {
       return NextResponse.json(
         { error: "Pagamento parcelado não está habilitado para sua unidade." },
         { status: 403 },
@@ -483,7 +479,6 @@ export const POST = withRequestContext(
     let enrollmentCoursePackageId: string | null
     let bundleCourseIds: string[] = []
     let rawPaymentType: PaymentType
-    let monthlyMonthsMain: number | null
     /** Todos os cursos cobertos pela venda — usado no gate de duplicidade. */
     let saleCourseIds: string[]
     /**
@@ -503,7 +498,6 @@ export const POST = withRequestContext(
       enrollmentTenantCourseId = null
       enrollmentCoursePackageId = null
       rawPaymentType = "ONE_TIME"
-      monthlyMonthsMain = null
       saleCourseIds = []
     } else if (isPackage) {
       const pkg = await getPackageForCheckout(tenant.id, data.packageId!)
@@ -518,7 +512,6 @@ export const POST = withRequestContext(
       enrollmentTenantCourseId = null
       enrollmentCoursePackageId = pkg.id
       rawPaymentType = "ONE_TIME"
-      monthlyMonthsMain = null
       // Duplicidade de pacote é checada pela matrícula primária do pacote, não
       // curso a curso (regra histórica) — ver o gate mais abaixo.
       saleCourseIds = [enrollmentCourseId]
@@ -576,39 +569,30 @@ export const POST = withRequestContext(
         )
       }
 
-      // Mensalidade é um contrato recorrente de UM curso: somá-la ao preço à
-      // vista de outros numa cobrança única cobraria só o 1º mês pelo pacote
-      // todo. Curso mensal só é vendido sozinho.
-      const mensal = tenantCourses.find(
-        (tc) => effectivePaymentType(tc.paymentType, tenant, "direct") === "MONTHLY",
-      )
-      if (tenantCourses.length > 1 && mensal) {
-        return NextResponse.json(
-          {
-            error: `O curso "${mensal.course.nome}" é vendido como mensalidade e precisa ser vendido sozinho.`,
-          },
-          { status: 400 },
-        )
-      }
-
       saleCourses = tenantCourses.map((tc) => tc.course)
 
       const primary = tenantCourses[0]
+      // Curso mensal entra pelo TOTAL da vitrine (mensalidade x meses da
+      // unidade): a venda direta não cria mais MONTHLY — à vista cobra o total,
+      // e o parcelado divide esse total (desconto implícito passa pelo teto).
       basePrice =
         Math.round(
-          tenantCourses.reduce((sum, tc) => sum + Number(tc.price), 0) * 100,
+          tenantCourses.reduce(
+            (sum, tc) =>
+              sum +
+              vitrineCoursePrice(
+                tc.paymentType,
+                Number(tc.price),
+                tenantCourseMonths(tc.customParcelas, tc.course.monthlyMonthsMain),
+              ),
+            0,
+          ) * 100,
         ) / 100
       enrollmentCourseId = primary.courseId
       enrollmentTenantCourseId = primary.id
       enrollmentCoursePackageId = null
       bundleCourseIds = tenantCourses.slice(1).map((tc) => tc.courseId)
       rawPaymentType = primary.paymentType
-      // O número que a unidade definiu em /painel/cursos ("3x de R$ 53"). Antes
-      // só o do catálogo era lido e toda venda mensal nascia com 12 meses.
-      monthlyMonthsMain = tenantCourseMonths(
-        primary.customParcelas,
-        primary.course.monthlyMonthsMain,
-      )
       saleCourseIds = tenantCourses.map((tc) => tc.courseId)
     }
     if (basePrice <= 0) {
@@ -640,7 +624,7 @@ export const POST = withRequestContext(
     if (
       !isBolsista &&
       !data.planId &&
-      !isCourseInstallment &&
+      !flexPlan &&
       manualDiscountZeroesPrice(basePrice, data.manualDiscountPercent)
     ) {
       if (data.manualDiscountPercent! > cap + 0.01) {
@@ -678,8 +662,8 @@ export const POST = withRequestContext(
     let discountAmount = 0
     let couponId: string | null = null
     let finalAmountFromCoupon: number | null = null
-    // Cupom não se aplica a carnê (valor definido manualmente pela revenda).
-    if (!isBolsista && !isCourseInstallment && data.couponCode) {
+    // Cupom não se aplica ao parcelado (valor definido pela revenda).
+    if (!isBolsista && !flexPlan && data.couponCode) {
       const code = data.couponCode.toUpperCase()
       const now = new Date()
       // Cupom só do próprio tenant — cupons PMB (tenantId=null) não vazam
@@ -739,10 +723,10 @@ export const POST = withRequestContext(
     // ── Desconto manual (sem cupom) ───────────────────────────────────────
     // O vendedor digita o percentual na hora; o teto é o cap dele (dono 100%,
     // consultor = maxDiscount, já resolvido em `cap`). Mutuamente exclusivo com
-    // cupom (schema) e não se aplica a bolsa nem a carnê de curso (valor
-    // manual). Na assinatura no boleto ELE VALE — pular o teto aqui deixaria o
-    // desconto passar sem limite para o preço da assinatura.
-    if (!isBolsista && !isCourseInstallment && data.manualDiscountPercent) {
+    // cupom (schema) e não se aplica a bolsa nem ao parcelado (valor manual).
+    // Na assinatura no boleto ELE VALE — pular o teto aqui deixaria o desconto
+    // passar sem limite para o preço da assinatura.
+    if (!isBolsista && !flexPlan && data.manualDiscountPercent) {
       if (data.manualDiscountPercent > cap + 0.01) {
         return NextResponse.json(
           { error: `Desconto excede seu cap (${cap}%)` },
@@ -756,6 +740,24 @@ export const POST = withRequestContext(
       })
       discountAmount = applied.discountAmount
       finalAmountFromCoupon = applied.finalAmount
+    }
+
+    // ── Parcelado: total abaixo da vitrine É desconto ─────────────────────
+    // Passa pelo MESMO teto do cupom (dono 100%, consultor = maxDiscount). O
+    // carnê antigo pulava o teto — dívida registrada em 2026-10-29.
+    if (flexPlan) {
+      const total = flexTotal(flexPlan.schedule)
+      discountAmount = Math.max(0, Math.round((basePrice - total) * 100) / 100)
+      if ((discountAmount / basePrice) * 100 > cap + 0.01) {
+        return NextResponse.json(
+          {
+            error: `O total do parcelado dá um desconto acima do seu cap (${cap}%)`,
+            code: "DISCOUNT_CAP",
+          },
+          { status: 403 },
+        )
+      }
+      finalAmountFromCoupon = total
     }
 
     const finalAmount = finalAmountFromCoupon ?? basePrice
@@ -1047,137 +1049,6 @@ export const POST = withRequestContext(
       })
     }
 
-    // ── Carnê (venda parcelada no boleto) ─────────────────────────────────────
-    // Cria a matrícula BOLETO_INSTALLMENT (installmentsTotal = nº de parcelas) e
-    // dispara a geração do plano: Asaas gera o carnê nativo; MP emite a 1ª parcela
-    // agora e o cron emite as demais ~7 dias antes de cada vencimento.
-    if (isCourseInstallment && data.boletoInstallment) {
-      const { count, amounts, firstDueDate } = data.boletoInstallment
-      // Com valores por parcela, o "valor da parcela" de referência é o da
-      // última (as demais são reprecificadas na criação do carnê).
-      const installmentValue =
-        amounts?.[amounts.length - 1] ?? data.boletoInstallment.installmentValue
-      // Garantido pelo schema no carnê de curso; o `if` só estreita o tipo.
-      if (installmentValue === undefined) {
-        return NextResponse.json(
-          { error: "Informe o valor de cada parcela." },
-          { status: 400 },
-        )
-      }
-      const amountsError = amounts && installmentAmountsError(amounts, count)
-      if (amountsError) {
-        return NextResponse.json({ error: amountsError }, { status: 400 })
-      }
-      if (count > MAX_BOLETO_INSTALLMENTS) {
-        return NextResponse.json(
-          { error: `Máximo de ${MAX_BOLETO_INSTALLMENTS}x.` },
-          { status: 400 },
-        )
-      }
-      const firstDue = new Date(`${firstDueDate}T12:00:00Z`)
-      const todayStart = new Date()
-      todayStart.setUTCHours(0, 0, 0, 0)
-      if (
-        Number.isNaN(firstDue.getTime()) ||
-        firstDue.getTime() < todayStart.getTime()
-      ) {
-        return NextResponse.json(
-          { error: "O 1º vencimento deve ser hoje ou uma data futura." },
-          { status: 400 },
-        )
-      }
-      // MP exige endereço do pagador no boleto.
-      if (tenant.salesGateway === "MP" && !data.endereco) {
-        return NextResponse.json(
-          { error: "Informe o endereço do aluno para gerar o boleto (Mercado Pago)." },
-          { status: 400 },
-        )
-      }
-      // Persiste o endereço no aluno (o cron reemite os boletos MP com ele).
-      if (data.endereco) {
-        await prisma.student
-          .update({
-            where: { id: student.id },
-            data: {
-              cep: data.endereco.cep,
-              rua: data.endereco.rua,
-              numero: data.endereco.numero,
-              bairro: data.endereco.bairro,
-              cidade: data.endereco.cidade,
-              estado: data.endereco.estado,
-            },
-          })
-          .catch(swallow("painel.vendas.carne.address"))
-      }
-
-      const total = amounts
-        ? sumAmounts(amounts)
-        : Math.round(count * installmentValue * 100) / 100
-      const enrollment = await prisma.enrollment.create({
-        data: {
-          tenantId: tenant.id,
-          studentId: student.id,
-          tenantCourseId: enrollmentTenantCourseId,
-          courseId: enrollmentCourseId,
-          coursePackageId: enrollmentCoursePackageId,
-          packagePrimary: isPackage,
-          bundleCourseIds,
-          soldByUserId: userId,
-          paymentType: "BOLETO_INSTALLMENT",
-          status: "PENDING",
-          gateway: tenant.salesGateway,
-          originalAmount: total,
-          discountAmount: 0,
-          finalAmount: total,
-          couponId: null,
-          installmentsTotal: count,
-        },
-        select: { id: true },
-      })
-
-      try {
-        await createBoletoInstallmentPlan({
-          enrollmentId: enrollment.id,
-          count,
-          installmentValue,
-          amounts,
-          firstDueDate: firstDue,
-        })
-        return NextResponse.json({
-          data: {
-            enrollmentId: enrollment.id,
-            studentId: student.id,
-            finalAmount: total,
-            // A página de pagamento da loja, como em toda venda — nunca o boleto
-            // hospedado no gateway. Ela mostra as parcelas do carnê e, no Asaas,
-            // deixa pagar a parcela aberta por PIX, cartão ou boleto.
-            paymentUrl: `${storeBaseUrl(tenant)}/pagar/${enrollment.id}`,
-            installment: { count, installmentValue, total, amounts: amounts ?? null },
-          },
-        })
-      } catch (err) {
-        await prisma.enrollment
-          .delete({ where: { id: enrollment.id } })
-          .catch(swallow("painel.vendas.carne.rollback"))
-        contextLogger().error(
-          { err, event: "painel.vendas.carne_failed", studentId: student.id },
-          "geracao do carne falhou",
-        )
-        const msg = err instanceof Error ? err.message : "Falha ao gerar o carnê."
-        return NextResponse.json(
-          { error: `Falha ao gerar o carnê: ${msg}` },
-          { status: 502 },
-        )
-      }
-    }
-
-    // Tipo efetivo no canal de venda direta/manual. Se a unidade nao tem
-    // parcelado habilitado, o curso MONTHLY cai para ONE_TIME. Pacote é sempre
-    // pagamento único (rawPaymentType já vem "ONE_TIME").
-    const effectiveType = effectivePaymentType(rawPaymentType, tenant, "direct")
-    const isMonthly = effectiveType === "MONTHLY"
-    const monthlyMonths = isMonthly ? monthlyMonthsMain ?? 12 : null
-
     // Desconto sai do bolso de quem vende, nunca do produtor — o snapshot
     // precisa refletir o valor efetivamente cobrado.
     let splitSnapshot = gate.split
@@ -1198,42 +1069,73 @@ export const POST = withRequestContext(
       splitSnapshot = recomputed.value
     }
 
-    // ── 1ª mensalidade paga fora (marketplace) ──────────────────────────────
-    if (data.primeiraMensalidadeExterna) {
-      const external = await sellWithExternalFirstPayment({
-        tenantId: tenant.id,
-        fulfillTenant: resellerTenantContext(tenant),
-        studentId: student.id,
-        soldByUserId: userId,
-        gateway: gate.forcedGateway ?? tenant.salesGateway,
-        months: monthlyMonths,
-        isMonthly,
-        paidAtYmd: data.primeiraMensalidadeExterna.paidAt,
-        endereco: data.endereco,
-        enrollment: {
+    // ── Parcelado (entrada opcional + N parcelas iguais) ──────────────────
+    // Nada é cobrado aqui: a matrícula nasce com as linhas SCHEDULED e o aluno
+    // escolhe o meio em /pagar/<id>. "1ª paga fora" entra como `paidBefore`.
+    if (flexPlan) {
+      // Opcional: o boleto do MP pede o endereço no pagamento, mas se o
+      // vendedor já informou, fica na ficha para as próximas emissões.
+      if (data.endereco) await saveBoletoAddress(student.id, data.endereco)
+      const enrollment = await prisma.enrollment.create({
+        data: {
+          tenantId: tenant.id,
+          studentId: student.id,
           tenantCourseId: enrollmentTenantCourseId,
           courseId: enrollmentCourseId,
+          coursePackageId: enrollmentCoursePackageId,
+          packagePrimary: isPackage,
           bundleCourseIds,
+          soldByUserId: userId,
+          paymentType: "BOLETO_INSTALLMENT",
+          status: "PENDING",
+          // Rateio obriga Asaas, como na venda à vista abaixo.
+          gateway: gate.forcedGateway ?? tenant.salesGateway,
           originalAmount: basePrice,
           discountAmount,
           finalAmount,
-          couponId,
-          splitSnapshot,
+          couponId: null,
+          authorSplitSnapshot: splitSnapshot
+            ? (splitSnapshot as unknown as Prisma.InputJsonValue)
+            : undefined,
         },
+        select: { id: true },
       })
-      if (!external.ok) {
-        if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas.externa"))
-        return NextResponse.json({ error: external.error }, { status: external.status })
+      try {
+        await prisma.enrollment.update({
+          where: { id: enrollment.id },
+          data: { externalReference: `enr_${enrollment.id}` },
+        })
+        await createFlexPlan({
+          enrollmentId: enrollment.id,
+          tenant: resellerTenantContext(tenant),
+          schedule: flexPlan.schedule,
+          paidBefore: flexPlan.paidBefore,
+        })
+      } catch (err) {
+        await rollbackSaleEnrollment(enrollment.id).catch(
+          swallow("painel.vendas.parcelado.rollback"),
+        )
+        contextLogger().error(
+          { err, event: "painel.vendas.parcelado_failed", studentId: student.id },
+          "criacao do parcelado falhou",
+        )
+        const msg = err instanceof Error ? err.message : "falha inesperada"
+        return NextResponse.json(
+          { error: `Falha ao criar o parcelado: ${msg}` },
+          { status: 502 },
+        )
       }
+      const { count, installmentValue, downPayment } = flexPlan.schedule
       return NextResponse.json({
         data: {
-          enrollmentId: external.enrollmentId,
+          enrollmentId: enrollment.id,
           studentId: student.id,
+          mode: "parcelado",
+          // A página de pagamento da loja, nunca a do gateway.
+          paymentUrl: `${storeBaseUrl(tenant)}/pagar/${enrollment.id}`,
           finalAmount,
-          externalFirst: external.summary,
-          // Asaas: o aluno cadastra ali o pagamento das próximas mensalidades.
-          // MP: ali ele vê os boletos do carnê.
-          paymentUrl: `${storeBaseUrl(tenant)}/pagar/${external.enrollmentId}`,
+          discountAmount,
+          installment: { count, installmentValue, downPayment, total: finalAmount },
         },
       })
     }
@@ -1248,7 +1150,9 @@ export const POST = withRequestContext(
         packagePrimary: isPackage,
         bundleCourseIds,
         soldByUserId: userId,
-        paymentType: effectiveType,
+        // Curso mensal à vista é pagamento único pelo total (o parcelado saiu
+        // acima); a venda direta não cria mais matrícula MONTHLY.
+        paymentType: "ONE_TIME",
         status: "PENDING",
         // Herda o gateway ATIVO da unidade — /api/loja/checkout/process roteia a
         // cobrança por este campo, então gravar "MP" fixo mandava o dinheiro da
@@ -1260,7 +1164,7 @@ export const POST = withRequestContext(
         discountAmount,
         finalAmount,
         couponId,
-        installmentsTotal: monthlyMonths,
+        installmentsTotal: null,
         authorSplitSnapshot: splitSnapshot
           ? (splitSnapshot as unknown as Prisma.InputJsonValue)
           : undefined,
@@ -1332,8 +1236,8 @@ export const POST = withRequestContext(
       return NextResponse.json({
         data: {
           enrollmentId: enrollment.id,
-          mode: isMonthly ? "subscription" : "one_time",
-          installmentsTotal: monthlyMonths,
+          mode: "one_time",
+          installmentsTotal: null,
           paymentUrl,
           finalAmount,
           discountAmount,
