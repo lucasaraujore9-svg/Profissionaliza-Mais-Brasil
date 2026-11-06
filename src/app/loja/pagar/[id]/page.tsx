@@ -6,6 +6,7 @@ import { externalPaidAt } from "@/lib/enrollment/external-first-payment-server"
 import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { AsaasCheckoutForm } from "@/components/loja/asaas-checkout-form"
 import { OrderSummary } from "@/components/loja/order-summary"
+import { FlexInstallmentPage } from "@/components/loja/flex-installment-page"
 import {
   InstallmentsSection,
   type InstallmentCarne,
@@ -69,6 +70,8 @@ export default async function PagarPage({ params }: PagarPageProps) {
       // ele — e não as credenciais MP — que decide qual formulário renderizar,
       // igual a /aluno/comprar/pagar/[id].
       gateway: true,
+      flexInstallments: true,
+      tenantId: true,
       paymentType: true,
       finalAmount: true,
       originalAmount: true,
@@ -121,6 +124,19 @@ export default async function PagarPage({ params }: PagarPageProps) {
       <Aviso
         titulo="Loja indisponível"
         texto="Esta loja não está aceitando pagamentos no momento."
+      />
+    )
+  }
+
+  // Venda direta parcelada: página própria, antes de qualquer outro ramo — a
+  // linha da vez é paga também em matrícula ACTIVE/SUSPENDED (ex.: cartão
+  // recusado), que os avisos abaixo tratariam como "já paga"/"indisponível".
+  if (enrollment.flexInstallments) {
+    return (
+      <FlexInstallmentPage
+        enrollmentId={enrollment.id}
+        scope={{ tenantId: tenantId ?? enrollment.tenantId }}
+        store="loja"
       />
     )
   }
@@ -241,7 +257,10 @@ export default async function PagarPage({ params }: PagarPageProps) {
                 installmentPlan={{
                   count: installmentCount,
                   amount: installmentAmount,
-                  currentNumber: 1,
+                  // A parcela em aberto de verdade (a última, se tudo pago).
+                  currentNumber:
+                    enrollment.boletoInstallments.find((r) => r.status !== "PAID")
+                      ?.number ?? enrollment.boletoInstallments.at(-1)?.number,
                 }}
               />
             </aside>

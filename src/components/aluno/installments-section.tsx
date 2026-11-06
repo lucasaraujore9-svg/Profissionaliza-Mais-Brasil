@@ -4,6 +4,7 @@ import { useState } from "react"
 import {
   CheckCircle2,
   Clock,
+  CreditCard,
   Copy,
   ExternalLink,
   FileText,
@@ -21,6 +22,10 @@ export interface InstallmentView {
   availableFromISO: string | null
   invoiceUrl: string | null
   digitableLine: string | null
+  /** Rótulo da linha (ex.: "Entrada"). Default "<unitLabel> <number>". */
+  label?: string
+  /** Cartão recusado nesta linha (parcelado): ISO de quando. */
+  cardDeclinedAt?: string | null
 }
 
 export interface InstallmentCarne {
@@ -106,7 +111,8 @@ function ParcelaRow({
     <li className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <p className="text-sm font-medium text-gray-900">
-          {unitLabel} {parcela.number} · {brl(parcela.amount)}
+          {parcela.label ?? `${unitLabel} ${parcela.number}`} ·{" "}
+          {brl(parcela.amount)}
         </p>
         <p className="text-xs text-gray-500">
           Vencimento {shortDate(parcela.dueDateISO)}
@@ -146,6 +152,11 @@ function ParcelaRow({
               </button>
             )}
           </>
+        ) : parcela.cardDeclinedAt ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700 ring-1 ring-rose-200">
+            <CreditCard className="h-3 w-3" aria-hidden />
+            Cartão recusado
+          </span>
         ) : parcela.available ? (
           // Na janela mas boleto ainda em emissão (MP: gerado pelo cron).
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-200">

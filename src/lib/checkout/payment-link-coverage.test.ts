@@ -117,6 +117,9 @@ describe("link de pagamento de loja nunca é a página do gateway", () => {
       "lib/installments/flex-card.ts",
       // Renegociação da parcela: regrava a coluna com o `bankSlipUrl` novo.
       "lib/installments/edit.ts",
+      // Página /pagar do parcelado: repassa a coluna (PDF do boleto gravado
+      // por flex-charge.ts) para a lista de parcelas da nossa página.
+      "components/loja/flex-installment-page.tsx",
       // ── Mesma view (`InstallmentView.invoiceUrl`) para a assinatura no boleto:
       //    preenchida com `bankSlipUrl`, o PDF do boleto — nunca a fatura.
       "lib/subscriptions/carne-view.ts",

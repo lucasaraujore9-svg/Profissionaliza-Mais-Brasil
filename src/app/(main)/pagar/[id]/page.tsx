@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { OrderSummary } from "@/components/loja/order-summary"
 import { PmbCheckoutForm } from "@/components/loja/pmb-checkout-form"
+import { FlexInstallmentPage } from "@/components/loja/flex-installment-page"
 import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { pmbMpPublicKey } from "@/lib/pmb-config"
 import {
@@ -68,6 +69,7 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
       id: true,
       status: true,
       gateway: true,
+      flexInstallments: true,
       paymentType: true,
       installmentsTotal: true,
       installmentsPaid: true,
@@ -100,6 +102,13 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
 
   if (!enrollment) {
     return <Aviso titulo="Cobrança não encontrada" texto="Este link de pagamento é inválido ou expirou." />
+  }
+
+  // Venda direta parcelada: página própria, antes de qualquer outro ramo — a
+  // linha da vez é paga também em matrícula ACTIVE/SUSPENDED (ex.: cartão
+  // recusado), que os avisos abaixo tratariam como "já paga"/"indisponível".
+  if (enrollment.flexInstallments) {
+    return <FlexInstallmentPage enrollmentId={enrollment.id} scope={{ tenantId: null }} store="pmb" />
   }
 
   // `course` é o curso primário técnico do fulfillment. Para uma compra de
@@ -201,6 +210,10 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
                     enrollment.installmentsTotal ??
                     enrollment.boletoInstallments.length,
                   amount: Number(enrollment.boletoInstallments[0]?.amount),
+                  // A parcela em aberto de verdade (a última, se tudo pago).
+                  currentNumber:
+                    enrollment.boletoInstallments.find((r) => r.status !== "PAID")
+                      ?.number ?? enrollment.boletoInstallments.at(-1)?.number,
                 }}
               />
             </aside>
