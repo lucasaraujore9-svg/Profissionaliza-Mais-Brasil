@@ -31,24 +31,25 @@ import {
   SUBSCRIPTION_CARNE_MIN_COUNT,
   defaultCarneCount,
 } from "@/lib/subscriptions/carne-schedule"
+import { flexPlanSummary } from "@/lib/installments/flex"
 import {
-  InstallmentAmountsField,
-  effectiveInstallmentAmounts,
-} from "@/components/shared/installment-amounts-field"
-import {
-  ExternalFirstPaymentField,
-  ExternalFirstResult,
-  type ExternalFirstSummary,
-} from "@/components/shared/external-first-payment-field"
+  FlexSaleFields,
+  flexSaleDefaults,
+  flexSaleInput,
+  type FlexSaleState,
+} from "@/components/shared/flex-sale-fields"
+import { ExternalFirstPaymentField } from "@/components/shared/external-first-payment-field"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CourseOption {
   id: string
   nome: string
+  /** Preço de vitrine (no curso mensal, o TOTAL: meses x mensalidade). */
   preco: number
   paymentType: "ONE_TIME" | "MONTHLY"
-  monthlyMonths: number | null
+  /** Curso mensal: abre o parcelado com estes meses e esta mensalidade. */
+  monthly: { months: number; value: number } | null
 }
 
 interface PackageOption {
@@ -77,7 +78,7 @@ type SaleItem = {
   nome: string
   preco: number
   paymentType: "ONE_TIME" | "MONTHLY"
-  monthlyMonths: number | null
+  monthly: { months: number; value: number } | null
   courseCount?: number
   /** Só em `kind: "plan"` — decide o rótulo do preço e o texto da cobrança. */
   interval?: SubscriptionIntervalValue
@@ -175,7 +176,7 @@ export function NovaVendaClient({
       nome: c.nome,
       preco: c.preco,
       paymentType: c.paymentType,
-      monthlyMonths: c.monthlyMonths,
+      monthly: c.monthly,
     })),
     ...packages.map((p) => ({
       kind: "package" as const,
@@ -183,7 +184,7 @@ export function NovaVendaClient({
       nome: `Pacote: ${p.name}`,
       preco: p.price,
       paymentType: "ONE_TIME" as const,
-      monthlyMonths: null,
+      monthly: null,
       courseCount: p.courseCount,
     })),
     ...plans.map((p) => ({
@@ -192,7 +193,7 @@ export function NovaVendaClient({
       nome: `Assinatura: ${p.name}`,
       preco: p.price,
       paymentType: "ONE_TIME" as const,
-      monthlyMonths: null,
+      monthly: null,
       courseCount: p.courseCount,
       interval: p.interval,
     })),
@@ -283,26 +284,21 @@ export function NovaVendaClient({
   const [carneMode, setCarneMode] = useState(false)
   const [carne, setCarne] = useState({ count: 12, firstDueDate: isoDatePlusDays(7) })
   const isCarne = carneAvailable && carneMode
-  // Curso/pacote no carnê (boleto parcelado no Asaas da PMB): valor por parcela
-  // digitado pelo vendedor, sem cupom nem desconto — o total É o preço.
-  const [courseCarne, setCourseCarne] = useState({
-    count: 2,
-    value: "",
-    firstDueDate: isoDatePlusDays(7),
-  })
-  const [customAmounts, setCustomAmounts] = useState<string[] | null>(null)
-  // Curso mensal com a 1ª mensalidade paga no marketplace. null = venda normal.
+  // Curso/pacote PARCELADO: entrada opcional + N parcelas iguais digitadas pelo
+  // vendedor, sem cupom nem desconto — o total É o preço. O aluno escolhe o meio
+  // de cada parcela no link.
+  const [flex, setFlex] = useState<FlexSaleState>(() => flexSaleDefaults())
+  // Parcelado com a 1ª parcela paga no marketplace. null = desligado.
   const [externalPaidAt, setExternalPaidAt] = useState<string | null>(null)
-  const isExternalFirst = hasMonthly && externalPaidAt !== null && !bolsista && !isPlan
-  const courseCarneAvailable = !isPlan && hasSelection && !bolsista && !isExternalFirst
-  const isCourseCarne = courseCarneAvailable && carneMode
-  const courseCarneAmounts = effectiveInstallmentAmounts(
-    courseCarne.count,
-    courseCarne.value,
-    customAmounts,
-  )
-  const courseCarneTotal =
-    courseCarneAmounts.reduce((acc, v) => acc + Math.round(v * 100), 0) / 100
+  const flexAvailable = !isPlan && hasSelection && !bolsista
+  const isFlex = flexAvailable && carneMode
+  const flexInput = flexSaleInput(flex)
+  // "1ª paga fora" só existe dentro do parcelado de curso (o servidor recusa fora dele).
+  const isExternalFirst = isFlex && hasMonthly && externalPaidAt !== null
+  // Curso mensal: o parcelado abre com os meses e a mensalidade do catálogo.
+  const monthlyDefault = selectedItems.find((i) => i.kind === "course" && i.monthly)?.monthly
+  const monthlyMonths = monthlyDefault?.months
+  const monthlyValue = monthlyDefault?.value
 
 
   // Step 4 — Link
@@ -315,10 +311,13 @@ export function NovaVendaClient({
     scholarship?: boolean
     /** Assinatura no boleto. */
     carne?: { count: number; amount: number; firstDueDate: string }
-    /** Curso/pacote no carnê. */
-    installment?: { count: number; amounts: number[]; total: number }
-    /** Curso mensal com a 1ª mensalidade paga fora. */
-    externalFirst?: ExternalFirstSummary
+    /** Curso/pacote parcelado (mode "parcelado"). */
+    installment?: {
+      count: number
+      installmentValue: number
+      downPayment: number | null
+      total: number
+    }
   } | null>(null)
 
   // Search students (debounced)
@@ -368,15 +367,22 @@ export function NovaVendaClient({
   // mostraria "Total R$ 0" num resumo de venda que vai cobrar o valor cheio.
   useEffect(() => {
     // O carnê volta ao modo link a cada troca de plano: a quantidade sugerida
-    // depende da periodicidade.
-    setCarneMode(false)
+    // depende da periodicidade. Curso mensal abre em Parcelado, com os meses e a
+    // mensalidade do catálogo.
+    const monthly =
+      !isPlan && monthlyMonths !== undefined && monthlyValue !== undefined
+        ? { months: monthlyMonths, value: monthlyValue }
+        : null
+    setCarneMode(!!monthly)
+    setFlex(flexSaleDefaults(monthly))
+    setExternalPaidAt(null)
     setCarne((prev) => ({ ...prev, count: defaultCarneCount(planInterval) }))
     if (!isPlan) return
     setBolsista(false)
     setCouponResult(null)
     setCouponCode("")
     setCouponError(null)
-  }, [isPlan, planInterval])
+  }, [isPlan, planInterval, monthlyMonths, monthlyValue])
 
   function handleCpfChange(v: string) {
     setNewStudent((s) => ({ ...s, cpf: maskCpf(v) }))
@@ -501,11 +507,11 @@ export function NovaVendaClient({
           // Assinatura recusa cupom e bolsa no servidor — não mandar aqui evita
           // um 400 que o vendedor não teria como interpretar.
           couponCode:
-            isPlan || bolsista || isCourseCarne || !couponResult
+            isPlan || bolsista || isFlex || !couponResult
               ? undefined
               : couponCode.trim(),
           manualDiscountPercent:
-            bolsista || isCourseCarne || couponResult || !manualValid
+            bolsista || isFlex || couponResult || !manualValid
               ? undefined
               : manualPctNumber,
           bolsista: isPlan ? undefined : bolsista || undefined,
@@ -515,9 +521,7 @@ export function NovaVendaClient({
           primeiraMensalidadeExterna: isExternalFirst
             ? { paidAt: externalPaidAt! }
             : undefined,
-          carneCurso: isCourseCarne
-            ? { amounts: courseCarneAmounts, firstDueDate: courseCarne.firstDueDate }
-            : undefined,
+          parcelado: isFlex ? flexInput.parcelado : undefined,
         }),
       })
       const body = await res.json()
@@ -532,7 +536,7 @@ export function NovaVendaClient({
           : body.data?.carne
             ? "Boletos da assinatura gerados!"
             : body.data?.installment
-              ? "Carnê gerado!"
+              ? "Venda parcelada criada!"
               : "Link de pagamento gerado!",
       )
     } catch {
@@ -777,8 +781,8 @@ export function NovaVendaClient({
                       {fmt(item.preco)}
                       {item.kind === "package"
                         ? ` · ${item.courseCount} ${item.courseCount === 1 ? "curso" : "cursos"} · pagamento único`
-                        : item.paymentType === "MONTHLY" && item.monthlyMonths
-                          ? ` · ${item.monthlyMonths}x mensais`
+                        : item.monthly
+                          ? ` · ou ${item.monthly.months}x de ${fmt(item.monthly.value)}`
                           : " · pagamento único"}
                     </p>
                   </div>
@@ -844,7 +848,7 @@ export function NovaVendaClient({
                           ? `${INTERVAL_PRICE_SUFFIX[c.interval]} · ${INTERVAL_LABEL[c.interval]} · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
                           : c.kind === "package"
                           ? ` · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
-                          : c.paymentType === "MONTHLY" && c.monthlyMonths ? ` · ${c.monthlyMonths}x mensais` : " · único"}
+                          : c.monthly ? ` · ou ${c.monthly.months}x de ${fmt(c.monthly.value)}` : " · único"}
                         {blocked ? ` · ${blocked}` : ""}
                       </p>
                     </span>
@@ -863,7 +867,7 @@ export function NovaVendaClient({
       {/* ── 3. Desconto ──────────────────────────────────────────────────── */}
       {/* Desconto manual (%) na hora, limitado ao cap do vendedor, OU cupom.
           Cupom só para curso: a validação (preview) usa courseId. */}
-      {!bolsista && !isCourseCarne && (
+      {!bolsista && !isFlex && (
       <Section title="3. Desconto (opcional)" done={!!couponResult || manualValid}>
         {couponResult ? (
           <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
@@ -983,17 +987,7 @@ export function NovaVendaClient({
                 </a>
               </div>
             )}
-            {hasMonthly && !isPlan && !bolsista && !linkResult && (
-              <ExternalFirstPaymentField
-                gateway={gateway}
-                paidAt={externalPaidAt}
-                onChange={(v) => {
-                  setExternalPaidAt(v)
-                  if (v !== null) setCarneMode(false)
-                }}
-              />
-            )}
-            {(carneAvailable || courseCarneAvailable) && !linkResult && (
+            {(carneAvailable || flexAvailable) && !linkResult && (
               <div className="space-y-3">
                 <div>
                   <span className="text-xs font-semibold text-gray-600">Forma de pagamento</span>
@@ -1007,7 +1001,7 @@ export function NovaVendaClient({
                           : "text-gray-600 hover:bg-gray-50"
                       }`}
                     >
-                      Link de pagamento
+                      {isPlan ? "Link de pagamento" : "À vista"}
                     </button>
                     <button
                       type="button"
@@ -1018,70 +1012,26 @@ export function NovaVendaClient({
                           : "text-gray-600 hover:bg-gray-50"
                       }`}
                     >
-                      {isPlan ? "Assinatura no boleto (carnê)" : "Parcelado no boleto (carnê)"}
+                      {isPlan ? "Assinatura no boleto (carnê)" : "Parcelado"}
                     </button>
                   </div>
                 </div>
-                {isCourseCarne && (
-                  <div className="grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-3">
-                    <div>
-                      <Label htmlFor="a-parcelas">Nº de parcelas</Label>
-                      <Select
-                        value={String(courseCarne.count)}
-                        onValueChange={(v) =>
-                          setCourseCarne({ ...courseCarne, count: Number(v) || 2 })
-                        }
-                      >
-                        <SelectTrigger id="a-parcelas" className="mt-1.5 h-10 w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 23 }, (_, i) => i + 2).map((n) => (
-                            <SelectItem key={n} value={String(n)}>
-                              {n}x
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="a-parcela-valor">Valor de cada parcela</Label>
-                      <Input
-                        id="a-parcela-valor"
-                        inputMode="decimal"
-                        value={courseCarne.value}
-                        onChange={(e) =>
-                          setCourseCarne({ ...courseCarne, value: e.target.value })
-                        }
-                        placeholder="Ex: 89,90"
-                        className="mt-1.5"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="a-parcela-venc">1º vencimento</Label>
-                      <Input
-                        id="a-parcela-venc"
-                        type="date"
-                        value={courseCarne.firstDueDate}
-                        min={isoDatePlusDays(0)}
-                        onChange={(e) =>
-                          setCourseCarne({ ...courseCarne, firstDueDate: e.target.value })
-                        }
-                        className="mt-1.5"
-                      />
-                    </div>
-                    <InstallmentAmountsField
-                      count={courseCarne.count}
-                      defaultValue={courseCarne.value}
-                      custom={customAmounts}
-                      onChange={setCustomAmounts}
+                {isFlex && (
+                  <>
+                    {hasMonthly && (
+                      <ExternalFirstPaymentField paidAt={externalPaidAt} onChange={setExternalPaidAt} />
+                    )}
+                    <FlexSaleFields
+                      idPrefix="a-parc"
+                      state={flex}
+                      onChange={setFlex}
+                      basePrice={basePrice}
+                      cap={cap}
                     />
-                    <p className="text-xs text-gray-600 sm:col-span-3">
-                      Boletos no Asaas da PMB, vencendo todo mês a partir do 1º. O
-                      acesso é liberado quando a 1ª parcela for paga. Total abaixo do
-                      preço conta como desconto e respeita seu cap ({cap}%).
+                    <p className="text-xs text-gray-400">
+                      Parcelado não aceita cupom nem desconto: o valor é o das parcelas.
                     </p>
-                  </div>
+                  </>
                 )}
                 {carneMode && isPlan && (
                   <div className="grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-2">
@@ -1157,10 +1107,10 @@ export function NovaVendaClient({
               ) : manualValid ? (
                 <Row label={`Desconto (${manualPctNumber}%)`} value={`− ${fmt(manualDiscountAmount)}`} className="text-emerald-600" />
               ) : null}
-              {isCourseCarne && (
+              {isFlex && (
                 <Row
-                  label="Parcelas"
-                  value={`${courseCarne.count}x · entrada de ${fmt(courseCarneAmounts[0])} · 1º vence em ${courseCarne.firstDueDate ? fmtYmd(courseCarne.firstDueDate) : "—"}`}
+                  label="Parcelado"
+                  value={`${flexInput.error ? "—" : flexInput.summary} · 1º vence em ${flex.firstDueDate ? fmtYmd(flex.firstDueDate) : "—"}`}
                 />
               )}
               {isCarne && (
@@ -1175,11 +1125,11 @@ export function NovaVendaClient({
                     ? "Cada boleto"
                     : planItem && isRecurringInterval(planItem.interval ?? "MONTHLY")
                       ? "Valor por cobrança"
-                      : isCourseCarne
-                        ? "Total do carnê"
+                      : isFlex
+                        ? "Total do parcelado"
                         : "Total"
                 }
-                value={fmt(isCourseCarne ? courseCarneTotal : finalPrice)}
+                value={fmt(isFlex ? flexInput.total : finalPrice)}
                 bold
               />
               {planItem && (
@@ -1197,7 +1147,7 @@ export function NovaVendaClient({
                   }
                 />
               )}
-              <Row label={bolsista ? "Cobrança" : "Gateway"} value={bolsista ? "Nenhuma (bolsa)" : isCourseCarne || gateway === "ASAAS" ? "Asaas" : "Mercado Pago"} />
+              <Row label={bolsista ? "Cobrança" : "Gateway"} value={bolsista ? "Nenhuma (bolsa)" : gateway === "ASAAS" ? "Asaas" : "Mercado Pago"} />
             </div>
 
             {!linkResult ? (
@@ -1208,7 +1158,7 @@ export function NovaVendaClient({
                 disabled={
                   generatingLink ||
                   !!selectedStudent?.guardianMissing ||
-                  (isCourseCarne && !courseCarneAmounts.every((v) => v > 0))
+                  (isFlex && !!flexInput.error)
                 }
                 className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
               >
@@ -1218,8 +1168,8 @@ export function NovaVendaClient({
                     ? "Conceder bolsa de estudo"
                     : isCarne
                       ? "Gerar boletos da assinatura"
-                      : isCourseCarne
-                        ? "Gerar carnê"
+                      : isFlex
+                        ? "Gerar venda parcelada"
                         : "Gerar link de pagamento"}
               </Button>
             ) : linkResult.scholarship ? (
@@ -1258,13 +1208,17 @@ export function NovaVendaClient({
                   {linkResult.carne
                     ? `Assinatura no boleto criada — ${linkResult.carne.count} ${linkResult.carne.count === 1 ? "boleto" : "boletos"} de ${fmt(linkResult.carne.amount)}`
                     : linkResult.installment
-                      ? `Carnê gerado — ${linkResult.installment.count}x, total ${fmt(linkResult.installment.total)}`
-                      : linkResult.externalFirst
-                        ? "Venda registrada"
-                        : "Link gerado com sucesso"}
+                      ? `Venda parcelada criada — ${flexPlanSummary({ ...linkResult.installment, hasDownPayment: linkResult.installment.downPayment !== null })}`
+                      : "Link gerado com sucesso"}
                 </div>
-                {linkResult.externalFirst && (
-                  <ExternalFirstResult summary={linkResult.externalFirst} />
+                {linkResult.installment && (
+                  <p className="text-sm text-emerald-800">
+                    {isExternalFirst
+                      ? "A 1ª parcela foi registrada como paga e o curso já está liberado. "
+                      : `O acesso é liberado quando a ${linkResult.installment.downPayment !== null ? "entrada" : "1ª parcela"} for paga. `}
+                    Envie o link: ali o aluno escolhe como pagar cada parcela (PIX,
+                    boleto ou cartão), 7 dias antes de cada vencimento.
+                  </p>
                 )}
                 {linkResult.carne && (
                   <p className="text-sm text-emerald-800">

@@ -27,15 +27,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { MAX_SALE_COURSES } from "@/lib/enrollment/multi-course"
+import { flexPlanSummary } from "@/lib/installments/flex"
 import {
-  InstallmentAmountsField,
-  effectiveInstallmentAmounts,
-} from "@/components/shared/installment-amounts-field"
-import {
-  ExternalFirstPaymentField,
-  ExternalFirstResult,
-  type ExternalFirstSummary,
-} from "@/components/shared/external-first-payment-field"
+  FlexSaleFields,
+  flexSaleDefaults,
+  flexSaleInput,
+  type FlexSaleState,
+} from "@/components/shared/flex-sale-fields"
+import { ExternalFirstPaymentField } from "@/components/shared/external-first-payment-field"
 import {
   INTERVAL_LABEL,
   INTERVAL_PERIOD_LABEL,
@@ -56,8 +55,11 @@ import {
 interface CourseOption {
   id: string
   nome: string
+  /** Preço de vitrine (no curso mensal, o TOTAL: meses x mensalidade). */
   price: number
   paymentType: "ONE_TIME" | "MONTHLY"
+  /** Curso mensal: abre o parcelado com estes meses e esta mensalidade. */
+  monthly: { months: number; value: number } | null
 }
 
 interface PlanOption {
@@ -86,6 +88,7 @@ type SaleItem = {
   nome: string
   preco: number
   paymentType: "ONE_TIME" | "MONTHLY"
+  monthly?: { months: number; value: number } | null
   courseCount?: number
   /** Só em `kind: "plan"` — decide o rótulo do preço e o texto da cobrança. */
   interval?: SubscriptionIntervalValue
@@ -121,11 +124,10 @@ type SelectedStudent =
     }
   | { isNew: true; nome: string; email: string; cpf: string; fone: string }
 
-/** Capability de venda parcelada no boleto (só presente quando ativa). */
+/** Capability de venda parcelada (só presente quando ativa). */
 interface InstallmentConfig {
   /** Teto de parcelas que a unidade pode oferecer. */
   maxCount: number
-  /** Gateway de venda da unidade — MP exige endereço do aluno no boleto. */
   gateway: "MP" | "ASAAS"
 }
 
@@ -143,16 +145,13 @@ interface CreatedVenda {
   finalAmount: number
   discountAmount?: number
   scholarship?: boolean
-  /** Presente quando a venda é um carnê (parcelado no boleto). */
+  /** Presente quando a venda é parcelada (mode "parcelado"). */
   installment?: {
     count: number
     installmentValue: number
+    downPayment: number | null
     total: number
-    /** Valores por parcela, quando personalizados na venda. */
-    amounts: number[] | null
   }
-  /** Curso mensal com a 1ª mensalidade paga fora (marketplace). */
-  externalFirst?: ExternalFirstSummary
   /** Presente quando a venda é uma assinatura no boleto. */
   carne?: {
     count: number
@@ -234,6 +233,7 @@ export function PainelNovaVendaClient({
       nome: c.nome,
       preco: c.price,
       paymentType: c.paymentType,
+      monthly: c.monthly,
     })),
     ...packages.map((p) => ({
       kind: "package" as const,
@@ -332,14 +332,16 @@ export function PainelNovaVendaClient({
   const [couponCode, setCouponCode] = useState("")
   const [manualPct, setManualPct] = useState("")
 
-  // ── Forma de pagamento: link normal vs carnê (parcelado no boleto) ──
+  // ── Forma de pagamento: à vista (link) vs Parcelado; na assinatura, link vs
+  // carnê (um boleto por ciclo) ──
   const [paymentMode, setPaymentMode] = useState<"normal" | "installment">("normal")
-  const [inst, setInst] = useState({ count: 2, value: "", firstDueDate: isoDatePlusDays(7) })
-  // Curso mensal com a 1ª mensalidade paga no marketplace: data do pagamento.
-  // null = venda normal.
+  // Assinatura no boleto: quantos boletos gerar agora + 1º vencimento.
+  const [inst, setInst] = useState({ count: 2, firstDueDate: isoDatePlusDays(7) })
+  // Parcelado de curso/pacote: entrada opcional + N parcelas + 1º vencimento.
+  const [flex, setFlex] = useState<FlexSaleState>(() => flexSaleDefaults())
+  // Parcelado com a 1ª parcela paga no marketplace: data do pagamento.
+  // null = desligado.
   const [externalPaidAt, setExternalPaidAt] = useState<string | null>(null)
-  // Valores por parcela (entrada diferente). null = todas valem `inst.value`.
-  const [customAmounts, setCustomAmounts] = useState<string[] | null>(null)
   const [addr, setAddr] = useState({ cep: "", rua: "", numero: "", bairro: "", cidade: "", estado: "" })
 
   // ── Submit / resultado ──
@@ -349,26 +351,27 @@ export function PainelNovaVendaClient({
   const [created, setCreated] = useState<CreatedVenda | null>(null)
   const [copied, setCopied] = useState(false)
 
-  // Carnê de CURSO: parcelamento de valor fechado, só com o parcelado liberado
-  // para a unidade. Carnê de ASSINATURA: um boleto por ciclo, pelo preço do
-  // plano — vale para todo plano recorrente (o vitalício é pago de uma vez, e o
-  // aluno escolhe boleto no próprio link). Loja no Asaas não tem carnê de
-  // assinatura: o aluno escolhe cartão recorrente, Pix Automático ou boleto no
-  // link (o servidor também recusa).
+  // PARCELADO de curso/pacote: só com o parcelado liberado para a unidade; o
+  // aluno escolhe o meio de cada parcela no link. Carnê de ASSINATURA: um boleto
+  // por ciclo, pelo preço do plano — vale para todo plano recorrente (o
+  // vitalício é pago de uma vez, e o aluno escolhe boleto no próprio link). Loja
+  // no Asaas não tem carnê de assinatura: o aluno escolhe cartão recorrente, Pix
+  // Automático ou boleto no link (o servidor também recusa).
   const installmentAvailable =
     !bolsista && (isPlan ? planRecurring && gateway !== "ASAAS" : !!installmentConfig)
   const isInstallment = installmentAvailable && paymentMode === "installment"
   const isPlanCarne = isInstallment && isPlan
-  const isCourseCarne = isInstallment && !isPlan
-  const carneGateway = isPlan ? gateway : installmentConfig?.gateway
-  const isExternalFirst =
-    hasMonthly && externalPaidAt !== null && !bolsista && !isPlan && !isInstallment
-  const needsAddress =
-    (isInstallment && carneGateway === "MP") || (isExternalFirst && gateway === "MP")
-  const installmentValueNum = Number(inst.value.replace(",", ".")) || 0
-  const installmentAmounts = effectiveInstallmentAmounts(inst.count, inst.value, customAmounts)
-  const installmentTotal =
-    installmentAmounts.reduce((acc, v) => acc + Math.round(v * 100), 0) / 100
+  const isFlex = isInstallment && !isPlan
+  const flexInput = flexSaleInput(flex)
+  // "1ª paga fora" só existe dentro do parcelado de curso (o servidor recusa fora dele).
+  const isExternalFirst = isFlex && hasMonthly && externalPaidAt !== null
+  // Só o carnê de assinatura no MP exige o endereço; no parcelado o boleto do MP
+  // pede o endereço na hora do pagamento.
+  const needsAddress = isPlanCarne && gateway === "MP"
+  // Curso mensal: o parcelado abre com os meses e a mensalidade da unidade.
+  const monthlyDefault = selectedItems.find((i) => i.kind === "course" && i.monthly)?.monthly
+  const monthlyMonths = monthlyDefault?.months
+  const monthlyValue = monthlyDefault?.value
 
   // Desconto manual derivado do input (aceita vírgula BR). Válido quando está
   // entre 0 (exclusivo) e o cap do vendedor; acima do cap o form bloqueia.
@@ -431,17 +434,24 @@ export function PainelNovaVendaClient({
   // jeito. Marcar a caixa aqui evita que a tela prometa um link de pagamento
   // que não vai existir.
   useEffect(() => {
-    if (!isPlan && !isCourseCarne && manualDiscountAmount > 0 && manualDiscountAmount >= basePrice) {
+    if (!isPlan && !isFlex && manualDiscountAmount > 0 && manualDiscountAmount >= basePrice) {
       setBolsista(true)
     }
-  }, [isPlan, isCourseCarne, manualDiscountAmount, basePrice])
+  }, [isPlan, isFlex, manualDiscountAmount, basePrice])
 
   // Escolher uma assinatura desliga a bolsa e o cupom. Os controles somem da
   // tela, mas o ESTADO ficaria — e um `bolsista` verdadeiro invisível mostraria
   // "Total R$ 0" num resumo de venda que vai cobrar o valor cheio. O carnê volta
-  // ao modo link: o de curso e o de assinatura contam coisas diferentes.
+  // ao modo link: o parcelado e o de assinatura contam coisas diferentes. Curso
+  // mensal abre em Parcelado, com os meses e a mensalidade da unidade.
   useEffect(() => {
-    setPaymentMode("normal")
+    const monthly =
+      !isPlan && monthlyMonths !== undefined && monthlyValue !== undefined
+        ? { months: monthlyMonths, value: monthlyValue }
+        : null
+    setPaymentMode(monthly ? "installment" : "normal")
+    setFlex(flexSaleDefaults(monthly))
+    setExternalPaidAt(null)
     setInst((prev) => ({
       ...prev,
       count: isPlan ? defaultCarneCount(planInterval) : 2,
@@ -449,7 +459,7 @@ export function PainelNovaVendaClient({
     if (!isPlan) return
     setBolsista(false)
     setCouponCode("")
-  }, [isPlan, planInterval])
+  }, [isPlan, planInterval, monthlyMonths, monthlyValue])
 
   function handleCpfChange(v: string) {
     setNewStudent((s) => ({ ...s, cpf: maskCpf(v) }))
@@ -497,8 +507,8 @@ export function PainelNovaVendaClient({
     setCouponCode("")
     setManualPct("")
     setPaymentMode("normal")
-    setInst({ count: 2, value: "", firstDueDate: isoDatePlusDays(7) })
-    setCustomAmounts(null)
+    setInst({ count: 2, firstDueDate: isoDatePlusDays(7) })
+    setFlex(flexSaleDefaults())
     setExternalPaidAt(null)
     setAddr({ cep: "", rua: "", numero: "", bairro: "", cidade: "", estado: "" })
     setError(null)
@@ -533,31 +543,24 @@ export function PainelNovaVendaClient({
             : isPkg
               ? { packageId: selectedItems[0].id }
               : { tenantCourseIds: selectedItems.map((i) => i.id) }),
-          // Cupom não se aplica a bolsa, carnê, assinatura nem quando há
-          // desconto manual. O servidor recusa assinatura+cupom; não mandar
+          // Cupom não se aplica a bolsa, parcelado, carnê, assinatura nem quando
+          // há desconto manual. O servidor recusa assinatura+cupom; não mandar
           // aqui evita um 400 que o vendedor não teria como interpretar.
           couponCode:
             isPlan || bolsista || isInstallment || manualValid || !couponCode.trim()
               ? undefined
               : couponCode.trim(),
-          // Desconto manual não se aplica a bolsa, carnê de curso (valor
-          // manual) nem quando há cupom. Na assinatura no boleto ele vale.
+          // Desconto manual não se aplica a bolsa, parcelado (o valor é o das
+          // parcelas) nem quando há cupom. Na assinatura no boleto ele vale.
           manualDiscountPercent:
-            bolsista || isCourseCarne || couponCode.trim() || !manualValid
+            bolsista || isFlex || couponCode.trim() || !manualValid
               ? undefined
               : manualPctNumber,
           bolsista: isPlan ? undefined : bolsista || undefined,
-          boletoInstallment: isCourseCarne
-            ? {
-                count: inst.count,
-                ...(customAmounts
-                  ? { amounts: installmentAmounts }
-                  : { installmentValue: installmentValueNum }),
-                firstDueDate: inst.firstDueDate,
-              }
-            : isPlanCarne
-              ? { count: inst.count, firstDueDate: inst.firstDueDate }
-              : undefined,
+          boletoInstallment: isPlanCarne
+            ? { count: inst.count, firstDueDate: inst.firstDueDate }
+            : undefined,
+          parcelado: isFlex ? flexInput.parcelado : undefined,
           primeiraMensalidadeExterna: isExternalFirst
             ? { paidAt: externalPaidAt! }
             : undefined,
@@ -630,23 +633,42 @@ export function PainelNovaVendaClient({
         ) : created.installment ? (
           <div className="rounded-2xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-6 text-[var(--color-pmb-green-900)]">
             <h2 className="text-base font-bold">
-              Carnê gerado — {created.installment.count}x
-              {created.installment.amounts
-                ? ` · entrada de ${fmt(created.installment.amounts[0])}`
-                : ` de ${fmt(created.installment.installmentValue)}`}
+              Venda parcelada criada —{" "}
+              {flexPlanSummary({
+                ...created.installment,
+                hasDownPayment: created.installment.downPayment !== null,
+              })}
             </h2>
             <p className="mt-2 text-sm">
-              O aluno acessa cada boleto na área dele. A <strong>1ª parcela</strong>{" "}
-              já está disponível; as próximas ficam disponíveis{" "}
-              <strong>7 dias antes de cada vencimento</strong>. O acesso ao curso é
-              liberado quando a 1ª parcela for paga.
+              {isExternalFirst ? (
+                <>
+                  A <strong>1ª parcela</strong> foi registrada como paga e o curso já
+                  está liberado.{" "}
+                </>
+              ) : (
+                <>
+                  O acesso ao curso é liberado quando a{" "}
+                  {created.installment.downPayment !== null ? "entrada" : "1ª parcela"}{" "}
+                  for paga.{" "}
+                </>
+              )}
+              Envie o link ao aluno: ali ele escolhe como pagar cada parcela (PIX,
+              boleto ou cartão). Cada parcela fica disponível{" "}
+              <strong>7 dias antes do vencimento</strong>.
             </p>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <Mini label="Parcelas" value={`${created.installment.count}x`} />
               <Mini
-                label={created.installment.amounts ? "1ª parcela" : "Cada parcela"}
-                value={fmt(created.installment.amounts?.[0] ?? created.installment.installmentValue)}
+                label="Entrada"
+                value={
+                  created.installment.downPayment !== null
+                    ? fmt(created.installment.downPayment)
+                    : "—"
+                }
+              />
+              <Mini
+                label="Parcelas"
+                value={`${created.installment.count}x ${fmt(created.installment.installmentValue)}`}
               />
               <Mini label="Total" value={fmt(created.installment.total)} accent />
             </div>
@@ -669,31 +691,6 @@ export function PainelNovaVendaClient({
                 >
                   <Copy className="h-3.5 w-3.5" />
                   {copied ? "Link copiado" : "Copiar link de pagamento"}
-                </button>
-              </div>
-            )}
-          </div>
-        ) : created.externalFirst ? (
-          <div className="space-y-3">
-            <ExternalFirstResult summary={created.externalFirst} />
-            {created.paymentUrl && (
-              <div className="flex flex-wrap items-center gap-2">
-                <a
-                  href={created.paymentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
-                >
-                  Abrir página de pagamento
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-                <button
-                  type="button"
-                  onClick={copyLink}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)]/30 bg-white px-4 py-2.5 text-xs font-bold text-[var(--color-pmb-green-700)] hover:bg-[var(--color-pmb-green)]/5"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                  {copied ? "Link copiado" : "Copiar link"}
                 </button>
               </div>
             )}
@@ -1120,8 +1117,8 @@ export function PainelNovaVendaClient({
                           ? `${INTERVAL_PRICE_SUFFIX[item.interval]} · ${item.courseCount} ${item.courseCount === 1 ? "curso" : "cursos"} · ${INTERVAL_CHARGE_LABEL[item.interval]}`
                           : item.kind === "package"
                           ? ` · ${item.courseCount} ${item.courseCount === 1 ? "curso" : "cursos"} · pagamento único`
-                          : item.paymentType === "MONTHLY"
-                            ? " · mensalidade recorrente"
+                          : item.monthly
+                            ? ` · ou ${item.monthly.months}x de ${fmt(item.monthly.value)}`
                             : " · pagamento único"}
                       </p>
                     </div>
@@ -1199,8 +1196,8 @@ export function PainelNovaVendaClient({
                             ? `${INTERVAL_PRICE_SUFFIX[c.interval]} · ${INTERVAL_LABEL[c.interval]} · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
                             : c.kind === "package"
                             ? ` · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
-                            : c.paymentType === "MONTHLY"
-                              ? " · mensal"
+                            : c.monthly
+                              ? ` · ou ${c.monthly.months}x de ${fmt(c.monthly.value)}`
                               : " · único"}
                           {blocked ? ` · ${blocked}` : ""}
                         </p>
@@ -1221,29 +1218,15 @@ export function PainelNovaVendaClient({
         </Section>
       </div>
 
-      {/* ── 3. Pagamento (desconto / carnê) ──────────────────────────────── */}
+      {/* ── 3. Pagamento (à vista / parcelado / desconto) ──────────────── */}
       {!bolsista && (
         <Section
           title="3. Pagamento"
-          done={
-            isCourseCarne
-              ? installmentAmounts.every((v) => v > 0)
-              : isPlanCarne || !!couponCode.trim() || manualValid
-          }
+          done={isFlex ? !flexInput.error : isPlanCarne || !!couponCode.trim() || manualValid}
         >
-          {hasMonthly && !isPlan && (
-            <ExternalFirstPaymentField
-              gateway={gateway}
-              paidAt={externalPaidAt}
-              onChange={(v) => {
-                setExternalPaidAt(v)
-                if (v !== null) setPaymentMode("normal")
-              }}
-            />
-          )}
-
-          {/* Forma de pagamento (só quando a unidade tem carnê liberado) */}
-          {installmentAvailable && !isExternalFirst && (
+          {/* Forma de pagamento (só quando a unidade tem o parcelado liberado,
+              ou na assinatura recorrente com carnê) */}
+          {installmentAvailable && (
             <div className="mb-4">
               <span className="text-xs font-semibold text-gray-600">Forma de pagamento</span>
               <div className="mt-1.5 inline-flex rounded-lg border border-gray-200 p-0.5">
@@ -1256,7 +1239,7 @@ export function PainelNovaVendaClient({
                       : "text-gray-600 hover:bg-gray-50"
                   }`}
                 >
-                  Link de pagamento
+                  {isPlan ? "Link de pagamento" : "À vista"}
                 </button>
                 <button
                   type="button"
@@ -1267,87 +1250,30 @@ export function PainelNovaVendaClient({
                       : "text-gray-600 hover:bg-gray-50"
                   }`}
                 >
-                  {isPlan ? "Assinatura no boleto (carnê)" : "Parcelado no boleto (carnê)"}
+                  {isPlan ? "Assinatura no boleto (carnê)" : "Parcelado"}
                 </button>
               </div>
             </div>
           )}
 
-          {isCourseCarne && installmentConfig ? (
-            /* ── Carnê ── */
-            <div className="grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-3">
-              <div>
-                <Label htmlFor="v-parcelas">Nº de parcelas</Label>
-                <Select
-                  value={String(inst.count)}
-                  onValueChange={(v) => setInst({ ...inst, count: Number(v) || 2 })}
-                >
-                  <SelectTrigger id="v-parcelas" className="mt-1.5 h-10 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from(
-                      { length: Math.max(0, installmentConfig.maxCount - 1) },
-                      (_, i) => i + 2,
-                    ).map((n) => (
-                      <SelectItem key={n} value={String(n)}>
-                        {n}x
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {fieldErrors["boletoInstallment.count"] && (
-                  <p className="mt-1 text-xs text-rose-600">{fieldErrors["boletoInstallment.count"]}</p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="v-parcela-valor">Valor de cada parcela</Label>
-                <Input
-                  id="v-parcela-valor"
-                  inputMode="decimal"
-                  value={inst.value}
-                  onChange={(e) => setInst({ ...inst, value: e.target.value })}
-                  placeholder="Ex: 89,90"
-                  className="mt-1.5"
-                />
-                {fieldErrors["boletoInstallment.installmentValue"] && (
-                  <p className="mt-1 text-xs text-rose-600">
-                    {fieldErrors["boletoInstallment.installmentValue"]}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="v-parcela-venc">1º vencimento</Label>
-                <Input
-                  id="v-parcela-venc"
-                  type="date"
-                  value={inst.firstDueDate}
-                  min={isoDatePlusDays(1)}
-                  onChange={(e) => setInst({ ...inst, firstDueDate: e.target.value })}
-                  className="mt-1.5"
-                />
-                {fieldErrors["boletoInstallment.firstDueDate"] && (
-                  <p className="mt-1 text-xs text-rose-600">
-                    {fieldErrors["boletoInstallment.firstDueDate"]}
-                  </p>
-                )}
-              </div>
-              <InstallmentAmountsField
-                count={inst.count}
-                defaultValue={inst.value}
-                custom={customAmounts}
-                onChange={setCustomAmounts}
-              />
-              {fieldErrors["boletoInstallment.amounts"] && (
-                <p className="text-xs text-rose-600 sm:col-span-3">
-                  {fieldErrors["boletoInstallment.amounts"]}
-                </p>
+          {isFlex ? (
+            /* ── Parcelado: entrada opcional + N parcelas iguais ── */
+            <>
+              {hasMonthly && (
+                <ExternalFirstPaymentField paidAt={externalPaidAt} onChange={setExternalPaidAt} />
               )}
-              <p className="text-xs text-gray-600 sm:col-span-3">
-                A 1ª parcela fica disponível na hora; as próximas, 7 dias antes de cada
-                vencimento, na área do aluno. O acesso é liberado quando a 1ª parcela for paga.
+              <FlexSaleFields
+                idPrefix="v-parc"
+                state={flex}
+                onChange={setFlex}
+                basePrice={basePrice}
+                cap={cap}
+                serverError={fieldErrors.parcelado}
+              />
+              <p className="mt-2 text-xs text-gray-400">
+                Parcelado não aceita cupom nem desconto: o valor é o das parcelas.
               </p>
-            </div>
+            </>
           ) : (
             <>
             {isPlanCarne && (
@@ -1577,18 +1503,19 @@ export function PainelNovaVendaClient({
                   value={`${item.nome} — ${fmt(item.preco)}`}
                 />
               ))}
-              {isCourseCarne ? (
+              {isFlex ? (
                 <>
+                  <Row label="Preço base" value={fmt(basePrice)} />
                   <Row
-                    label="Parcelas"
-                    value={
-                      customAmounts
-                        ? `${inst.count}x · entrada de ${fmt(installmentAmounts[0])}`
-                        : `${inst.count}x de ${fmt(installmentValueNum)}`
-                    }
+                    label="Parcelado"
+                    value={flexInput.error ? "—" : flexInput.summary}
                   />
-                  <Row label="Total do carnê" value={fmt(installmentTotal)} bold />
-                  <Row label="Cobrança" value={`Carnê (boleto ${gateway === "ASAAS" ? "Asaas" : "Mercado Pago"})`} />
+                  <Row
+                    label="1º vencimento"
+                    value={flex.firstDueDate ? fmtYmd(flex.firstDueDate) : "—"}
+                  />
+                  <Row label="Total" value={fmt(flexInput.total)} bold />
+                  <Row label="Pagamento" value="Link na sua loja — o aluno escolhe PIX, boleto ou cartão a cada parcela" />
                 </>
               ) : (
                 <>
@@ -1658,6 +1585,7 @@ export function PainelNovaVendaClient({
               // o vendedor descubra a regra só depois de clicar.
               disabled={
                 submitting ||
+                (isFlex && !!flexInput.error) ||
                 (!!selectedStudent &&
                   !selectedStudent.isNew &&
                   !!selectedStudent.guardianMissing)
@@ -1671,16 +1599,16 @@ export function PainelNovaVendaClient({
                     ? "Concedendo bolsa…"
                     : isPlanCarne
                       ? "Gerando boletos…"
-                      : isInstallment
-                        ? "Gerando carnê…"
+                      : isFlex
+                        ? "Gerando parcelado…"
                         : "Gerando link…"}
                 </>
               ) : bolsista ? (
                 "Conceder bolsa de estudo"
               ) : isPlanCarne ? (
                 "Gerar boletos da assinatura"
-              ) : isInstallment ? (
-                "Gerar carnê no boleto"
+              ) : isFlex ? (
+                "Gerar venda parcelada"
               ) : (
                 "Gerar link de pagamento"
               )}

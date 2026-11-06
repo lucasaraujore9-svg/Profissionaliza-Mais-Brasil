@@ -2,7 +2,7 @@ import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 import { getSystemSettings } from "@/lib/system-settings"
 import { NovaVendaClient } from "@/components/admin/nova-venda-client"
-import { coursePaymentType } from "@/lib/tenant/monthly-policy"
+import { coursePaymentType, vitrineCoursePrice } from "@/lib/tenant/monthly-policy"
 import { resolveVitrinePackages } from "@/lib/packages/vitrine"
 import { resolveVitrinePlans } from "@/lib/subscriptions/plans"
 import { effectiveSalesCap } from "@/lib/coupons/sales-cap"
@@ -42,13 +42,20 @@ export default async function NovaVendaPage() {
       <NovaVendaClient
         cap={cap}
         gateway={settings.pmbDirectSaleGateway}
-        courses={courses.map((c) => ({
-          id: c.id,
-          nome: c.nome,
-          preco: Number(c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0),
-          paymentType: coursePaymentType(c.paymentTypeMain),
-          monthlyMonths: c.monthlyMonthsMain ?? null,
-        }))}
+        courses={courses.map((c) => {
+          // Curso mensal: o preço é a MENSALIDADE; a venda cobra o total da
+          // vitrine (mesma conta da rota) e o parcelado abre com meses x mensalidade.
+          const price = Number(c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0)
+          const paymentType = coursePaymentType(c.paymentTypeMain)
+          const months = c.monthlyMonthsMain ?? 12
+          return {
+            id: c.id,
+            nome: c.nome,
+            preco: vitrineCoursePrice(c.paymentTypeMain, price, months),
+            paymentType,
+            monthly: paymentType === "MONTHLY" ? { months, value: price } : null,
+          }
+        })}
         packages={vitrinePackages.map((p) => ({
           id: p.id,
           name: p.name,

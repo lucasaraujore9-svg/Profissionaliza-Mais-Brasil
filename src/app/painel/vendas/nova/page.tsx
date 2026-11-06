@@ -5,7 +5,12 @@ import { courseCuratedForTenant } from "@/lib/catalog/visibility"
 import { PageHeader } from "@/components/painel/page-header"
 import { PainelNovaVendaClient } from "@/components/painel/painel-nova-venda-client"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
-import { coursePaymentType, monthlyActive } from "@/lib/tenant/monthly-policy"
+import {
+  coursePaymentType,
+  monthlyActive,
+  tenantCourseMonths,
+  vitrineCoursePrice,
+} from "@/lib/tenant/monthly-policy"
 import { MAX_BOLETO_INSTALLMENTS } from "@/lib/installments/schedule"
 import { resolveVitrinePackages } from "@/lib/packages/vitrine"
 import { resolveVitrinePlans } from "@/lib/subscriptions/plans"
@@ -44,7 +49,7 @@ export default async function PainelNovaVendaPage() {
       },
       orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }],
       include: {
-        course: { select: { nome: true, status: true } },
+        course: { select: { nome: true, status: true, monthlyMonthsMain: true } },
       },
     }),
     // Pacotes vendáveis nesta vitrine (PMB distribuídos + próprios da unidade).
@@ -70,12 +75,19 @@ export default async function PainelNovaVendaPage() {
 
   const courses = tenantCourses
     .filter((tc) => tc.course.status === "ATIVO")
-    .map((tc) => ({
-      id: tc.id,
-      nome: tc.course.nome,
-      price: Number(tc.price),
-      paymentType: coursePaymentType(tc.paymentType),
-    }))
+    .map((tc) => {
+      // Curso mensal: `tc.price` é a MENSALIDADE; a venda cobra o total da
+      // vitrine (mesma conta da rota) e o parcelado abre com meses x mensalidade.
+      const paymentType = coursePaymentType(tc.paymentType)
+      const months = tenantCourseMonths(tc.customParcelas, tc.course.monthlyMonthsMain)
+      return {
+        id: tc.id,
+        nome: tc.course.nome,
+        price: vitrineCoursePrice(tc.paymentType, Number(tc.price), months),
+        paymentType,
+        monthly: paymentType === "MONTHLY" ? { months, value: Number(tc.price) } : null,
+      }
+    })
 
   const packages = vitrinePackages.map((p) => ({
     id: p.id,
@@ -92,9 +104,9 @@ export default async function PainelNovaVendaPage() {
     courseCount: p.courseCount,
   }))
 
-  // Carnê (parcelado no boleto) usa a MESMA capability de mensalidade: quando o
-  // pagamento parcelado está ativo (admin liberou + unidade ativou), o carnê
-  // fica disponível na venda direta. Sem campo/toggle próprio.
+  // Parcelado usa a MESMA capability de mensalidade: quando o pagamento
+  // parcelado está ativo (admin liberou + unidade ativou), ele fica disponível
+  // na venda direta. Sem campo/toggle próprio.
   const installmentConfig =
     tenant && monthlyActive(tenant)
       ? { maxCount: MAX_BOLETO_INSTALLMENTS, gateway: tenant.salesGateway }
