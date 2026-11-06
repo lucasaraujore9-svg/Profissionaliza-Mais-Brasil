@@ -20,26 +20,19 @@ import { afterResponse } from "@/lib/after-response"
 import { appUrl, storeBaseUrl } from "@/lib/tenant/urls"
 import { logAudit } from "@/lib/audit"
 import { contextLogger } from "@/lib/logger"
-import { loadContext, type PlanContext } from "./plan"
+import { loadContext } from "./plan"
 import { asaasEvent, asaasKeyFor, mpTokenFor, readAsaasPayment, releaseAsaasCharge } from "./flex-charge"
 import {
   alertPmbAdmin,
   cancelFlexSubscription,
   settleFlexSubscriptionPayment,
+  START_RACE_WAIT_MS,
   type GatewaySubscription,
 } from "./flex-card"
 
 const OPEN = ["SCHEDULED", "GENERATED", "OVERDUE"] as const
 
 export type FlexDeclineOutcome = "declined" | "cancel_unconfirmed" | "ignored"
-
-/** Assinatura do parcelado sendo criada/negada agora: o webhook deve ser reentregue. */
-export class FlexCardBusyError extends Error {
-  constructor(enrollmentId: string) {
-    super(`parcelado no cartão em processamento (${enrollmentId})`)
-    this.name = "FlexCardBusyError"
-  }
-}
 
 export async function handleFlexCardDeclined(input: {
   enrollmentId: string
@@ -48,11 +41,16 @@ export async function handleFlexCardDeclined(input: {
   let result: FlexDeclineOutcome = "ignored"
   // O mesmo lock do startFlexCardSubscription: a recusa não se intercala com a
   // criação de uma assinatura nova.
-  const ran = await withAdvisoryLock(advisoryLockKeyFrom(`FLEX_CARD:${input.enrollmentId}`), async () => {
-    result = await declineUnderLock(input.enrollmentId, input.gatewayPaymentId)
-  })
-  if (!ran) throw new FlexCardBusyError(input.enrollmentId)
-  return result
+  const attempt = () =>
+    withAdvisoryLock(advisoryLockKeyFrom(`FLEX_CARD:${input.enrollmentId}`), async () => {
+      result = await declineUnderLock(input.enrollmentId, input.gatewayPaymentId)
+    })
+  if (await attempt()) return result
+  // Ocupado: espera a criação terminar e tenta UMA vez. Sem retry infinito pelo
+  // gateway — um lock vazado no pooler travaria a fila de webhooks da conta.
+  await new Promise((r) => setTimeout(r, START_RACE_WAIT_MS))
+  if (await attempt()) return result
+  return unconfirmed(input.enrollmentId, "assinatura (matrícula ocupada por outro processamento)")
 }
 
 async function declineUnderLock(enrollmentId: string, gatewayPaymentId: string): Promise<FlexDeclineOutcome> {
@@ -74,12 +72,12 @@ async function declineUnderLock(enrollmentId: string, gatewayPaymentId: string):
     if (!subs?.asaasSubscriptionId) return "ignored"
     sub = { asaasSubscriptionId: subs.asaasSubscriptionId }
     const apiKey = asaasKeyFor(ctx)
-    if (!apiKey) return unconfirmed(ctx, `assinatura ${sub.asaasSubscriptionId}`)
+    if (!apiKey) return unconfirmed(enrollmentId, `assinatura ${sub.asaasSubscriptionId}`)
     // Fonte da verdade é o gateway: a recusa tem que ser de uma cobrança da
     // assinatura VIGENTE (a de uma antiga não pode derrubar a nova) e não paga.
     const refused = await getAsaasPayment(gatewayPaymentId, apiKey)
     if (refused.subscription !== sub.asaasSubscriptionId || CONFIRMED_STATUSES.has(refused.status)) return "ignored"
-    if (!(await cancelFlexSubscription(ctx, sub))) return unconfirmed(ctx, `assinatura ${sub.asaasSubscriptionId}`)
+    if (!(await cancelFlexSubscription(ctx, sub))) return unconfirmed(enrollmentId, `assinatura ${sub.asaasSubscriptionId}`)
 
     // A remoção da assinatura costuma levar junto a cobrança pendente; só a
     // releitura (`deleted: true` / 404) prova que ela não pode mais ser paga.
@@ -92,25 +90,36 @@ async function declineUnderLock(enrollmentId: string, gatewayPaymentId: string):
       await settleFlexSubscriptionPayment({ enrollmentId, event: asaasEvent(released.payment) })
       return "ignored"
     }
-    if (released.kind !== "released") return unconfirmed(ctx, `cobrança ${refused.id}`)
+    if (released.kind !== "released") return unconfirmed(enrollmentId, `cobrança ${refused.id}`)
   } else {
     if (!subs?.mpSubscriptionId) return "ignored"
     sub = { mpSubscriptionId: subs.mpSubscriptionId }
     const token = await mpTokenFor(ctx)
-    if (!token) return unconfirmed(ctx, `assinatura ${sub.mpSubscriptionId}`)
+    if (!token) return unconfirmed(enrollmentId, `assinatura ${sub.mpSubscriptionId}`)
     // Recusado no MP é terminal: não há cobrança a tirar do ar, só a recorrência.
     const refused = await getMpPayment(token, gatewayPaymentId)
     if (refused.status !== "rejected") return "ignored"
-    if (!(await cancelFlexSubscription(ctx, sub))) return unconfirmed(ctx, `assinatura ${sub.mpSubscriptionId}`)
+    if (!(await cancelFlexSubscription(ctx, sub))) return unconfirmed(enrollmentId, `assinatura ${sub.mpSubscriptionId}`)
   }
 
   const declinedAt = new Date()
-  await prisma.boletoInstallment.update({ where: { id: row.id }, data: { cardDeclinedAt: declinedAt } })
-  // Solta a matrícula: sem isto um cartão novo bateria em SUBSCRIPTION_ACTIVE.
-  await prisma.enrollment.update({
-    where: { id: enrollmentId },
-    data: "asaasSubscriptionId" in sub ? { asaasSubscriptionId: null } : { mpSubscriptionId: null },
-  })
+  try {
+    // Solta a matrícula PRIMEIRO: sozinho já tira a página do "automático"
+    // (flexOffer) e libera um cartão novo (sem SUBSCRIPTION_ACTIVE).
+    await prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: "asaasSubscriptionId" in sub ? { asaasSubscriptionId: null } : { mpSubscriptionId: null },
+    })
+    await prisma.boletoInstallment.update({ where: { id: row.id }, data: { cardDeclinedAt: declinedAt } })
+  } catch (err) {
+    // Cancelado no gateway e não gravado: a reentrega acharia a cobrança já
+    // removida e não refaria nada. Alguém precisa conferir à mão.
+    await alertPmbAdmin(
+      "Cartão recusado no parcelado não gravado",
+      `A assinatura da matrícula ${enrollmentId} foi cancelada no gateway após a recusa do cartão, mas a gravação falhou. Confira se a parcela ${row.number} aparece para pagamento por PIX/boleto.`,
+    )
+    throw err
+  }
   await logAudit({
     action: "enrollment.flex.card_declined",
     resource: "Enrollment",
@@ -125,14 +134,14 @@ async function declineUnderLock(enrollmentId: string, gatewayPaymentId: string):
 }
 
 /** Gateway sem prova de parada: a linha fica como está e um humano resolve. */
-async function unconfirmed(ctx: PlanContext, what: string): Promise<"cancel_unconfirmed"> {
+async function unconfirmed(enrollmentId: string, what: string): Promise<"cancel_unconfirmed"> {
   contextLogger().error(
-    { event: "installments.flex_card.decline_cancel_unconfirmed", enrollmentId: ctx.enrollment.id, what },
+    { event: "installments.flex_card.decline_cancel_unconfirmed", enrollmentId, what },
     "cartão recusado no parcelado, mas o cancelamento não foi confirmado",
   )
   await alertPmbAdmin(
     "Cancelamento não confirmado no parcelado",
-    `O cartão da matrícula ${ctx.enrollment.id} foi recusado, mas a ${what} não pôde ser cancelada/removida com confirmação. Cancele à mão no gateway: até lá o aluno não vê PIX/boleto, para a parcela não ser cobrada duas vezes.`,
+    `O cartão da matrícula ${enrollmentId} foi recusado, mas a ${what} não pôde ser cancelada/removida com confirmação. Cancele à mão no gateway: até lá o aluno não vê PIX/boleto, para a parcela não ser cobrada duas vezes.`,
   )
   return "cancel_unconfirmed"
 }

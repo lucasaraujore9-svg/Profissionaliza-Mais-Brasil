@@ -192,8 +192,13 @@ export async function processResellerAsaasWebhook(
         await markLog(logId, true, `parcelado cartao: ${outcome}`)
         return
       }
-      // Cartao recusado: cancela a assinatura e abre PIX/boleto/outro cartao.
-      if (event === "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED" && payment.subscription) {
+      // Cartao recusado: cancela a assinatura e abre PIX/boleto/outro cartao. Sem
+      // CAPTURE_REFUSED (cartao vencido etc.) a recusa so aparece como OVERDUE da
+      // cobranca de cartao da assinatura.
+      const cardRefused =
+        event === "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED" ||
+        (event === "PAYMENT_OVERDUE" && payment.billingType === "CREDIT_CARD")
+      if (cardRefused && payment.subscription) {
         const outcome = await handleFlexCardDeclined({ enrollmentId: enrollment.id, gatewayPaymentId: payment.id })
         await markLog(logId, true, `parcelado cartao recusado: ${outcome}`)
         return

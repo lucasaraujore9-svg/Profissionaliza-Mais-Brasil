@@ -372,7 +372,7 @@ async function startMp(ctx: PlanContext, rows: BoletoInstallment[], input: Start
   return { kind: "pending" }
 }
 
-const START_RACE_WAIT_MS = 3_000
+export const START_RACE_WAIT_MS = 3_000
 
 /** true = há um startFlexCardSubscription segurando o lock desta matrícula. */
 async function cardStartInProgress(enrollmentId: string): Promise<boolean> {

@@ -3,7 +3,6 @@ import { MPApiError } from "@/lib/mercadopago/client"
 import { AsaasApiError } from "@/lib/asaas/client"
 import { EAApiError, EANetworkError } from "@/lib/plataforma-cursos/errors"
 import { CardInstallmentOutOfOrderError } from "@/lib/enrollment/card-installment"
-import { FlexCardBusyError } from "@/lib/installments/flex-decline"
 
 /**
  * Códigos Prisma que indicam falha TRANSITÓRIA de infraestrutura (vale retry):
@@ -32,9 +31,6 @@ export function isTransientWebhookError(error: unknown): boolean {
   // resolve (na volta a 1ª já liberou o curso). Engolir perderia a parcela do
   // extrato para sempre.
   if (error instanceof CardInstallmentOutOfOrderError) return true
-  // Recusa do cartão do parcelado chegou enquanto a assinatura era criada: a
-  // reentrega a processa depois, sem intercalar com a criação.
-  if (error instanceof FlexCardBusyError) return true
   // Gateways: 5xx (instabilidade do provedor) ou statusCode 0 (erro de rede).
   if (error instanceof MPApiError) {
     return error.statusCode >= 500 || error.statusCode === 0

@@ -116,10 +116,19 @@ describe("conta-mãe (vitrine PMB)", () => {
     expect(fulfillEnrollment).not.toHaveBeenCalled()
   })
 
-  it("OVERDUE não suspende a matrícula", async () => {
+  it("OVERDUE da cobrança de cartão da assinatura (recusa sem CAPTURE_REFUSED) vai para handleFlexCardDeclined", async () => {
     await processAsaasWebhook("log1", { event: "PAYMENT_OVERDUE", payment: charge("pmb_enr_enr1") } as never)
+    expect(handleFlexCardDeclined).toHaveBeenCalledWith({ enrollmentId: "enr1", gatewayPaymentId: "pay_7" })
     expect(db.enrollment.update).not.toHaveBeenCalled()
     expect(settleFlexSubscriptionPayment).not.toHaveBeenCalled()
+  })
+
+  it("OVERDUE que não é de cartão não suspende nem nega", async () => {
+    const pix = { ...charge("pmb_enr_enr1"), billingType: "PIX" }
+    asaas.getPayment.mockResolvedValue(pix)
+    await processAsaasWebhook("log1", { event: "PAYMENT_OVERDUE", payment: pix } as never)
+    expect(handleFlexCardDeclined).not.toHaveBeenCalled()
+    expect(db.enrollment.update).not.toHaveBeenCalled()
   })
 })
 
@@ -151,8 +160,17 @@ describe("conta da unidade", () => {
     expect(fulfillFromAsaasPayment).not.toHaveBeenCalled()
   })
 
-  it("OVERDUE não suspende a matrícula", async () => {
+  it("OVERDUE da cobrança de cartão da assinatura (recusa sem CAPTURE_REFUSED) vai para handleFlexCardDeclined", async () => {
     await processResellerAsaasWebhook("log1", unit, { event: "PAYMENT_OVERDUE", payment: charge("enr_enr1") } as never)
+    expect(handleFlexCardDeclined).toHaveBeenCalledWith({ enrollmentId: "enr1", gatewayPaymentId: "pay_7" })
+    expect(db.enrollment.update).not.toHaveBeenCalled()
+  })
+
+  it("OVERDUE que não é de cartão não suspende nem nega", async () => {
+    const pix = { ...charge("enr_enr1"), billingType: "PIX" }
+    asaas.getPayment.mockResolvedValue(pix)
+    await processResellerAsaasWebhook("log1", unit, { event: "PAYMENT_OVERDUE", payment: pix } as never)
+    expect(handleFlexCardDeclined).not.toHaveBeenCalled()
     expect(db.enrollment.update).not.toHaveBeenCalled()
   })
 })

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // Cartão recusado no parcelado: a assinatura é cancelada na 1ª recusa e, SÓ com
 // o cancelamento confirmado, a linha vira negada (página abre PIX/boleto/outro
@@ -54,6 +54,7 @@ vi.mock("./flex-card", () => ({
   cancelFlexSubscription: vi.fn(),
   alertPmbAdmin: vi.fn(),
   settleFlexSubscriptionPayment: vi.fn(),
+  START_RACE_WAIT_MS: 3000,
 }))
 vi.mock("@/lib/asaas/client", () => ({ getPayment: vi.fn() }))
 vi.mock("@/lib/mercadopago/client", () => ({ getPayment: vi.fn() }))
@@ -221,12 +222,48 @@ describe("handleFlexCardDeclined — Asaas", () => {
     expect(db.rows[1].cardDeclinedAt).toBeNull()
   })
 
-  it("lock da matrícula ocupado (assinatura nascendo): lança para o gateway reentregar", async () => {
+  describe("lock da matrícula ocupado", () => {
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+
+    it("ocupado uma vez (assinatura nascendo): espera e processa", async () => {
+      plan("ASAAS")
+      const { withAdvisoryLock } = await import("@/lib/enrollment/fulfill")
+      m(withAdvisoryLock).mockResolvedValueOnce(false)
+      const res = handleFlexCardDeclined({ enrollmentId: "enr1", gatewayPaymentId: "pay_9" })
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(await res).toBe("declined")
+      expect(withAdvisoryLock).toHaveBeenCalledTimes(2)
+    })
+
+    it("ocupado duas vezes: \"cancel_unconfirmed\" com alerta, sem lançar (o webhook responde 200)", async () => {
+      plan("ASAAS")
+      const { withAdvisoryLock } = await import("@/lib/enrollment/fulfill")
+      m(withAdvisoryLock).mockResolvedValueOnce(false).mockResolvedValueOnce(false)
+      const res = handleFlexCardDeclined({ enrollmentId: "enr1", gatewayPaymentId: "pay_9" })
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(await res).toBe("cancel_unconfirmed")
+      expect(withAdvisoryLock).toHaveBeenCalledTimes(2)
+      expect(cancelFlexSubscription).not.toHaveBeenCalled()
+      expect(alertPmbAdmin).toHaveBeenCalledTimes(1)
+      expect(m(alertPmbAdmin).mock.calls[0][1]).toContain("enr1")
+      expect(db.rows[1].cardDeclinedAt).toBeNull()
+    })
+  })
+
+  it("cancelado no gateway e a gravação da linha falha: assinatura já solta, alerta à PMB e relança", async () => {
     plan("ASAAS")
-    const { withAdvisoryLock } = await import("@/lib/enrollment/fulfill")
-    m(withAdvisoryLock).mockResolvedValueOnce(false)
-    await expect(handleFlexCardDeclined({ enrollmentId: "enr1", gatewayPaymentId: "pay_9" })).rejects.toThrow()
-    expect(cancelFlexSubscription).not.toHaveBeenCalled()
+    const { prisma } = await import("@/lib/prisma")
+    m(prisma.boletoInstallment.update).mockRejectedValueOnce(new Error("db down"))
+    await expect(handleFlexCardDeclined({ enrollmentId: "enr1", gatewayPaymentId: "pay_9" })).rejects.toThrow("db down")
+    await flush()
+
+    expect(db.enrollment.asaasSubscriptionId).toBeNull()
+    expect(alertPmbAdmin).toHaveBeenCalledTimes(1)
+    expect(m(alertPmbAdmin).mock.calls[0][1]).toContain("enr1")
+    expect(sendEmail).not.toHaveBeenCalled()
+    // Sem assinatura ativa, a página já sai do "automático".
+    expect(flexOffer(state(), new Date("2026-11-06T15:00:00Z")).kind).toBe("pay")
   })
 })
 
