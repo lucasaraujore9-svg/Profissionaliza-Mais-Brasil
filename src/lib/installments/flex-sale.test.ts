@@ -4,9 +4,7 @@ vi.mock("@/lib/prisma", () => {
   const prisma = {
     enrollment: { findUnique: vi.fn(), update: vi.fn() },
     boletoInstallment: { createMany: vi.fn() },
-    $transaction: vi.fn(),
   }
-  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma))
   return { prisma }
 })
 vi.mock("@/lib/enrollment/external-first-payment-server", () => ({
@@ -24,7 +22,6 @@ import { createFlexPlan } from "./flex-sale"
 const p = prisma as unknown as {
   enrollment: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
   boletoInstallment: { createMany: ReturnType<typeof vi.fn> }
-  $transaction: ReturnType<typeof vi.fn>
 }
 
 const tenant = { id: "t1", slug: "loja", plataformaVendedorId: null }
@@ -81,7 +78,14 @@ describe("createFlexPlan", () => {
     await expect(
       createFlexPlan({ enrollmentId: "enr1", tenant, schedule: { ...schedule, count: 0 } }),
     ).rejects.toThrow()
-    expect(p.$transaction).not.toHaveBeenCalled()
+    expect(p.boletoInstallment.createMany).not.toHaveBeenCalled()
+    expect(p.enrollment.update).not.toHaveBeenCalled()
+  })
+
+  it("matrícula de outra unidade lança sem gravar nada", async () => {
+    p.enrollment.findUnique.mockResolvedValue({ id: "enr1", tenantId: "outro", gateway: "ASAAS" })
+    await expect(createFlexPlan({ enrollmentId: "enr1", tenant, schedule })).rejects.toThrow()
+    expect(p.boletoInstallment.createMany).not.toHaveBeenCalled()
     expect(p.enrollment.update).not.toHaveBeenCalled()
   })
 })
