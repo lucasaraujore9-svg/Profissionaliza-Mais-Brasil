@@ -13,7 +13,9 @@
  *   A1. Plano no boleto: emite a linha da janela por `chargeFlexRow` (lock por
  *       linha), nos dois gateways.
  *   A2. Plano no PIX/boleto (ou sem meio escolhido): e-mail "parcela
- *       disponível", no máximo FLEX_EMAIL_CAP por rodada, um de cada vez.
+ *       disponível", no máximo FLEX_EMAIL_CAP por rodada, um de cada vez. Roda
+ *       POR ÚLTIMO e com orçamento de tempo: SMTP lento não pode derrubar a
+ *       função antes do OVERDUE/bloqueio, da cota nem da varredura de assinatura.
  *   B.  Cartão com assinatura viva e sem recusa: só vira OVERDUE após
  *       CARD_GRACE_DAYS (o gateway ainda retenta o cartão).
  *
@@ -59,10 +61,13 @@ const GENERATE_BATCH = 200
 const OVERDUE_BATCH = 500
 /** Hostinger suspende as caixas em rajada: poucos por rodada, um de cada vez. */
 const FLEX_EMAIL_CAP = 15
+/** Cada envio pode esperar até 60 s por uma caixa; a rota tem maxDuration 300 s. */
+const FLEX_EMAIL_BUDGET_MS = 120_000
 const CARD_GRACE_DAYS = 3
 const DAY_MS = 86_400_000
 
 export async function runBoletoInstallmentSweep(now: Date = new Date()): Promise<SweepResult> {
+  const startedAt = Date.now()
   const result: SweepResult = {
     generated: 0,
     generateErrors: 0,
@@ -104,7 +109,6 @@ export async function runBoletoInstallmentSweep(now: Date = new Date()): Promise
   }
 
   await emitFlexBoletos(windowEnd, result)
-  await emailFlexAvailable(windowEnd, result)
 
   // ── B. Marcar OVERDUE + bloquear ───────────────────────────────────────────
   const candidates = await prisma.boletoInstallment.findMany({
@@ -152,6 +156,9 @@ export async function runBoletoInstallmentSweep(now: Date = new Date()): Promise
 
   // ── C. Reconciliar a cota de aulas ─────────────────────────────────────────
   result.paceReconciled = await reconcilePaceGates()
+
+  // ── A2 por último: o envio é o passo mais lento e o único adiável. ─────────
+  await emailFlexAvailable(now, windowEnd, startedAt + FLEX_EMAIL_BUDGET_MS, result)
 
   return result
 }
@@ -222,12 +229,19 @@ async function emitFlexBoletos(windowEnd: Date, result: SweepResult): Promise<vo
  * entrada fica de fora: o aluno já tem o link desde a venda. A marca só é
  * gravada depois do envio, então a falha re-tenta na próxima rodada.
  */
-async function emailFlexAvailable(windowEnd: Date, result: SweepResult): Promise<void> {
+async function emailFlexAvailable(
+  now: Date,
+  windowEnd: Date,
+  deadline: number,
+  result: SweepResult,
+): Promise<void> {
+  // Vencida não recebe "vence em <data passada> e já pode ser paga".
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const rows = await prisma.boletoInstallment.findMany({
     where: {
       status: { in: ["SCHEDULED", "GENERATED"] },
       availableEmailSentAt: null,
-      dueDate: { lte: windowEnd },
+      dueDate: { gte: todayUtc, lte: windowEnd },
       OR: [{ number: { gt: 1 } }, { enrollment: { flexHasDownPayment: false } }],
       enrollment: {
         flexInstallments: true,
@@ -254,8 +268,15 @@ async function emailFlexAvailable(windowEnd: Date, result: SweepResult): Promise
   })
 
   let attempts = 0
-  for (const row of rows) {
+  for (const [i, row] of rows.entries()) {
     if (attempts >= FLEX_EMAIL_CAP) break
+    if (Date.now() >= deadline) {
+      contextLogger().warn(
+        { event: "installments.sweep.flex_available_budget_exhausted", leftover: rows.length - i },
+        "orçamento de tempo do e-mail de parcela disponível esgotado — o resto fica para a próxima rodada",
+      )
+      break
+    }
     const enr = row.enrollment
     if (!enr.student.email) continue
     attempts++

@@ -271,6 +271,32 @@ describe("runBoletoInstallmentSweep — parcelado flex", () => {
     expect(where.enrollment.OR).toEqual([{ installmentMethod: { in: ["PIX", "BOLETO"] } }, { installmentMethod: null }])
     expect(where.OR).toEqual([{ number: { gt: 1 } }, { enrollment: { flexHasDownPayment: false } }])
     expect(where.dueDate.lte).toEqual(new Date(NOW.getTime() + 7 * DAY))
+    // Vencida (ontem ou antes) fica fora: "vence em <passado> e já pode ser paga".
+    expect(where.dueDate.gte).toEqual(new Date("2026-11-10T00:00:00.000Z"))
+  })
+
+  it("e-mail roda por último: depois do OVERDUE e da cota", async () => {
+    rowsFor({ email: [emailRow(1)], overdue: [cardRow(4)] })
+    p.enrollment.findMany.mockResolvedValue([{ id: "e1" }])
+    await runBoletoInstallmentSweep(NOW)
+    const sendOrder = sendMock.mock.invocationCallOrder[0]
+    expect(p.boletoInstallment.update.mock.invocationCallOrder[0]).toBeLessThan(sendOrder)
+    expect(paceMock.mock.invocationCallOrder[0]).toBeLessThan(sendOrder)
+  })
+
+  it("orçamento de tempo esgotado: para de enviar e deixa o resto intocado", async () => {
+    rowsFor({ email: [emailRow(1), emailRow(2), emailRow(3)] })
+    // início = 0; 1ª checagem em 1 s (envia); 2ª já passou dos 120 s.
+    const clock = vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValueOnce(1_000).mockReturnValue(121_000)
+    try {
+      const out = await runBoletoInstallmentSweep(NOW)
+      expect(sendMock).toHaveBeenCalledTimes(1)
+      const marks = p.boletoInstallment.update.mock.calls.filter((c) => c[0].data.availableEmailSentAt)
+      expect(marks.map((c) => c[0].where.id)).toEqual(["r1"])
+      expect(out.flexEmailed).toBe(1)
+    } finally {
+      clock.mockRestore()
+    }
   })
 
   it("cartão com assinatura viva vencido há 1 dia: ainda não é OVERDUE", async () => {
