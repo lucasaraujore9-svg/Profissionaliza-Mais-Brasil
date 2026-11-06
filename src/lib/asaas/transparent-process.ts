@@ -357,9 +357,9 @@ async function resolveCustomerId(
   return customer.id
 }
 
-function buildCardPair(
+export function buildCardPair(
   formData: AsaasTransparentFormData,
-  enrollment: AsaasTransparentEnrollment,
+  enrollment: Pick<AsaasTransparentEnrollment, "payerCpf" | "payerFone" | "payerNome" | "payerEmail">,
 ): { creditCard: AsaasCreditCard; creditCardHolderInfo: AsaasCreditCardHolderInfo } | null {
   if (!formData.card) return null
   const card = formData.card
