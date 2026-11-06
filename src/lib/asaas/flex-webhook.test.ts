@@ -16,6 +16,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: db }))
 const asaas = vi.hoisted(() => ({ getPayment: vi.fn(), AsaasApiError: class extends Error {} }))
 vi.mock("./client", () => asaas)
 vi.mock("@/lib/installments/flex-card", () => ({ settleFlexSubscriptionPayment: vi.fn(async () => "settled") }))
+vi.mock("@/lib/installments/flex-decline", () => ({ handleFlexCardDeclined: vi.fn(async () => "declined") }))
 vi.mock("./fulfillment", () => ({ fulfillFromAsaasPayment: vi.fn() }))
 vi.mock("@/lib/webhooks/transient", () => ({ isTransientWebhookError: () => false }))
 vi.mock("@/lib/email/resend", () => ({ sendEmail: vi.fn() }))
@@ -47,6 +48,7 @@ vi.mock("@/lib/logger", () => {
 })
 
 import { settleFlexSubscriptionPayment } from "@/lib/installments/flex-card"
+import { handleFlexCardDeclined } from "@/lib/installments/flex-decline"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { fulfillFromAsaasPayment } from "./fulfillment"
 import { processAsaasWebhook } from "./process"
@@ -105,6 +107,15 @@ describe("conta-mãe (vitrine PMB)", () => {
     expect(fulfillEnrollment).not.toHaveBeenCalled()
   })
 
+  it("captura recusada da assinatura vai para handleFlexCardDeclined, sem fulfill", async () => {
+    await processAsaasWebhook("log1", {
+      event: "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
+      payment: charge("pmb_enr_enr1"),
+    } as never)
+    expect(handleFlexCardDeclined).toHaveBeenCalledWith({ enrollmentId: "enr1", gatewayPaymentId: "pay_7" })
+    expect(fulfillEnrollment).not.toHaveBeenCalled()
+  })
+
   it("OVERDUE não suspende a matrícula", async () => {
     await processAsaasWebhook("log1", { event: "PAYMENT_OVERDUE", payment: charge("pmb_enr_enr1") } as never)
     expect(db.enrollment.update).not.toHaveBeenCalled()
@@ -128,6 +139,15 @@ describe("conta da unidade", () => {
     db.enrollment.findFirst.mockResolvedValue({ ...flexEnrollment("t1"), asaasSubscriptionId: "sub_outra" })
     await processResellerAsaasWebhook("log1", unit, { event: "PAYMENT_CONFIRMED", payment: charge("enr_enr1") } as never)
     expect(settleFlexSubscriptionPayment).toHaveBeenCalledWith(settled)
+    expect(fulfillFromAsaasPayment).not.toHaveBeenCalled()
+  })
+
+  it("captura recusada da assinatura vai para handleFlexCardDeclined, sem fulfill", async () => {
+    await processResellerAsaasWebhook("log1", unit, {
+      event: "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
+      payment: charge("enr_enr1"),
+    } as never)
+    expect(handleFlexCardDeclined).toHaveBeenCalledWith({ enrollmentId: "enr1", gatewayPaymentId: "pay_7" })
     expect(fulfillFromAsaasPayment).not.toHaveBeenCalled()
   })
 

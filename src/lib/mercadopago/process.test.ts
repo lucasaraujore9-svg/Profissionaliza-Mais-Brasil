@@ -59,6 +59,9 @@ vi.mock("@/lib/subscriptions/renew", () => ({
 vi.mock("@/lib/installments/flex-card", () => ({
   settleFlexSubscriptionPayment: vi.fn(async () => "settled"),
 }))
+vi.mock("@/lib/installments/flex-decline", () => ({
+  handleFlexCardDeclined: vi.fn(async () => "declined"),
+}))
 vi.mock("@/lib/logger", () => ({
   contextLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
@@ -66,6 +69,7 @@ vi.mock("@/lib/logger", () => ({
 import { prisma } from "@/lib/prisma"
 import { getAuthorizedPayment, getPayment } from "./client"
 import { settleFlexSubscriptionPayment } from "@/lib/installments/flex-card"
+import { handleFlexCardDeclined } from "@/lib/installments/flex-decline"
 import { fulfillFromMpPayment } from "./fulfillment"
 import { createNotification } from "@/lib/notifications"
 import {
@@ -391,5 +395,35 @@ describe("processMpWebhook — estorno/cancelamento de matricula avulsa", () => 
       event: expect.objectContaining({ gateway: "MP", externalPaymentId: "555", amount: 100 }),
     })
     expect(fulfillMock).not.toHaveBeenCalled()
+  })
+  it("authorized_payment RECUSADO do preapproval vigente de matrícula flex vai para handleFlexCardDeclined, sem o e-mail genérico", async () => {
+    ;(getAuthorizedPayment as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 77,
+      payment_id: 555,
+      preapproval_id: "pre_1",
+    })
+    getPaymentMock.mockResolvedValue({ ...mpPayment("rejected"), id: 555 })
+    p.enrollment.findFirst.mockResolvedValue({ id: "e1", flexInstallments: true, mpSubscriptionId: "pre_1" })
+
+    await processMpWebhook(args({ topic: "subscription_authorized_payment", dataId: "77", paymentId: "77" }))
+
+    expect(handleFlexCardDeclined).toHaveBeenCalledWith({ enrollmentId: "e1", gatewayPaymentId: "555" })
+    expect(notifyStudentPaymentRejected).not.toHaveBeenCalled()
+  })
+
+  it("recusa de matrícula flex fora do preapproval vigente (aviso `payment` ou preapproval antigo) só registra", async () => {
+    ;(getAuthorizedPayment as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 77,
+      payment_id: 555,
+      preapproval_id: "pre_antigo",
+    })
+    getPaymentMock.mockResolvedValue({ ...mpPayment("rejected"), id: 555 })
+    p.enrollment.findFirst.mockResolvedValue({ id: "e1", flexInstallments: true, mpSubscriptionId: "pre_1" })
+
+    await processMpWebhook(args({ topic: "subscription_authorized_payment", dataId: "77", paymentId: "77" }))
+    await processMpWebhook(args())
+
+    expect(handleFlexCardDeclined).not.toHaveBeenCalled()
+    expect(notifyStudentPaymentRejected).not.toHaveBeenCalled()
   })
 })

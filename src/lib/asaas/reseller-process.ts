@@ -5,6 +5,7 @@ import { getPayment, AsaasApiError } from "./client"
 import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { settleFlexSubscriptionPayment } from "@/lib/installments/flex-card"
+import { handleFlexCardDeclined } from "@/lib/installments/flex-decline"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import {
@@ -189,6 +190,12 @@ export async function processResellerAsaasWebhook(
           },
         })
         await markLog(logId, true, `parcelado cartao: ${outcome}`)
+        return
+      }
+      // Cartao recusado: cancela a assinatura e abre PIX/boleto/outro cartao.
+      if (event === "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED" && payment.subscription) {
+        const outcome = await handleFlexCardDeclined({ enrollmentId: enrollment.id, gatewayPaymentId: payment.id })
+        await markLog(logId, true, `parcelado cartao recusado: ${outcome}`)
         return
       }
       if (event === "PAYMENT_OVERDUE") {

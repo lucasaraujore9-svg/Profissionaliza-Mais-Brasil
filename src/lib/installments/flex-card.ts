@@ -13,6 +13,7 @@ import { Prisma, type BoletoInstallment } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { advisoryLockKeyFrom, withAdvisoryLock } from "@/lib/enrollment/fulfill"
 import {
+  AsaasApiError,
   cancelSubscription as cancelAsaasSubscription,
   createSubscription as createAsaasSubscription,
   listPayments as listAsaasPayments,
@@ -156,7 +157,7 @@ async function releaseRows(
 async function adoptCardSchedule(
   ctx: PlanContext,
   rows: BoletoInstallment[],
-  subscription: { asaasSubscriptionId: string } | { mpSubscriptionId: string },
+  subscription: GatewaySubscription,
 ): Promise<void> {
   await prisma.enrollment.update({
     where: { id: ctx.enrollment.id },
@@ -181,6 +182,40 @@ async function adoptCardSchedule(
   })
 }
 
+export type GatewaySubscription = { asaasSubscriptionId: string } | { mpSubscriptionId: string }
+
+/**
+ * Cancela a assinatura no gateway. true só com PROVA: Asaas `deleted: true` (ou
+ * 404, não existe mais), MP `status: "cancelled"`. Qualquer outra resposta ou
+ * erro = não confirmado (a recorrência pode seguir cobrando).
+ */
+export async function cancelFlexSubscription(ctx: PlanContext, sub: GatewaySubscription): Promise<boolean> {
+  try {
+    if ("asaasSubscriptionId" in sub) {
+      const apiKey = asaasKeyFor(ctx)
+      if (!apiKey) return false
+      return (await cancelAsaasSubscription(sub.asaasSubscriptionId, apiKey)).deleted === true
+    }
+    const token = await mpTokenFor(ctx)
+    if (!token) return false
+    return (await cancelPreapproval(token, sub.mpSubscriptionId)).status === "cancelled"
+  } catch (err) {
+    return err instanceof AsaasApiError && err.statusCode === 404
+  }
+}
+
+/** Alerta à PMB (SUPER_ADMIN) de algo que só um humano resolve no gateway. */
+export async function alertPmbAdmin(title: string, body: string): Promise<void> {
+  await createNotification({
+    audience: "ROLE",
+    roleTarget: "SUPER_ADMIN",
+    level: "WARNING",
+    title,
+    body,
+    href: "/admin/alunos",
+  }).catch(swallow("installments.flex_card.alert"))
+}
+
 /**
  * A assinatura já existe no gateway: se gravá-la no banco falhar, ela fica
  * órfã (a matrícula não a conhece, a próxima tentativa cria outra e o cartão é
@@ -189,13 +224,12 @@ async function adoptCardSchedule(
 async function adoptOrUndo(
   ctx: PlanContext,
   rows: BoletoInstallment[],
-  subscription: { asaasSubscriptionId: string } | { mpSubscriptionId: string },
-  cancel: () => Promise<boolean>,
+  subscription: GatewaySubscription,
 ): Promise<void> {
   try {
     await adoptCardSchedule(ctx, rows, subscription)
   } catch (err) {
-    const cancelled = await cancel().catch(() => false)
+    const cancelled = await cancelFlexSubscription(ctx, subscription)
     contextLogger().error(
       { err, event: "installments.flex_card.adopt_failed", enrollmentId: ctx.enrollment.id, ...subscription, cancelled },
       "assinatura do parcelado criada no gateway, mas não gravada",
@@ -208,14 +242,10 @@ async function adoptOrUndo(
         .catch(swallow("installments.flex_card.adopt_clear"))
     } else {
       const id = "asaasSubscriptionId" in subscription ? subscription.asaasSubscriptionId : subscription.mpSubscriptionId
-      await createNotification({
-        audience: "ROLE",
-        roleTarget: "SUPER_ADMIN",
-        level: "WARNING",
-        title: "Assinatura de parcelado órfã no gateway",
-        body: `A assinatura ${id} da matrícula ${ctx.enrollment.id} foi criada no gateway, mas não foi gravada nem pôde ser cancelada. Cancele à mão para o cartão do aluno não ser cobrado sem registro.`,
-        href: "/admin/alunos",
-      }).catch(swallow("installments.flex_card.adopt_failed"))
+      await alertPmbAdmin(
+        "Assinatura de parcelado órfã no gateway",
+        `A assinatura ${id} da matrícula ${ctx.enrollment.id} foi criada no gateway, mas não foi gravada nem pôde ser cancelada. Cancele à mão para o cartão do aluno não ser cobrado sem registro.`,
+      )
     }
     throw err
   }
@@ -268,9 +298,7 @@ async function startAsaas(ctx: PlanContext, rows: BoletoInstallment[], input: St
     return asaasErrorToResult(err)
   }
   // Grava ANTES de olhar a 1ª cobrança: o webhook dela casa pela assinatura.
-  await adoptOrUndo(ctx, rows, { asaasSubscriptionId: subscriptionId }, async () =>
-    (await cancelAsaasSubscription(subscriptionId, apiKey)).deleted === true,
-  )
+  await adoptOrUndo(ctx, rows, { asaasSubscriptionId: subscriptionId })
 
   // Como no MONTHLY: só "aprovado" com a 1ª cobrança capturada de verdade.
   let firstPayment: AsaasPayment | undefined
@@ -339,9 +367,7 @@ async function startMp(ctx: PlanContext, rows: BoletoInstallment[], input: Start
     if (err instanceof MPApiError && err.statusCode >= 400 && err.statusCode < 500) return REJECTED
     throw err
   }
-  await adoptOrUndo(ctx, rows, { mpSubscriptionId: preapprovalId }, async () =>
-    (await cancelPreapproval(token, preapprovalId)).status === "cancelled",
-  )
+  await adoptOrUndo(ctx, rows, { mpSubscriptionId: preapprovalId })
   // A 1ª cobrança do preapproval chega pelo webhook.
   return { kind: "pending" }
 }

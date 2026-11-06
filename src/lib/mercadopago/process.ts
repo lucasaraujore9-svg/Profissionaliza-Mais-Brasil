@@ -13,6 +13,7 @@ import { fulfillFromMpPayment } from "./fulfillment"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { settleFlexSubscriptionPayment } from "@/lib/installments/flex-card"
+import { handleFlexCardDeclined } from "@/lib/installments/flex-decline"
 import {
   handleMpCarnePayment,
   isMpCarneReference,
@@ -158,7 +159,7 @@ async function resolveTenantBySlug(slug: string): Promise<TenantContext | null> 
 async function resolveEnrollment(
   tenant: TenantContext,
   payment: MPPayment,
-): Promise<{ id: string; flexInstallments: boolean } | null> {
+): Promise<{ id: string; flexInstallments: boolean; mpSubscriptionId: string | null } | null> {
   if (!payment.external_reference) return null
 
   return prisma.enrollment.findFirst({
@@ -166,7 +167,7 @@ async function resolveEnrollment(
       externalReference: payment.external_reference,
       ...(tenant.isPmbVitrine ? { tenantId: null } : { tenantId: tenant.id }),
     },
-    select: { id: true, flexInstallments: true },
+    select: { id: true, flexInstallments: true, mpSubscriptionId: true },
   })
 }
 
@@ -428,6 +429,8 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     // MP da revenda/PMB) nunca efetivava via webhook. A idempotência final é por
     // mpPaymentId no fulfill + advisory lock, então reentregas são seguras.
     let effectivePaymentId = paymentId
+    /** Preapproval da cobrança, quando o aviso é um authorized_payment. */
+    let preapprovalId: string | null = null
     if (
       topic === "subscription_authorized_payment" ||
       topic.includes("subscription_authorized_payment")
@@ -438,6 +441,7 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         return
       }
       effectivePaymentId = String(ap.payment_id)
+      preapprovalId = ap.preapproval_id
       // O id da notificacao era o do authorized_payment: a linha local e a do pagamento.
       alreadyPaid = await prisma.payment.findUnique({
         where: { mpPaymentId: effectivePaymentId },
@@ -608,6 +612,19 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     }
 
     if (payment.status === "rejected") {
+      if (enrollment.flexInstallments) {
+        // Parcelado no cartão: recusa de cobrança do preapproval VIGENTE cancela
+        // a recorrência e abre PIX/boleto/outro cartão. O aviso `payment` da
+        // mesma recusa (sem preapproval) e o de um preapproval antigo só
+        // registram — o e-mail genérico de "tente de novo" confundiria o aluno.
+        if (preapprovalId && preapprovalId === enrollment.mpSubscriptionId) {
+          const outcome = await handleFlexCardDeclined({ enrollmentId, gatewayPaymentId: String(payment.id) })
+          await markLog(logId, true, `parcelado cartao recusado: ${outcome}`)
+        } else {
+          await markLog(logId, true, "parcelado: recusa fora do preapproval vigente sem acao")
+        }
+        return
+      }
       // Recusa (cartão recusado etc.): avisa o aluno para tentar de novo.
       notifyStudentPaymentRejected(tenant, enrollmentId, payment)
       await markLog(logId, true, `rejected: aviso enviado`)

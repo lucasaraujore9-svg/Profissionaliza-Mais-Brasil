@@ -11,6 +11,7 @@ import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { settleFlexSubscriptionPayment } from "@/lib/installments/flex-card"
+import { handleFlexCardDeclined } from "@/lib/installments/flex-decline"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { createNotification } from "@/lib/notifications"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
@@ -484,6 +485,12 @@ async function processPmbDirectSale(
         },
       })
       await markLog(logId, true, `pmb parcelado cartao: ${outcome}`)
+      return true
+    }
+    // Cartao recusado: cancela a assinatura e abre PIX/boleto/outro cartao.
+    if (event === "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED" && payment.subscription) {
+      const outcome = await handleFlexCardDeclined({ enrollmentId: enrollment.id, gatewayPaymentId: payment.id })
+      await markLog(logId, true, `pmb parcelado cartao recusado: ${outcome}`)
       return true
     }
     if (event === "PAYMENT_OVERDUE") {
