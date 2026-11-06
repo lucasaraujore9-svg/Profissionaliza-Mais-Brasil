@@ -12,6 +12,15 @@ describe("parseBrl", () => {
     expect(parseBrl("")).toBe(0)
     expect(parseBrl("abc")).toBe(0)
   })
+
+  it("ponto de milhar sem vírgula é milhar, não decimal (F2)", () => {
+    expect(parseBrl("10.000")).toBe(10000)
+    expect(parseBrl("1.500")).toBe(1500)
+    expect(parseBrl("1.234.567")).toBe(1234567)
+    expect(parseBrl("10,50")).toBe(10.5)
+    expect(parseBrl("10.5")).toBe(10.5)
+    expect(parseBrl("1.234,56")).toBe(1234.56)
+  })
 })
 
 describe("venda parcelada no formulário", () => {

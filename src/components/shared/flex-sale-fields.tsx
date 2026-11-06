@@ -24,7 +24,10 @@ import { todayYmd } from "./external-first-payment-field"
 export function parseBrl(v: string): number {
   const t = v.trim()
   if (!t) return 0
-  const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t)
+  // "10.000" sem vírgula é milhar (R$ 10 mil), não 10; "10.5" segue decimal.
+  const n = Number(
+    t.includes(",") || /^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, "").replace(",", ".") : t,
+  )
   return Number.isFinite(n) ? n : 0
 }
 
