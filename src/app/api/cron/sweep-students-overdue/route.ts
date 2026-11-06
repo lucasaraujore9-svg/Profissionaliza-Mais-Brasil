@@ -60,6 +60,11 @@ async function processOverdueStudents() {
       // pegava ACTIVE). O período de carência continua respeitado via ageDays.
       status: { in: ["ACTIVE", "SUSPENDED"] },
       installmentsTotal: { not: null },
+      // Venda direta parcelada: o cronograma real esta nas linhas (o cartao e
+      // reescrito por adoptCardSchedule) e a inadimplencia e do sweep das linhas
+      // (src/lib/installments/sweep.ts). Prever por startedAt + pagas suspenderia
+      // aluno em dia.
+      flexInstallments: false,
       OR: [
         { asaasSubscriptionId: { not: null } },
         { mpSubscriptionId: { not: null } },
@@ -75,7 +80,13 @@ async function processOverdueStudents() {
           status: true,
           enrollments: {
             where: { status: "ACTIVE" },
-            select: { id: true, installmentsTotal: true, installmentsPaid: true, startedAt: true },
+            select: {
+              id: true,
+              installmentsTotal: true,
+              installmentsPaid: true,
+              startedAt: true,
+              flexInstallments: true,
+            },
           },
         },
       },
@@ -120,6 +131,8 @@ async function processOverdueStudents() {
         if (e.id === enrollment.id) return false
         // Sem mensalidades = ONE_TIME, considera em dia
         if (e.installmentsTotal === null) return true
+        // Parcelado flex: o atraso e julgado pelo sweep das linhas, nao aqui.
+        if (e.flexInstallments) return true
         if (e.installmentsPaid >= e.installmentsTotal) return true
         if (!e.startedAt) return true
         // Usa o mesmo clamp do cálculo principal — setMonth nativo faz overflow
