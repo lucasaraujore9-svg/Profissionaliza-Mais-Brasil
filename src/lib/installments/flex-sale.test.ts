@@ -1,0 +1,87 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
+vi.mock("@/lib/prisma", () => {
+  const prisma = {
+    enrollment: { findUnique: vi.fn(), update: vi.fn() },
+    boletoInstallment: { createMany: vi.fn() },
+    $transaction: vi.fn(),
+  }
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma))
+  return { prisma }
+})
+vi.mock("@/lib/enrollment/external-first-payment-server", () => ({
+  registerExternalFirstPayment: vi.fn(),
+}))
+vi.mock("@/lib/asaas/client", () => ({ createInstallmentWithBoleto: vi.fn(), createPayment: vi.fn() }))
+vi.mock("@/lib/mercadopago/client", () => ({ createPayment: vi.fn() }))
+
+import { prisma } from "@/lib/prisma"
+import { registerExternalFirstPayment } from "@/lib/enrollment/external-first-payment-server"
+import * as asaas from "@/lib/asaas/client"
+import * as mp from "@/lib/mercadopago/client"
+import { createFlexPlan } from "./flex-sale"
+
+const p = prisma as unknown as {
+  enrollment: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
+  boletoInstallment: { createMany: ReturnType<typeof vi.fn> }
+  $transaction: ReturnType<typeof vi.fn>
+}
+
+const tenant = { id: "t1", slug: "loja", plataformaVendedorId: null }
+const schedule = {
+  count: 3,
+  installmentValue: 100.1,
+  downPayment: 250,
+  firstDueDate: new Date("2026-12-10T12:00:00Z"),
+  saleDate: new Date("2026-11-06T12:00:00Z"),
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  p.enrollment.findUnique.mockResolvedValue({ id: "enr1", tenantId: "t1", gateway: "ASAAS" })
+})
+
+describe("createFlexPlan", () => {
+  it("cria 4 linhas SCHEDULED, grava o total e não toca em gateway", async () => {
+    const r = await createFlexPlan({ enrollmentId: "enr1", tenant, schedule })
+    expect(r).toEqual({ rows: 4, total: 550.3 })
+    const data = p.boletoInstallment.createMany.mock.calls[0][0].data
+    expect(data).toHaveLength(4)
+    expect(data.every((d: { status: string; gateway: string; tenantId: string }) =>
+      d.status === "SCHEDULED" && d.gateway === "ASAAS" && d.tenantId === "t1")).toBe(true)
+    expect(p.enrollment.update.mock.calls[0][0].data).toMatchObject({
+      flexInstallments: true,
+      flexHasDownPayment: true,
+      installmentsTotal: 4,
+      finalAmount: 550.3,
+    })
+    expect(registerExternalFirstPayment).not.toHaveBeenCalled()
+    expect(asaas.createInstallmentWithBoleto).not.toHaveBeenCalled()
+    expect(asaas.createPayment).not.toHaveBeenCalled()
+    expect(mp.createPayment).not.toHaveBeenCalled()
+  })
+
+  it("paidBefore: linha 1 nasce PAID e a baixa externa usa o valor dela", async () => {
+    const paidAt = new Date("2026-11-05T12:00:00Z")
+    await createFlexPlan({ enrollmentId: "enr1", tenant, schedule, paidBefore: { paidAt } })
+    const data = p.boletoInstallment.createMany.mock.calls[0][0].data
+    expect(data[0]).toMatchObject({ number: 1, status: "PAID", paidAt })
+    expect(data[1].status).toBe("SCHEDULED")
+    expect(registerExternalFirstPayment).toHaveBeenCalledWith({
+      tenant,
+      enrollmentId: "enr1",
+      gateway: "ASAAS",
+      paymentType: "BOLETO_INSTALLMENT",
+      amount: 250,
+      paidAt,
+    })
+  })
+
+  it("plano inválido lança sem gravar nada", async () => {
+    await expect(
+      createFlexPlan({ enrollmentId: "enr1", tenant, schedule: { ...schedule, count: 0 } }),
+    ).rejects.toThrow()
+    expect(p.$transaction).not.toHaveBeenCalled()
+    expect(p.enrollment.update).not.toHaveBeenCalled()
+  })
+})
