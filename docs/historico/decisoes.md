@@ -2880,3 +2880,69 @@ migrado.
   nao mudou: PIX/boleto mes a mes segue R$ 329, visivel so na pagina
   `/cobranca` e no e-mail. Risco aceito pelo dono: anuncio de 289 com boleto a
   329. Precos de CURSO (R$ 239,90 etc.) nao sao a mensalidade e ficaram.
+
+### Venda direta parcelada: o aluno escolhe o meio (2026-11-06)
+
+Spec: `docs/superpowers/specs/2026-11-06-venda-direta-parcelada-design.md`.
+
+- **Decisão do dono:** a venda direta parcelada virou uma só. O vendedor não
+  escolhe o meio; o aluno escolhe na página `/pagar/<id>` entre cartão, PIX e
+  boleto, no Asaas e no Mercado Pago, na loja e na PMB. Parcelas sempre iguais;
+  entrada opcional de valor diferente (no cartão é 1x). O meio escolhido vale
+  para as parcelas seguintes; só a recusa do cartão devolve a escolha ao aluno.
+- **Discriminador:** `Enrollment.flexInstallments` + `flexHasDownPayment` +
+  `installmentMethod` (migration `20261106_flex_installments`, aditiva, sem
+  backfill). `paymentType` segue `BOLETO_INSTALLMENT`. Carnê/mensal antigo, sem
+  a marca, roda o código de sempre: nada se infere pelo formato dos dados.
+- **Livro de parcelas:** as linhas de `BoletoInstallment` registram TODAS as
+  parcelas, em qualquer meio (inclusive as pagas pela assinatura do cartão).
+  Nada é cobrado no gateway na venda (`flex-sale.ts`); sem `$transaction`
+  (pooler da Supabase), o chamador desfaz apagando a matrícula.
+- **Cobrança por linha:** `chargeFlexRow` (`flex-charge.ts`). Asaas usa
+  `externalReference` `carne_<enrollmentId>` (adota cobrança órfã, não há
+  idempotência); MP usa `parc_<rowId>`. Lock por linha: venda, página e cron
+  nunca emitem a mesma linha ao mesmo tempo. Rateio via
+  `asaasSplitsForEnrollment` em toda cobrança.
+- **Cartão = assinatura do gateway sobre as linhas restantes**
+  (`startFlexCardSubscription`, `flex-card.ts`): valor = parcela, nº = linhas
+  restantes. Os vencimentos das linhas são reescritos para o calendário da
+  assinatura, com auditoria. Assinatura órfã (falha no meio) é desfeita;
+  pagamento que chega sem linha em aberto gera alerta (`reportUnmatchedPayment`).
+- **Cancela na 1ª recusa, com confirmação** (`handleFlexCardDeclined`,
+  `flex-decline.ts`): eventos `CAPTURE_REFUSED` e cartão `OVERDUE` (Asaas) e
+  `authorized_payment` recusado (MP). A linha só vira negada depois que o
+  gateway CONFIRMA o cancelamento (Asaas: `deleted: true`). Invariante: nunca
+  cobrar a mesma parcela duas vezes. Lock ocupado repete com limite, não
+  trava a fila de webhooks. Pagou a negada no cartão: nova assinatura; no
+  PIX/boleto: o plano passa a ser esse meio.
+- **Meio do plano fixado quando uma linha fica PAGA** (`settleBoletoInstallment`),
+  não quando a cobrança é criada: quem gerou um PIX e desistiu ainda pode
+  trocar para boleto.
+- **Rotas:** `/api/loja/checkout/parcela` e `/api/checkout/parcela` (+ `/status`
+  com `enrollment_id` + `installment_id`, resposta `{ data: { paid } }`),
+  atrás do BotID. Loja mantém 403 `TENANT_INACTIVE` para unidade não ativa.
+- **Página:** `FlexInstallmentPage` (loja e PMB iguais), usa os formulários
+  Asaas/MP existentes; mostra "Parcela K de N", resumo, lista de parcelas e o
+  que a parcela da vez oferece (tabela da spec; função pura em `flex.ts`).
+- **Varredura** (`runBoletoInstallmentSweep`, sem job novo de pg_cron): plano
+  flex fora do passo A legado; emite BOLETO quando a linha entra na janela de
+  7 dias; e-mail "parcela disponível" por último, teto de 15 por execução e
+  orçamento de 120 s (SMTP da Hostinger suspende em rajada); cartão negado tem
+  carência de 3 dias. MP boleto sem endereço salvo não emite: só avisa.
+- **Edição:** `CARD_PLAN_NOT_EDITABLE` — o botão "Parcelas" recusa linha de
+  plano com assinatura ativa. PIX/boleto edita como antes.
+- **Venda direta mudou:** curso MONTHLY deixou de ser vendido como MONTHLY
+  (sem `parcelado` = ONE_TIME no total da vitrine); "Personalizar valores"
+  saiu do formulário; campos legados (`carneCurso`, valores por parcela) dão
+  400; o painel passou a aplicar o teto do vendedor (`effectiveSalesCap`,
+  antes o carnê o pulava); o admin não força mais o Asaas.
+- **Trade-offs aceitos:** venda flex não dispara o pixel `Purchase`
+  (`TrackingPurchaseEvent`), pois os formulários voltam para `/pagar/<id>`;
+  "1ª paga fora" continua só para curso mensal (escopo de 2026-10-29); sem Pix
+  Automático; renegociar plano no cartão fica para depois.
+- **Fora do escopo, a checar:** `end_date` do `preapproval` MP da MONTHLY legada
+  (`mercadopago/transparent-process.ts`, N*31d+3d) pode permitir uma cobrança
+  a mais. Não mexi.
+- **Não validado contra os gateways reais.** Pendente (dono, Chrome real por
+  causa do BotID): uma venda de valor baixo por gateway, entrada no PIX, 1ª
+  parcela no cartão e um boleto; recusa de cartão nos dois. Não anunciar antes.
