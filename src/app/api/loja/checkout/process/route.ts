@@ -73,6 +73,7 @@ export const POST = withRequestContext(
           tenantId: true,
           gateway: true,
           paymentType: true,
+          flexInstallments: true,
           finalAmount: true,
           installmentsTotal: true,
           installmentsPaid: true,
@@ -123,6 +124,14 @@ export const POST = withRequestContext(
         return NextResponse.json(
           { error: "Matrícula inválida para esta loja", code: "TENANT_MISMATCH" },
           { status: 403 },
+        )
+      }
+      // Parcelado flex: paga-se linha a linha pela página do plano (flex-pay.ts,
+      // que respeita flexOffer). Aqui cobraria fora da vez, no meio errado ou o total.
+      if (enrollment.flexInstallments) {
+        return NextResponse.json(
+          { error: "Pague esta compra pela página do plano parcelado.", code: "USE_PARCELA_ROUTE" },
+          { status: 409 },
         )
       }
 

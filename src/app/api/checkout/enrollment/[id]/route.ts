@@ -127,6 +127,7 @@ export const POST = withRequestContextParams<{ id: string }>(
         status: true,
         finalAmount: true,
         paymentType: true,
+        flexInstallments: true,
         installmentsTotal: true,
         installmentsPaid: true,
         asaasPaymentId: true,
@@ -145,6 +146,14 @@ export const POST = withRequestContextParams<{ id: string }>(
       return NextResponse.json(
         { error: "Cobrança não encontrada", code: "ENROLLMENT_NOT_FOUND" },
         { status: 404 },
+      )
+    }
+    // Parcelado flex: paga-se linha a linha pela página do plano (flex-pay.ts,
+    // que respeita flexOffer). Aqui cobraria fora da vez, no meio errado ou o total.
+    if (enrollment.flexInstallments) {
+      return NextResponse.json(
+        { error: "Pague esta compra pela página do plano parcelado.", code: "USE_PARCELA_ROUTE" },
+        { status: 409 },
       )
     }
     // Curso mensal com a 1ª paga fora (marketplace): a matrícula já está

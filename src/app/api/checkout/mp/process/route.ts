@@ -75,6 +75,7 @@ export const POST = withRequestContext(
           id: true,
           status: true,
           paymentType: true,
+          flexInstallments: true,
           finalAmount: true,
           installmentsTotal: true,
           externalReference: true,
@@ -87,6 +88,14 @@ export const POST = withRequestContext(
         return NextResponse.json(
           { error: "Matrícula não encontrada", code: "NOT_FOUND" },
           { status: 404 },
+        )
+      }
+      // Parcelado flex: paga-se linha a linha pela página do plano (flex-pay.ts,
+      // que respeita flexOffer). Aqui cobraria fora da vez, no meio errado ou o total.
+      if (enrollment.flexInstallments) {
+        return NextResponse.json(
+          { error: "Pague esta compra pela página do plano parcelado.", code: "USE_PARCELA_ROUTE" },
+          { status: 409 },
         )
       }
 
