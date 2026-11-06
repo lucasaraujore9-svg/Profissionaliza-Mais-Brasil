@@ -10,6 +10,7 @@ import {
 } from "@/components/aluno/installments-section"
 import { isWithinRevealWindow, INSTALLMENT_REVEAL_WINDOW_DAYS } from "@/lib/installments/schedule"
 import { subscriptionCarneView } from "@/lib/subscriptions/carne-view"
+import { flexCarneView, flexPaymentUrl } from "@/lib/installments/flex"
 import { loadStudentPaymentHistory } from "@/lib/students/payment-history"
 
 function brl(value: number): string {
@@ -80,7 +81,9 @@ export default async function StudentPaymentsPage() {
       include: {
         course: { select: { nome: true } },
         // Payability da loja p/ decidir o destino do botao "Pagar agora".
-        tenant: { select: { status: true, mpPublicKey: true } },
+        tenant: {
+          select: { status: true, mpPublicKey: true, slug: true, customDomain: true, domainVerified: true },
+        },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -91,7 +94,14 @@ export default async function StudentPaymentsPage() {
         enrollment: { studentId: session.studentId },
         status: { not: "CANCELLED" },
       },
-      include: { enrollment: { include: { course: { select: { nome: true } } } } },
+      include: {
+        enrollment: {
+          include: {
+            course: { select: { nome: true } },
+            tenant: { select: { slug: true, customDomain: true, domainVerified: true } },
+          },
+        },
+      },
       orderBy: [{ enrollmentId: "asc" }, { number: "asc" }],
     }),
     // Assinatura no boleto: os boletos dela aparecem aqui também, no mesmo
@@ -125,8 +135,9 @@ export default async function StudentPaymentsPage() {
 
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0)
   // Carnê tem sua própria seção (boletos por parcela) — fora da lista genérica.
+  // Parcelado flex PENDENTE (entrada/1ª a pagar) entra: paga na página do plano.
   const pending = enrollments.filter(
-    (e) => e.status === "PENDING" && e.paymentType !== "BOLETO_INSTALLMENT",
+    (e) => e.status === "PENDING" && (e.paymentType !== "BOLETO_INSTALLMENT" || e.flexInstallments),
   )
 
   // View model do carnê: agrupa parcelas por matrícula e resolve a disponibilidade
@@ -134,6 +145,8 @@ export default async function StudentPaymentsPage() {
   const now = new Date()
   const carnesMap = new Map<string, InstallmentCarne>()
   for (const row of installmentRows) {
+    // Parcelado flex não é carnê de boleto: vai para a seção própria abaixo.
+    if (row.enrollment.flexInstallments) continue
     let carne = carnesMap.get(row.enrollmentId)
     if (!carne) {
       carne = {
@@ -164,6 +177,32 @@ export default async function StudentPaymentsPage() {
     })
   }
   const carnes = [...carnesMap.values()]
+  const flexRowsMap = new Map<string, typeof installmentRows>()
+  for (const row of installmentRows) {
+    if (!row.enrollment.flexInstallments) continue
+    flexRowsMap.set(row.enrollmentId, [...(flexRowsMap.get(row.enrollmentId) ?? []), row])
+  }
+  const flexPlans = [...flexRowsMap.values()].map((rows) => {
+    const e = rows[0].enrollment
+    return flexCarneView(
+      {
+        id: e.id,
+        courseName: e.course.nome,
+        hasDownPayment: e.flexHasDownPayment,
+        method: e.installmentMethod,
+        subscriptionActive: !!(e.asaasSubscriptionId || e.mpSubscriptionId),
+        tenant: e.tenant,
+      },
+      rows.map((r) => ({
+        number: r.number,
+        status: r.status,
+        amount: Number(r.amount),
+        dueDate: r.dueDate,
+        cardDeclinedAt: r.cardDeclinedAt,
+      })),
+      now,
+    )
+  })
   // Só o carnê de BOLETO: no PIX não há boleto a listar (o QR é gerado na hora,
   // em /aluno/assinatura) e a linha ficaria em "Gerando boleto…" para sempre.
   const subscriptionCarnes = carneSubscriptions
@@ -245,15 +284,27 @@ export default async function StudentPaymentsPage() {
                     {e.course.nome}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {e.paymentType === "MONTHLY"
-                      ? "Mensalidade"
-                      : "Pagamento único"}{" "}
+                    {e.flexInstallments
+                      ? "Parcelado"
+                      : e.paymentType === "MONTHLY"
+                        ? "Mensalidade"
+                        : "Pagamento único"}{" "}
                     · {brl(Number(e.finalAmount))}
                   </p>
                 </div>
                 <div className="flex flex-col items-stretch gap-2 sm:items-end">
-                  <PayPendingButton enrollment={e} />
-                  <PaymentCheckButton enrollmentId={e.id} />
+                  {e.flexInstallments ? (
+                    <a
+                      href={flexPaymentUrl(e.id, e.tenant)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--brand-btn)] px-4 py-2 text-sm font-semibold text-[var(--brand-btn-on)] shadow-sm transition-colors hover:bg-[var(--brand-btn-hover)]"
+                    >
+                      Pagar agora
+                    </a>
+                  ) : (
+                    <PayPendingButton enrollment={e} />
+                  )}
+                  {/* Parcelado flex baixa por linha (webhook/página do plano), não pela matrícula. */}
+                  {!e.flexInstallments && <PaymentCheckButton enrollmentId={e.id} />}
                 </div>
               </li>
             ))}
@@ -263,6 +314,13 @@ export default async function StudentPaymentsPage() {
 
       {/* Carnê (venda parcelada no boleto) — boletos por parcela */}
       <InstallmentsSection carnes={carnes} />
+
+      {/* Venda direta parcelada: cada parcela se paga na página do plano */}
+      <InstallmentsSection
+        carnes={flexPlans}
+        title="Parcelas"
+        description="Cada parcela fica disponível 7 dias antes do vencimento. Pague por PIX, boleto ou cartão na página do plano."
+      />
 
       {/* Assinatura no boleto — um boleto por ciclo */}
       <InstallmentsSection

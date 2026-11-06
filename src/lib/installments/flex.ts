@@ -3,6 +3,7 @@
  * (PIX / boleto / cartão). Sem I/O nem Prisma: roda no client (prévia do
  * formulário) e no server.
  */
+import type { InstallmentCarne } from "@/components/aluno/installments-section"
 import { addMonthsClampedUtc } from "@/lib/dates"
 import { appUrl, storeBaseUrl } from "@/lib/tenant/urls"
 import {
@@ -186,4 +187,46 @@ export function flexPaymentUrl(
   tenant: { slug: string; customDomain?: string | null; domainVerified?: boolean | null } | null,
 ): string {
   return `${tenant ? storeBaseUrl(tenant) : appUrl()}/pagar/${enrollmentId}`
+}
+
+type FlexTenant = Parameters<typeof flexPaymentUrl>[1]
+
+/**
+ * Plano parcelado na lista do aluno (/aluno/pagamentos): o pagamento é sempre
+ * pela página do plano (`payUrl`), nunca boleto do carnê legado. Só a linha que
+ * `flexOffer` deixa pagar fica disponível.
+ */
+export function flexCarneView(
+  e: Omit<FlexPlanState, "rows"> & { id: string; courseName: string; tenant: FlexTenant },
+  rows: FlexRowState[],
+  now: Date,
+): InstallmentCarne {
+  const sorted = [...rows].sort((a, b) => a.number - b.number)
+  const offer = flexOffer({ ...e, rows: sorted }, now)
+  return {
+    id: e.id,
+    courseName: e.courseName,
+    payUrl: flexPaymentUrl(e.id, e.tenant),
+    parcelas: sorted.map((r) => {
+      const open = r.status !== "PAID" && r.status !== "CANCELLED"
+      let availableFromISO: string | null = null
+      if (open && !isWithinRevealWindow(r, now)) {
+        const from = new Date(r.dueDate)
+        from.setUTCDate(from.getUTCDate() - INSTALLMENT_REVEAL_WINDOW_DAYS)
+        availableFromISO = from.toISOString()
+      }
+      return {
+        number: r.number,
+        amount: r.amount,
+        dueDateISO: r.dueDate.toISOString(),
+        status: r.status,
+        label: flexRowLabel(r, e.hasDownPayment, sorted.length),
+        available: offer.kind === "pay" && offer.rowNumber === r.number,
+        availableFromISO,
+        invoiceUrl: null,
+        digitableLine: null,
+        cardDeclinedAt: r.cardDeclinedAt?.toISOString() ?? null,
+      }
+    }),
+  }
 }

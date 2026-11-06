@@ -35,6 +35,8 @@ export interface InstallmentCarne {
   parcelas: InstallmentView[]
   /** Como cada boleto é chamado na lista. Default "Parcela". */
   unitLabel?: string
+  /** Parcelado flex: a parcela disponível se paga nesta página (PIX/boleto/cartão). */
+  payUrl?: string
 }
 
 function brl(v: number): string {
@@ -78,6 +80,7 @@ export function InstallmentsSection({
                   key={p.number}
                   parcela={p}
                   unitLabel={carne.unitLabel ?? "Parcela"}
+                  payUrl={carne.payUrl}
                 />
               ))}
             </ul>
@@ -91,9 +94,11 @@ export function InstallmentsSection({
 function ParcelaRow({
   parcela,
   unitLabel,
+  payUrl,
 }: {
   parcela: InstallmentView
   unitLabel: string
+  payUrl?: string
 }) {
   const [copied, setCopied] = useState(false)
 
@@ -126,6 +131,18 @@ function ParcelaRow({
             <CheckCircle2 className="h-3 w-3" aria-hidden />
             Paga
           </span>
+        ) : parcela.available && payUrl ? (
+          <a
+            href={payUrl}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold ${
+              isOverdue
+                ? "bg-rose-600 text-white hover:bg-rose-700"
+                : "bg-[var(--brand-btn)] text-[var(--brand-btn-on)] hover:bg-[var(--brand-btn-hover)]"
+            }`}
+          >
+            {isOverdue ? "Pagar parcela vencida" : "Pagar"}
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
         ) : parcela.available && parcela.invoiceUrl ? (
           <>
             <a

@@ -7,6 +7,8 @@ import {
   flexPlanSummary,
   flexRowsSummary,
   flexOffer,
+  flexCarneView,
+  flexPaymentUrl,
   type FlexPlanState,
   type FlexRowState,
 } from "./flex"
@@ -172,5 +174,40 @@ describe("flexOffer", () => {
   it("tudo pago: done", () => {
     const p = plan({ rows: [row(1, "PAID", "2026-11-06"), row(2, "CANCELLED", "2027-01-10")] })
     expect(flexOffer(p, now)).toEqual({ kind: "done" })
+  })
+})
+
+describe("flexCarneView (I3: /aluno/pagamentos)", () => {
+  const now = new Date("2026-11-06T15:00:00Z")
+  const base = {
+    id: "enr1",
+    courseName: "Curso X",
+    hasDownPayment: true,
+    method: null,
+    subscriptionActive: false,
+    tenant: { slug: "loja" },
+  }
+  const r = (number: number, status: FlexRowState["status"], due: string, amount = 100) => ({
+    number, status, amount, dueDate: new Date(`${due}T12:00:00Z`), cardDeclinedAt: null,
+  })
+
+  it("linha da vez abre para pagar na pagina do plano; demais aguardam a janela", () => {
+    const v = flexCarneView(base, [r(1, "PAID", "2026-11-01", 300), r(2, "SCHEDULED", "2026-11-10"), r(3, "SCHEDULED", "2026-12-10")], now)
+    expect(v.payUrl).toBe(flexPaymentUrl("enr1", { slug: "loja" }))
+    expect(v.parcelas.map((p) => [p.label, p.available, p.availableFromISO?.slice(0, 10) ?? null])).toEqual([
+      ["Entrada", false, null],
+      ["Parcela 1 de 2", true, null],
+      ["Parcela 2 de 2", false, "2026-12-03"],
+    ])
+    expect(v.parcelas.every((p) => p.invoiceUrl === null)).toBe(true)
+  })
+
+  it("cartao em dia: nenhuma linha para pagar", () => {
+    const v = flexCarneView(
+      { ...base, method: "CREDIT_CARD", subscriptionActive: true },
+      [r(1, "PAID", "2026-11-01", 300), r(2, "SCHEDULED", "2026-11-08")],
+      now,
+    )
+    expect(v.parcelas.some((p) => p.available)).toBe(false)
   })
 })

@@ -32,4 +32,15 @@ describe("InstallmentsSection", () => {
       "Cartão recusado",
     )
   })
+
+  it("plano parcelado (payUrl): linha da vez vira \"Pagar\" na pagina do plano, nunca \"Gerando boleto\"", () => {
+    const html = renderToStaticMarkup(
+      <InstallmentsSection
+        carnes={[{ id: "e1", courseName: "Curso", payUrl: "https://loja.x/pagar/e1", parcelas: [row({ available: true, status: "SCHEDULED" })] }]}
+      />,
+    )
+    expect(html).toContain('href="https://loja.x/pagar/e1"')
+    expect(html).toContain("Pagar")
+    expect(html).not.toContain("Gerando boleto")
+  })
 })
