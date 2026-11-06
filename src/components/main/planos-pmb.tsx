@@ -74,10 +74,14 @@ export function PlanosPMB() {
             <div className="mt-7 flex items-baseline gap-1.5">
               <span className="text-xl font-bold text-white/60">R$</span>
               <span className="text-6xl font-black leading-none tracking-tight text-white">
-                239
+                289
               </span>
               <span className="text-base font-medium text-white/60">/mês</span>
             </div>
+            <p className="mt-2 text-sm text-white/70">
+              No cartão, com débito automático. No boleto ou PIX, pagos mês a
+              mês: R$ 329/mês.
+            </p>
 
             <a href="#formulario" className="mt-6 block">
               <Button

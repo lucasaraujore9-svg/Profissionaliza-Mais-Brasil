@@ -15,6 +15,11 @@ interface Props {
    * cobrança e não suspende as dos próximos meses.
    */
   isFirstCharge: boolean
+  /**
+   * Mensalidade no débito automático do cartão (R$ 289) quando a unidade está
+   * na tabela mês a mês (R$ 329). null = sem a oferta (unidade antiga, promo).
+   */
+  recurringValue: number | null
 }
 
 type Tab = "PIX" | "BOLETO" | "CARTAO"
@@ -266,12 +271,14 @@ function CardTab({
   amount,
   maxInstallments,
   isFirstCharge,
+  recurringValue,
 }: {
   paymentId: string
   onPaid: () => void
   amount: number
   maxInstallments: number
   isFirstCharge: boolean
+  recurringValue: number | null
 }) {
   const [installmentCount, setInstallmentCount] = useState(1)
   const [form, setForm] = useState<CardForm>({
@@ -289,6 +296,9 @@ function CardTab({
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 1x com a oferta = débito automático (assinatura nova no cartão); 2x+ =
+  // parcelamento desta cobrança, no valor mês a mês.
+  const recurring = recurringValue !== null && installmentCount === 1
 
   function set(field: keyof CardForm, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -305,7 +315,10 @@ function CardTab({
     setSubmitting(true)
 
     try {
-      const res = await fetch(`/api/cobranca/${paymentId}/pay-card`, {
+      const url = recurring
+        ? `/api/cobranca/${paymentId}/assinar-cartao`
+        : `/api/cobranca/${paymentId}/pay-card`
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -324,7 +337,7 @@ function CardTab({
             addressNumber: form.addressNumber,
             phone: form.phone,
           },
-          installmentCount,
+          ...(recurring ? {} : { installmentCount }),
         }),
       })
 
@@ -534,7 +547,9 @@ function CardTab({
               {Array.from({ length: maxInstallments }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>
                   {n === 1
-                    ? `À vista — ${formatBRL(amount)}`
+                    ? recurringValue !== null
+                      ? `Débito automático — ${formatBRL(recurringValue)}/mês`
+                      : `À vista — ${formatBRL(amount)}`
                     : `${n}x de ${formatBRL(Math.round((amount / n) * 100) / 100)}`}
                 </option>
               ))}
@@ -553,6 +568,14 @@ function CardTab({
         </div>
       )}
 
+      {recurring && (
+        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-relaxed text-emerald-800">
+          Você paga <strong>{formatBRL(recurringValue)}</strong> hoje e o mesmo
+          valor todo mês, debitado automaticamente neste cartão. A cobrança mês
+          a mês de {formatBRL(amount)} é cancelada.
+        </p>
+      )}
+
       {error && (
         <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {error}
@@ -569,6 +592,8 @@ function CardTab({
             <Spinner white />
             Processando...
           </>
+        ) : recurring ? (
+          `Ativar débito automático — ${formatBRL(recurringValue)}/mês`
         ) : (
           "Pagar com cartão"
         )}
@@ -631,6 +656,7 @@ export function CheckoutClient({
   amount,
   maxInstallments,
   isFirstCharge,
+  recurringValue,
 }: Props) {
   const [tab, setTab] = useState<Tab>("PIX")
   const [billingInfo, setBillingInfo] = useState<AsaasBillingInfo | null>(null)
@@ -788,6 +814,22 @@ export function CheckoutClient({
         ))}
       </div>
 
+      {recurringValue !== null && (
+        <div className="border-b border-emerald-200 bg-emerald-50 px-6 py-3 text-xs text-emerald-900">
+          <strong>Débito automático no cartão: {formatBRL(recurringValue)}/mês.</strong>{" "}
+          PIX e boleto, pagos mês a mês: {formatBRL(amount)}.
+          {tab !== "CARTAO" && (
+            <button
+              type="button"
+              onClick={() => setTab("CARTAO")}
+              className="ml-1 font-semibold underline"
+            >
+              Usar cartão
+            </button>
+          )}
+        </div>
+      )}
+
       {presaNumMetodoSo && (
         <div className="border-b border-amber-200 bg-amber-50 px-6 py-3">
           <p className="text-xs text-amber-900">
@@ -846,6 +888,7 @@ export function CheckoutClient({
                 amount={amount}
                 maxInstallments={maxInstallments}
                 isFirstCharge={isFirstCharge}
+                recurringValue={recurringValue}
               />
             )}
           </>

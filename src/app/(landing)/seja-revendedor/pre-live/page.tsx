@@ -70,7 +70,7 @@ const ALTERNATIVAS = [
 const PLANOS = [
   {
     titulo: "Profissionaliza PRO",
-    preco: "R$ 239",
+    preco: "R$ 289",
     periodo: "/mês",
     descricao:
       "Sua escola no ar: site próprio, 200 cursos, sem comissão e a Automação que vende no WhatsApp por você.",

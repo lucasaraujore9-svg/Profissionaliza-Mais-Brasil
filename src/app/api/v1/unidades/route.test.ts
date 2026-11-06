@@ -63,14 +63,15 @@ describe("POST /api/v1/unidades", () => {
 
     const input = create.mock.calls[0][0]
     expect(input.slug).toBe("cursos-do-joao")
-    expect(input.planValue).toBe(239)
+    expect(input.planValue).toBe(329)
     expect(input.automationEnabled).toBe(true)
     expect(input.ownerEmail).toBe("joao@exemplo.com.br")
     expect(input.actor).toEqual({ userId: null, role: "API_KEY", email: "api:pmb_live_abc" })
 
     const body = await res.json()
     expect(body.data.pagamento.url).toMatch(/\/cobranca\/pay_1$/)
-    expect(body.data.pagamento.valor).toBe(239)
+    expect(body.data.pagamento.valor).toBe(329)
+    expect(body.data.pagamento.valorDebitoAutomatico).toBe(289)
     // Checkout transparente do PMB: a fatura hospedada do Asaas nunca sai.
     expect(JSON.stringify(body)).not.toContain("asaas/i/1")
   })
@@ -92,7 +93,7 @@ describe("POST /api/v1/unidades", () => {
     const { plano: _omit, ...semPlano } = BODY
     const res = await post(semPlano)
     expect(res.status).toBe(201)
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ planValue: 239, automationEnabled: true }))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ planValue: 329, automationEnabled: true }))
   })
 
   it("e-mail/slug já usado vira 409 CONFLICT", async () => {

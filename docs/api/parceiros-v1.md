@@ -321,8 +321,8 @@ Authorization: Bearer pmb_live_xxx
 |-------|-------------|-------|
 | `nome` | sim | 2–80 caracteres. |
 | `slug` | não | 3–32, letras minúsculas, números e hífen. Ausente = derivado do `nome`. Vira o subdomínio da vitrine. |
-| `plano` | não | `pro` (R$ 239, já liga o módulo de Automação), que é o padrão. Não há outro valor — `profissionaliza` (R$ 209) saiu de venda em 2026-10-13 e é recusado com 400. Cortesia, promoção e preço livre são só pelo /admin. |
-| `parcelasPrimeiraMensalidade` | não | 1–12, teto do cartão na 1ª mensalidade. Padrão 1. |
+| `plano` | não | `pro` (já liga o módulo de Automação), que é o padrão. Mensalidade: **R$ 329 mês a mês** (boleto ou PIX) ou **R$ 289 no débito automático do cartão** — quem escolhe é o titular, no link de pagamento. Não há outro valor — `profissionaliza` (R$ 209) saiu de venda em 2026-10-13 e é recusado com 400. Cortesia, promoção e preço livre são só pelo /admin. |
+| `parcelasPrimeiraMensalidade` | não | 1–12, teto do cartão parcelado na 1ª mensalidade (no valor mês a mês, R$ 329). Padrão 1 = sem parcelar. |
 | `titular.nome` / `email` / `cpfCnpj` | sim | O e-mail vira o login do titular e não pode já existir. |
 | `titular.telefone` | não | 8–20 caracteres. |
 
@@ -340,7 +340,8 @@ Resposta `201`:
     "pagamento": {
       "url": "https://profissionalizamaisbrasil.com.br/cobranca/pay_abc123",
       "cobrancaId": "pay_abc123",
-      "valor": 239,
+      "valor": 329,
+      "valorDebitoAutomatico": 289,
       "plano": "pro",
       "erro": null
     },
@@ -350,7 +351,14 @@ Resposta `201`:
 ```
 
 - **`pagamento.url` é o checkout transparente do PMB**: PIX (QR e copia e cola),
-  boleto e cartão parcelado na própria página. Envie esse link ao titular.
+  boleto, débito automático no cartão e cartão parcelado na própria página.
+  Envie esse link ao titular.
+- **Preço por forma de pagamento.** A cobrança nasce em `valor` (R$ 329, mês a
+  mês). Se o titular escolher o **débito automático no cartão**, a mensalidade
+  passa a `valorDebitoAutomatico` (R$ 289), cobrada hoje e todo mês no mesmo
+  cartão: a assinatura de R$ 329 é cancelada e a `cobrancaId` original deixa de
+  existir (`DELETED`). Acompanhe a ativação por `status` da unidade ou pelo
+  webhook `unidade.pagamento.confirmado`, não pela `cobrancaId`.
 - A unidade nasce `PENDING` e vira `ACTIVE` quando a 1ª mensalidade é paga.
   Para saber se pagou, consulte `GET /api/v1/unidades/{slug}` e olhe `status`.
 - O titular recebe por e-mail o login e a senha temporária. A API **não**

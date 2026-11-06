@@ -10,6 +10,8 @@ export interface ResellerOnboardingTemplateProps {
   vitrineUrl: string
   paymentUrl: string | null
   planValue: number
+  /** Mensalidade no débito automático do cartão, quando a unidade tem a opção. */
+  recurringValue?: number | null
 }
 
 function formatBRL(value: number): string {
@@ -28,6 +30,7 @@ export function ResellerOnboardingTemplate({
   vitrineUrl,
   paymentUrl,
   planValue,
+  recurringValue,
 }: ResellerOnboardingTemplateProps) {
   const planFormatted = formatBRL(planValue)
 
@@ -52,8 +55,11 @@ export function ResellerOnboardingTemplate({
             <Text style={styles.highlightLabel}>Primeira mensalidade</Text>
             <Text style={styles.highlightValue}>{planFormatted}</Text>
             <Text style={styles.paragraphMuted}>
-              Pague no Pix, boleto ou cartão. Assim que o pagamento for
-              confirmado, sua vitrine entra no ar automaticamente.
+              {recurringValue
+                ? `No boleto ou Pix, pagos mês a mês. No cartão com débito automático, a mensalidade cai para ${formatBRL(recurringValue)}. `
+                : "Pague no Pix, boleto ou cartão. "}
+              Assim que o pagamento for confirmado, sua vitrine entra no ar
+              automaticamente.
             </Text>
             <Button style={styles.accentButton} href={paymentUrl}>
               Pagar primeira mensalidade

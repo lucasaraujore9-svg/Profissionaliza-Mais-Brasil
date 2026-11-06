@@ -14,19 +14,19 @@ const paymentMethods: Array<{
   {
     id: "CREDIT_CARD",
     label: "Cartão de crédito",
-    description: "Cobrança recorrente mensal automática.",
+    description: "R$ 289/mês, debitado automaticamente todo mês.",
     icon: CreditCard,
   },
   {
     id: "PIX",
     label: "PIX mensal",
-    description: "Receba um QR Code todo mês com 7 dias de antecedência.",
+    description: "R$ 329/mês. Receba um QR Code todo mês com 7 dias de antecedência.",
     icon: QrCode,
   },
   {
     id: "BOLETO",
     label: "Boleto mensal",
-    description: "Boleto enviado por email 7 dias antes do vencimento.",
+    description: "R$ 329/mês. Boleto enviado por email 7 dias antes do vencimento.",
     icon: CalendarCheck,
   },
 ]

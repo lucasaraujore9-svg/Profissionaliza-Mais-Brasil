@@ -23,11 +23,12 @@ const createSchema = z.object({
   ownerEmail: z.string().email().toLowerCase(),
   ownerCpfCnpj: z.string().min(11).max(20),
   ownerPhone: z.string().min(8).max(20).optional(),
-  // Mensalidade da sub-revenda: SÓ o plano de tabela (PRO, 239). O vendedor
+  // Mensalidade da sub-revenda: SÓ o plano de tabela (PRO, 329 mês a mês; 289
+  // se a unidade ativar o débito automático no link de pagamento). O vendedor
   // NUNCA cria revenda gratuita — qualquer outro valor (inclusive 0) é rejeitado.
   planValue: z
     .number()
-    .refine(isAllowedResellerPlan, "O plano da revenda é o Profissionaliza PRO (R$ 239)."),
+    .refine(isAllowedResellerPlan, "O plano da revenda é o Profissionaliza PRO (R$ 329)."),
   firstPaymentMaxInstallments: z.number().int().min(1).max(12).default(1),
   // Lead de revenda sendo convertido (opcional) — marcado CONVERTED ao criar.
   leadId: z.string().min(1).optional(),
@@ -64,7 +65,7 @@ export const POST = withRequestContext(
       ownerPhone: data.ownerPhone,
       planValue: data.planValue,
       firstPaymentMaxInstallments: data.firstPaymentMaxInstallments,
-      // PRO (239) já habilita o módulo de Automação na criação.
+      // PRO já habilita o módulo de Automação na criação.
       automationEnabled: planEnablesAutomation(data.planValue),
       // Atribuição FORÇADA à unidade vendedora; sem vendedor PMB nem gerente; a
       // sub-revenda não herda o módulo de revender revendas.

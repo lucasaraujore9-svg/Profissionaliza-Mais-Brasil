@@ -2832,3 +2832,46 @@ exige cartao de credito".
   venda mensal nascia com **12** mensalidades. Agora usa `tenantCourseMonths`.
 - `/pagar/<id>` de matricula MONTHLY (venda direta) mostra so cartao
   (`cardOnly` nos formularios MP e Asaas).
+
+### Mensalidade da unidade: R$ 329 mes a mes, R$ 289 no debito automatico (2026-11-05)
+
+Pedido do dono, para reduzir inadimplencia: unidade NOVA paga R$ 329 se paga a
+mao todo mes (boleto ou PIX comum) e R$ 289 no debito automatico. Unidade que
+ja existia segue no valor gravado na assinatura dela (239/209) — nada foi
+migrado.
+
+- **Fonte unica** em `lib/resellers/plans.ts`: `value` 329 (mes a mes) e
+  `recurringValue` 289. `recurringMonthlyValue` decide quem tem direito ao 289:
+  so `planValue === 329` e sem promo (unidade antiga ficaria MAIS cara trocando).
+- **A assinatura nasce em 329** (`UNDEFINED`) por toda porta que nao sabe o
+  meio: /admin, painel, `POST /api/v1/unidades`. O titular escolhe na pagina
+  `/cobranca`: aba Cartao, opcao "Debito automatico" (1x) chama
+  `POST /api/cobranca/[id]/assinar-cartao`. Parcelado (2x+) segue no `pay-card`,
+  a R$ 329. A API devolve `pagamento.valorDebitoAutomatico: 289`.
+- **O Asaas nao muda `value` de assinatura existente** (PUT nao aceita), entao
+  a troca (`lib/tenant-billing/card-subscription.ts`) CRIA uma assinatura
+  `CREDIT_CARD` de 289 com o cartao (captura hoje), aponta a unidade para ela e
+  so depois remove a cobranca aberta e cancela a de 329. Ordem travada em
+  teste: cancelar antes faria o `SUBSCRIPTION_DELETED` suspender a unidade.
+  Advisory lock por unidade contra clique duplo (duas assinaturas = cartao
+  cobrado duas vezes).
+- **Webhook antes do update:** a 1a cobranca da assinatura nova pode chegar
+  antes de a unidade gravar o id novo. `process.ts` passou a casar tambem por
+  `externalReference` `tenant:<slug>` + `asaasCustomerId` (os dois juntos).
+- **Cadastro publico** (`/api/revendedores/cadastro`) ja pergunta o meio antes:
+  cartao nasce em 289, PIX/boleto em 329.
+- **E-mail de onboarding** passou a mandar `/cobranca/<id>` (antes o
+  `invoiceUrl` do Asaas, onde nao ha a opcao de 289) e cita o valor do cartao.
+- Comissao de indicacao: `PLANO_BASE_PRO` segue 239 com teto 1 — unidade nova
+  em 289 ou 329 gera a faixa cheia.
+- **Etapa 2 (pendente): Pix Automatico a R$ 289.** O Asaas tem
+  `paymentCreationMode: SUBSCRIPTION` na autorizacao e
+  `pixAutomaticAuthorizationMode` na assinatura. Validar no sandbox antes
+  (elegibilidade PJ da conta-mae e casamento do 1o pagamento — ver
+  "Pix Automatico: 1o pagamento nao computava").
+- **Limite conhecido:** unidade no cartao (289) cujo cartao falha pode usar
+  "Pagar com PIX ou boleto" (`liberar-metodos`) e pagar aquela cobranca a 289.
+- **NAO validado contra o Asaas real.** Antes de divulgar: no sandbox, (1)
+  assinatura `CREDIT_CARD` com cartao e `nextDueDate` hoje captura na criacao e
+  recusa com 4xx; (2) cancelar a assinatura antiga nao suspende a unidade; (3) o
+  2o mes debita sozinho.

@@ -790,7 +790,23 @@ export async function processAsaasWebhook(
           ],
         },
         select: TENANT_BILLING_SELECT,
-      }))
+      })) ??
+      // Assinatura RECEM-CRIADA cujo id a unidade ainda nao gravou: a troca para
+      // o debito automatico (tenant-billing/card-subscription.ts) captura o
+      // cartao na criacao e o webhook pode chegar antes do update. Casa pelo
+      // `externalReference` `tenant:<slug>` E pelo cliente — os dois juntos, para
+      // um slug sozinho nunca puxar cobranca de outro cliente.
+      (subscriptionId &&
+      payment.customer &&
+      payment.externalReference?.startsWith("tenant:")
+        ? await prisma.tenant.findFirst({
+            where: {
+              slug: payment.externalReference.slice("tenant:".length),
+              asaasCustomerId: payment.customer,
+            },
+            select: TENANT_BILLING_SELECT,
+          })
+        : null)
 
     if (!tenant) {
       await markLog(logId, true, `tenant nao encontrado para ${subscriptionId}`)

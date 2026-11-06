@@ -96,7 +96,7 @@ export function NewResellerDialog({
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<CreatedResult | null>(null)
   // Mensalidade controlada para alternar copy/promoção conforme o valor.
-  const [planValueStr, setPlanValueStr] = useState("239.00")
+  const [planValueStr, setPlanValueStr] = useState("329.00")
   const [promoEnabled, setPromoEnabled] = useState(false)
   // Nome + subdomínio controlados: o subdomínio é sugerido a partir do nome
   // até o admin editá-lo manualmente (slugTouched).
@@ -118,7 +118,7 @@ export function NewResellerDialog({
     setError(null)
     setCreated(null)
     setSubmitting(false)
-    setPlanValueStr("239.00")
+    setPlanValueStr("329.00")
     setPromoEnabled(false)
     setName(initialValues?.name ?? "")
     setSlug(suggestSlug(initialValues?.name ?? ""))

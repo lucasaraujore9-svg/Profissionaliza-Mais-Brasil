@@ -81,6 +81,10 @@ export const POST = withRequestContext(
   }
 
   const { pessoal, empresa, pagamento, password } = parsed.data
+  // Cartão aqui = assinatura CREDIT_CARD do Asaas, debitada todo mês no mesmo
+  // cartão: preço do débito automático. PIX/boleto = pago à mão, mês a mês.
+  const planValue =
+    pagamento.billingType === "CREDIT_CARD" ? PLANO.recurringValue : PLANO.value
 
   // Marca reservada (contrato): o nome da unidade (e o subdomínio derivado
   // dele) não podem conter Bolsa Mais Brasil / Profissionaliza / Escola de
@@ -159,7 +163,7 @@ export const POST = withRequestContext(
     asaasSubscription = await createSubscription({
       customer: asaasCustomer.id,
       billingType: pagamento.billingType,
-      value: PLANO.value,
+      value: planValue,
       nextDueDate: formatDueDate(3),
       cycle: "MONTHLY",
       description: PLANO_DESCRICAO,
@@ -188,7 +192,7 @@ export const POST = withRequestContext(
           slug,
           status: "PENDING",
           billingMode: "AUTO",
-          planValue: new Prisma.Decimal(PLANO.value),
+          planValue: new Prisma.Decimal(planValue),
           automationEnabled: PLANO.automation,
           asaasCustomerId: asaasCustomer.id,
           asaasSubscriptionId: asaasSubscription.id,
@@ -273,7 +277,7 @@ export const POST = withRequestContext(
           data: {
             tenantId: createdTenantId,
             asaasPaymentId: firstPayment.id,
-            amount: PLANO.value,
+            amount: planValue,
             billingType: pagamento.billingType,
             status: "PENDING",
             dueDate: new Date(firstPayment.dueDate),

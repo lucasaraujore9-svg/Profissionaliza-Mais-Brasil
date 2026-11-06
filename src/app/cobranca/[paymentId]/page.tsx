@@ -8,6 +8,7 @@ import {
   isFirstMonthlyCharge,
   maxInstallmentsForCharge,
 } from "@/lib/tenant-billing/installments"
+import { recurringMonthlyValue } from "@/lib/resellers/plans"
 
 interface Props {
   params: Promise<{ paymentId: string }>
@@ -63,6 +64,8 @@ export default async function CobrancaPage({ params }: Props) {
   // rota de pagamento aplica, senão a tela oferece um número que a API recusa.
   let maxInstallments = 1
   let isFirstCharge = false
+  // Débito automático no cartão (R$ 289) para a unidade na tabela mês a mês.
+  let recurringValue: number | null = null
   if (isPending && payment.subscription) {
     const [tenant, settings] = await Promise.all([
       prisma.tenant.findFirst({
@@ -74,6 +77,9 @@ export default async function CobrancaPage({ params }: Props) {
         },
         select: {
           status: true,
+          planValue: true,
+          asaasSubscriptionId: true,
+          asaasPromoSubscriptionId: true,
           firstPaymentMaxInstallments: true,
           monthlyMaxInstallments: true,
         },
@@ -92,6 +98,13 @@ export default async function CobrancaPage({ params }: Props) {
         globalMonthlyMaxInstallments:
           settings?.tenantMonthlyMaxInstallments ?? 12,
       })
+      // Só a cobrança da assinatura REGULAR (a rota de troca recusa a promo).
+      if (tenant.asaasSubscriptionId === payment.subscription) {
+        recurringValue = recurringMonthlyValue({
+          planValue: Number(tenant.planValue),
+          hasPromo: Boolean(tenant.asaasPromoSubscriptionId),
+        })
+      }
     }
   }
 
@@ -205,6 +218,7 @@ export default async function CobrancaPage({ params }: Props) {
             amount={payment.value}
             maxInstallments={maxInstallments}
             isFirstCharge={isFirstCharge}
+            recurringValue={recurringValue}
           />
         )}
       </main>

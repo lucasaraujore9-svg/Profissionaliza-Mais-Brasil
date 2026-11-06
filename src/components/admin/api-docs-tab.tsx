@@ -209,15 +209,17 @@ const PARCEIRO_AGENT_MD = [
   "    }",
   "",
   "  slug       opcional (3-32, minusculas, numeros e hifen); ausente = derivado do nome",
-  "  plano      pro (R$ 239, ja liga Automacao). Opcional; nao ha outro.",
-  "  parcelasPrimeiraMensalidade  opcional, 1-12 (teto do cartao na 1a mensalidade)",
+  "  plano      pro (ja liga Automacao). Opcional; nao ha outro.",
+  "             R$ 329 mes a mes (boleto/PIX) ou R$ 289 no debito automatico do",
+  "             cartao — o titular escolhe no link de pagamento.",
+  "  parcelasPrimeiraMensalidade  opcional, 1-12 (cartao parcelado da 1a mensalidade, a R$ 329)",
   "  titular.email vira o login do titular e nao pode ja existir",
   "",
   "Resposta 201:",
   "    { \"ok\": true, \"data\": {",
   "      \"unidade\": { \"id\", \"slug\", \"nome\", \"status\": \"PENDING\", \"vitrineUrl\" },",
   "      \"titular\": { \"id\", \"email\" },",
-  "      \"pagamento\": { \"url\", \"cobrancaId\", \"valor\", \"plano\", \"erro\" },",
+  "      \"pagamento\": { \"url\", \"cobrancaId\", \"valor\", \"valorDebitoAutomatico\", \"plano\", \"erro\" },",
   "      \"emailOnboardingEnviado\": true } }",
   "",
   "pagamento.url e o checkout transparente do PMB (PIX, boleto e cartao na",
@@ -494,8 +496,8 @@ export function ApiDocsTab({
             criar (30/min). Dê à chave só o escopo que a integração usa.
           </li>
           <li>
-            <strong>Criação:</strong> só os planos de tabela (Profissionaliza ou
-            PRO). Cortesia, promoção e valor livre continuam só aqui no /admin. O
+            <strong>Criação:</strong> só o plano de tabela (PRO: R$ 329 mês a
+            mês ou R$ 289 no débito automático do cartão). Cortesia, promoção e valor livre continuam só aqui no /admin. O
             link devolvido é o checkout transparente do PMB, não a fatura do
             Asaas.
           </li>

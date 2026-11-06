@@ -63,7 +63,8 @@ export function NovaRevendaForm({ initial }: { initial?: NovaRevendaInitial } = 
   const [ownerEmail, setOwnerEmail] = useState(initial?.ownerEmail ?? "")
   const [ownerCpfCnpj, setOwnerCpfCnpj] = useState(initial?.ownerCpfCnpj ?? "")
   const [ownerPhone, setOwnerPhone] = useState(initial?.ownerPhone ?? "")
-  // Plano da sub-revenda: só o PRO (239, com Automação). Nunca grátis.
+  // Plano da sub-revenda: só o PRO (329 mês a mês / 289 débito automático, com
+  // Automação). Nunca grátis.
   const [planValue, setPlanValue] = useState<number>(RESELLER_PLANS[0].value)
   const [installments, setInstallments] = useState("1")
 
@@ -261,7 +262,7 @@ export function NovaRevendaForm({ initial }: { initial?: NovaRevendaInitial } = 
                   {p.label}
                 </span>
                 <span className="font-mono text-sm font-bold text-[var(--color-pmb-green)]">
-                  R$ {p.value}/mês
+                  R$ {p.value}/mês · R$ {p.recurringValue} no cartão
                 </span>
               </div>
               <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">

@@ -85,6 +85,7 @@ aqui entra so uma linha no indice abaixo.
 - Carne para matricula liberada sem cobranca (2026-10-29)
 - CNPJ da unidade (2026-11-04)
 - Curso mensal: mensalidade so na venda direta (2026-11-05)
+- Mensalidade da unidade: R$ 329 mes a mes, R$ 289 no debito automatico (2026-11-05)
 
 ### Bugs conhecidos (pendentes)
 

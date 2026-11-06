@@ -28,6 +28,7 @@ import { validateSlugFormat, isSlugAvailable } from "@/lib/tenant/slug"
 import { syncTenantBrandingToLms } from "@/lib/lms"
 import { cpfFromDocument } from "@/lib/validation/cpf"
 import { emitUnidadeCriada, type Origem } from "@/lib/webhooks-saida/unidade"
+import { recurringMonthlyValue } from "@/lib/resellers/plans"
 
 /**
  * Criação de revenda (tenant) — núcleo compartilhado entre:
@@ -454,8 +455,14 @@ export async function createReseller(
           tempPassword,
           loginUrl: `${baseUrl}/login`,
           vitrineUrl,
-          paymentUrl: invoiceUrl,
+          // Nossa página (/cobranca), não a fatura do Asaas: só nela a unidade
+          // escolhe o débito automático no cartão (preço menor).
+          paymentUrl: firstPaymentId ? `${baseUrl}/cobranca/${firstPaymentId}` : invoiceUrl,
           planValue: input.planValue,
+          recurringValue: recurringMonthlyValue({
+            planValue: input.planValue,
+            hasPromo: isPromo,
+          }),
         },
       },
     })

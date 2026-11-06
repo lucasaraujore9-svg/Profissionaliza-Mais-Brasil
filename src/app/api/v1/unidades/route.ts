@@ -16,6 +16,10 @@ import { slugify } from "@/lib/utils"
  * (`createReseller`) do /admin e do painel: cobrança no Asaas da PMB, e-mail de
  * onboarding com a senha temporária, vitrine semeada.
  *
+ * Mensalidade (desde 2026-11-05): R$ 329 mês a mês (boleto/PIX) ou R$ 289 no
+ * débito automático do cartão. A assinatura nasce em 329; a unidade troca para
+ * o débito automático no próprio link de pagamento (/cobranca).
+ *
  * Só os planos de TABELA. Cortesia, promoção e valor livre continuam sendo
  * decisão humana no /admin — uma chave vazada não pode abrir unidade de graça.
  *
@@ -32,7 +36,7 @@ const bodySchema = z.object({
   slug: z.string().trim().toLowerCase().min(3).max(32).regex(SLUG_REGEX, "Use apenas letras, números e hífen").optional(),
   /** Só "pro": o "profissionaliza" (R$ 209) saiu de venda em 2026-10-13. */
   plano: z.literal("pro").default("pro"),
-  /** Teto de parcelas no cartão da 1ª mensalidade (1 = à vista). */
+  /** Teto de parcelas no cartão da 1ª mensalidade, no valor mês a mês (1 = sem parcelar). */
   parcelasPrimeiraMensalidade: z.number().int().min(1).max(12).default(1),
   titular: z.object({
     nome: z.string().trim().min(2).max(80),
@@ -91,8 +95,9 @@ export const POST = withRequestContext(
         })
       }
 
-      // Link da NOSSA página de cobrança (PIX, boleto e cartão parcelado), não a
-      // fatura hospedada do Asaas — mesmo destino do /admin e do painel.
+      // Link da NOSSA página de cobrança (PIX, boleto, débito automático no
+      // cartão e cartão parcelado), não a fatura hospedada do Asaas — mesmo
+      // destino do /admin e do painel.
       const { firstPaymentId, error: asaasError } = result.asaas
       return apiOk(
         {
@@ -107,7 +112,10 @@ export const POST = withRequestContext(
           pagamento: {
             url: firstPaymentId ? `${appUrl()}/cobranca/${firstPaymentId}` : null,
             cobrancaId: firstPaymentId,
+            /** Mês a mês (boleto/PIX) — o valor desta cobrança. */
             valor: plano.value,
+            /** Se pagar no débito automático do cartão (escolha no link). */
+            valorDebitoAutomatico: plano.recurringValue,
             plano: data.plano,
             // A unidade JÁ foi criada; sem link, a equipe PMB reemite pelo /admin.
             erro: asaasError,
