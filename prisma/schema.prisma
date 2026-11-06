@@ -78,6 +78,14 @@ enum BoletoInstallmentStatus {
   CANCELLED // Parcela cancelada (ex.: matricula cancelada)
 }
 
+// Meio de pagamento de uma parcela na venda direta parcelada (flexInstallments).
+// Ver docs/superpowers/specs/2026-11-06-venda-direta-parcelada-design.md.
+enum InstallmentMethod {
+  PIX
+  BOLETO
+  CREDIT_CARD
+}
+
 // Escopo onde o pagamento parcelado/mensalidade da unidade vale.
 enum MonthlyScope {
   DIRECT_ONLY // So venda direta/manual (revendedor cria a venda)
@@ -561,7 +569,7 @@ model Tenant {
   // `courseAuthoringEnabled`. Nao se confunde com `assinaturas.*`, que diz QUEM
   // dentro da unidade mexe nos planos depois de ligado. Desligar fecha a VENDA;
   // quem ja assina segue com acesso. Ver src/lib/subscriptions/module.ts.
-  subscriptionsEnabled   Boolean   @default(true)  @map("subscriptions_enabled")
+  subscriptionsEnabled   Boolean   @default(true) @map("subscriptions_enabled")
   // Nome unico da sessao no engine de WhatsApp (gerado como cuid na 1a conexao).
   waSessionName          String?   @unique @map("wa_session_name")
   // Telefone E.164 conectado (snapshot apos QR scan). Unique = um numero
@@ -1589,6 +1597,11 @@ model Enrollment {
   installmentsTotal Int? @map("installments_total") // = course.monthlyMonthsMain no momento da compra
   installmentsPaid  Int  @default(0) @map("installments_paid")
 
+  // Venda direta parcelada com meio escolhido pelo aluno (spec 2026-11-06).
+  flexInstallments   Boolean            @default(false) @map("flex_installments") // discriminador da venda nova
+  flexHasDownPayment Boolean            @default(false) @map("flex_has_down_payment") // linha 1 e a entrada
+  installmentMethod  InstallmentMethod? @map("installment_method") // meio do plano; null = ainda nao escolhido
+
   // ── Cota de aulas (trava de conclusao proporcional ao pagamento) ──────────
   // Na venda parcelada o acesso e liberado em fatias: o aluno so avanca ate
   // floor(installmentsPaid / installmentsTotal x 100)% do curso. A cota e SEMPRE
@@ -1881,6 +1894,11 @@ model BoletoInstallment {
   asaasPaymentId String? @unique @map("asaas_payment_id")
 
   paidAt DateTime? @map("paid_at")
+
+  // Venda parcelada flex (spec 2026-11-06)
+  method               InstallmentMethod? // meio da cobranca emitida para a linha
+  cardDeclinedAt       DateTime?          @map("card_declined_at")
+  availableEmailSentAt DateTime?          @map("available_email_sent_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
