@@ -17,10 +17,10 @@ import { sendEmail } from "@/lib/email/mailer"
 import { PMB_EMAIL_BRAND, emailFromForBrand } from "@/lib/email/brand"
 import { loadTenantEmailBrand } from "@/lib/email/tenant-brand"
 import { afterResponse } from "@/lib/after-response"
-import { appUrl, storeBaseUrl } from "@/lib/tenant/urls"
 import { logAudit } from "@/lib/audit"
 import { contextLogger } from "@/lib/logger"
 import { loadContext } from "./plan"
+import { flexPaymentUrl } from "./flex"
 import { asaasEvent, asaasKeyFor, mpTokenFor, readAsaasPayment, releaseAsaasCharge } from "./flex-charge"
 import {
   alertPmbAdmin,
@@ -163,7 +163,6 @@ function notifyStudentCardDeclined(enrollmentId: string, amount: number): void {
         },
       })
       if (!enr?.student.email) return
-      const base = enr.tenant ? storeBaseUrl(enr.tenant) : appUrl()
       const brand = enr.tenantId ? await loadTenantEmailBrand(enr.tenantId) : PMB_EMAIL_BRAND
       await sendEmail({
         to: enr.student.email,
@@ -177,7 +176,7 @@ function notifyStudentCardDeclined(enrollmentId: string, amount: number): void {
             studentName: enr.student.nome,
             courseName: enr.course.nome,
             amount: `R$ ${amount.toFixed(2).replace(".", ",")}`,
-            paymentUrl: `${base}/pagar/${enrollmentId}`,
+            paymentUrl: flexPaymentUrl(enrollmentId, enr.tenant),
             brand,
           },
         },

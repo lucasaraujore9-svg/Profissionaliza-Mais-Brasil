@@ -4,6 +4,7 @@
  * formulário) e no server.
  */
 import { addMonthsClampedUtc } from "@/lib/dates"
+import { appUrl, storeBaseUrl } from "@/lib/tenant/urls"
 import {
   INSTALLMENT_REVEAL_WINDOW_DAYS,
   MAX_BOLETO_INSTALLMENTS,
@@ -163,4 +164,12 @@ export function flexOffer(plan: FlexPlanState, now: Date): FlexOffer {
     return { kind: "pay", rowNumber: row.number, methods: [plan.method], card: null }
   }
   return { kind: "pay", rowNumber: row.number, methods: ALL_METHODS, card: "subscription" }
+}
+
+/** Página de pagamento do plano: a loja da unidade, ou a PMB quando a venda é dela. */
+export function flexPaymentUrl(
+  enrollmentId: string,
+  tenant: { slug: string; customDomain?: string | null; domainVerified?: boolean | null } | null,
+): string {
+  return `${tenant ? storeBaseUrl(tenant) : appUrl()}/pagar/${enrollmentId}`
 }

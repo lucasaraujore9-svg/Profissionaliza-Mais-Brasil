@@ -60,6 +60,10 @@ import {
   type InstallmentCardDeclinedTemplateProps,
 } from "./templates/installment-card-declined"
 import {
+  InstallmentAvailableTemplate,
+  type InstallmentAvailableTemplateProps,
+} from "./templates/installment-available"
+import {
   PlatformAccessTemplate,
   type PlatformAccessTemplateProps,
 } from "./templates/platform-access"
@@ -101,6 +105,7 @@ export type EmailTemplate =
       type: "installment-card-declined"
       props: InstallmentCardDeclinedTemplateProps
     }
+  | { type: "installment-available"; props: InstallmentAvailableTemplateProps }
   | { type: "platform-access"; props: PlatformAccessTemplateProps }
 
 interface SendEmailParams {
@@ -270,6 +275,8 @@ function renderTemplate(template: EmailTemplate): React.ReactElement {
       return PaymentRejectedTemplate(template.props)
     case "installment-card-declined":
       return InstallmentCardDeclinedTemplate(template.props)
+    case "installment-available":
+      return InstallmentAvailableTemplate(template.props)
     case "platform-access":
       return PlatformAccessTemplate(template.props)
   }
