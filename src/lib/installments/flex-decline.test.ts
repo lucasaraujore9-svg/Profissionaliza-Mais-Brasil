@@ -134,6 +134,7 @@ const state = () => ({
     status: r.status as "SCHEDULED",
     dueDate: r.dueDate as Date,
     cardDeclinedAt: (r.cardDeclinedAt as Date | null) ?? null,
+    amount: Number(r.amount),
   })),
 })
 

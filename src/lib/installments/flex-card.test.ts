@@ -271,6 +271,23 @@ describe("startFlexCardSubscription — Asaas", () => {
   })
 })
 
+describe("startFlexCardSubscription — linhas abertas com valores diferentes (I2)", () => {
+  it.each(["ASAAS", "MP"] as const)("%s: 409 CARD_REQUIRES_EQUAL_ROWS e nada no gateway", async (gw) => {
+    plan(gw)
+    db.rows[3].amount = 150 // renegociada
+    const res = await startFlexCardSubscription({
+      enrollmentId: "enr1",
+      fromRowNumber: 2,
+      payer,
+      card: gw === "ASAAS" ? asaasCard : mpCard,
+    })
+
+    expect(res).toMatchObject({ kind: "error", httpStatus: 409, code: "CARD_REQUIRES_EQUAL_ROWS" })
+    expect(asaas.createSubscription).not.toHaveBeenCalled()
+    expect(mp.createPreapproval).not.toHaveBeenCalled()
+  })
+})
+
 describe("assinatura criada mas não gravada (falha no banco)", () => {
   it("Asaas: cancela a assinatura no gateway e relança; cancelamento confirmado não alerta", async () => {
     plan("ASAAS")

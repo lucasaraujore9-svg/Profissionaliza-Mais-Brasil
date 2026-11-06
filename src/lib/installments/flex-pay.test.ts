@@ -38,7 +38,7 @@ const payer = { nome: "Ana", email: "ana@x.com", cpf: "12345678909" }
 const card = { gateway: "MP" as const, token: "tok", paymentMethodId: "visa" }
 
 function row(id: string, number: number, extra: Record<string, unknown> = {}) {
-  return { id, number, status: "SCHEDULED", dueDate: NOW, cardDeclinedAt: null, gateway: "MP", ...extra }
+  return { id, number, amount: 100, status: "SCHEDULED", dueDate: NOW, cardDeclinedAt: null, gateway: "MP", ...extra }
 }
 
 function enrollment(extra: Partial<Enr> = {}): Enr {

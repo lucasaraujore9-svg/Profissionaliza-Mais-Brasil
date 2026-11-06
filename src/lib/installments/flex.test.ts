@@ -101,7 +101,8 @@ describe("flexOffer", () => {
     status: FlexRowState["status"],
     due: string,
     cardDeclinedAt: Date | null = null,
-  ): FlexRowState => ({ number, status, dueDate: d(due), cardDeclinedAt })
+    amount = 100,
+  ): FlexRowState => ({ number, status, dueDate: d(due), cardDeclinedAt, amount })
   const plan = (p: Partial<FlexPlanState>): FlexPlanState => ({
     hasDownPayment: false,
     method: null,
@@ -151,6 +152,22 @@ describe("flexOffer", () => {
       rows: [row(1, "PAID", "2026-11-06"), row(2, "SCHEDULED", "2027-01-10")],
     })
     expect(flexOffer(p, now)).toEqual({ kind: "waiting", availableFrom: d("2027-01-03") })
+  })
+  it("parcelas abertas com valores diferentes (renegociadas): sem cartao-assinatura (I2)", () => {
+    const p = plan({
+      rows: [row(1, "PAID", "2026-11-06", null, 50), row(2, "SCHEDULED", "2026-11-08"), row(3, "SCHEDULED", "2026-12-08", null, 80)],
+    })
+    expect(flexOffer(p, now)).toEqual({
+      kind: "pay", rowNumber: 2, methods: ["PIX", "BOLETO"], card: null,
+    })
+  })
+  it("linha paga com valor diferente nao tira o cartao das abertas iguais", () => {
+    const p = plan({
+      rows: [row(1, "PAID", "2026-11-06", null, 50), row(2, "SCHEDULED", "2026-11-08"), row(3, "SCHEDULED", "2026-12-08")],
+    })
+    expect(flexOffer(p, now)).toEqual({
+      kind: "pay", rowNumber: 2, methods: all, card: "subscription",
+    })
   })
   it("tudo pago: done", () => {
     const p = plan({ rows: [row(1, "PAID", "2026-11-06"), row(2, "CANCELLED", "2027-01-10")] })

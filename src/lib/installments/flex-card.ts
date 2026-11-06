@@ -28,6 +28,7 @@ import { logAudit } from "@/lib/audit"
 import { contextLogger } from "@/lib/logger"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
+import { openRowsEqual } from "./flex"
 import { loadContext, resolveAsaasCustomerId, type PlanContext } from "./plan"
 import { settleBoletoInstallment, type InstallmentPaymentEvent } from "./settle"
 import {
@@ -102,6 +103,16 @@ async function startUnderEnrollmentLock(input: StartInput): Promise<FlexChargeRe
     const rows = await openRowsFrom(input.enrollmentId, input.fromRowNumber)
     if (rows[0]?.id !== first.id) {
       result = fail(409, "ROW_NOT_PAYABLE", "Esta parcela não está disponível para pagamento")
+      return
+    }
+    // A assinatura cobra rows[0].amount em todas: com parcelas renegociadas
+    // diferentes, cobraria um valor que o aluno não viu (flexOffer já esconde).
+    if (!openRowsEqual(rows.map((r) => ({ amount: Number(r.amount) })))) {
+      result = fail(
+        409,
+        "CARD_REQUIRES_EQUAL_ROWS",
+        "As parcelas restantes têm valores diferentes: pague esta parcela por PIX ou boleto.",
+      )
       return
     }
     result = first.gateway === "ASAAS" ? await startAsaas(ctx, rows, input) : await startMp(ctx, rows, input)

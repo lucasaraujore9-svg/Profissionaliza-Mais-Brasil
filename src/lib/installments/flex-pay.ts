@@ -48,7 +48,9 @@ export async function payFlexRow(
       asaasSubscriptionId: true,
       mpSubscriptionId: true,
       tenant: { select: { status: true } },
-      boletoInstallments: { select: { id: true, number: true, status: true, dueDate: true, cardDeclinedAt: true } },
+      boletoInstallments: {
+        select: { id: true, number: true, status: true, dueDate: true, cardDeclinedAt: true, amount: true },
+      },
     },
   })
   if (!enrollment?.flexInstallments) return err(404, "NOT_FOUND", "Matrícula não encontrada")
@@ -66,7 +68,7 @@ export async function payFlexRow(
       hasDownPayment: enrollment.flexHasDownPayment,
       method: enrollment.installmentMethod,
       subscriptionActive: !!(enrollment.asaasSubscriptionId || enrollment.mpSubscriptionId),
-      rows: enrollment.boletoInstallments,
+      rows: enrollment.boletoInstallments.map((r) => ({ ...r, amount: Number(r.amount) })),
     },
     now,
   )

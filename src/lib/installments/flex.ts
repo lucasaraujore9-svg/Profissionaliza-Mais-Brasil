@@ -127,6 +127,14 @@ export interface FlexRowState {
   status: "SCHEDULED" | "GENERATED" | "PAID" | "OVERDUE" | "CANCELLED"
   dueDate: Date
   cardDeclinedAt: Date | null
+  /** Em reais. */
+  amount: number
+}
+
+/** A assinatura do cartão cobra um valor fixo: só cabe com as linhas abertas iguais. */
+export function openRowsEqual(rows: { amount: number }[]): boolean {
+  const cents = rows.map((r) => Math.round(r.amount * 100))
+  return cents.every((c) => c === cents[0])
 }
 
 export interface FlexPlanState {
@@ -144,9 +152,10 @@ export type FlexOffer =
 
 /** O que o aluno pode fazer agora: pagar a linha da vez, esperar, ou nada. */
 export function flexOffer(plan: FlexPlanState, now: Date): FlexOffer {
-  const row = plan.rows
+  const open = plan.rows
     .filter((r) => r.status !== "PAID" && r.status !== "CANCELLED")
-    .sort((a, b) => a.number - b.number)[0]
+    .sort((a, b) => a.number - b.number)
+  const row = open[0]
   if (!row) return { kind: "done" }
 
   if (plan.hasDownPayment && row.number === 1) {
@@ -162,6 +171,11 @@ export function flexOffer(plan: FlexPlanState, now: Date): FlexOffer {
   }
   if (plan.method === "PIX" || plan.method === "BOLETO") {
     return { kind: "pay", rowNumber: row.number, methods: [plan.method], card: null }
+  }
+  // Renegociadas com valores diferentes: a assinatura cobraria um valor que o
+  // aluno não viu. Sobra PIX/boleto linha a linha.
+  if (!openRowsEqual(open)) {
+    return { kind: "pay", rowNumber: row.number, methods: ["PIX", "BOLETO"], card: null }
   }
   return { kind: "pay", rowNumber: row.number, methods: ALL_METHODS, card: "subscription" }
 }

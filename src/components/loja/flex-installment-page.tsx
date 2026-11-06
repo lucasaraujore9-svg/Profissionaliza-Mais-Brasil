@@ -154,7 +154,7 @@ export async function FlexInstallmentPage({
       hasDownPayment,
       method: enrollment.installmentMethod,
       subscriptionActive: !!(enrollment.asaasSubscriptionId || enrollment.mpSubscriptionId),
-      rows,
+      rows: rows.map((r) => ({ ...r, amount: Number(r.amount) })),
     },
     now,
   )
