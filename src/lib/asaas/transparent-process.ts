@@ -149,8 +149,8 @@ export type TransparentResult =
     }
   | { kind: "error"; httpStatus: number; error: string; code: string; statusDetail?: string }
 
-const CONFIRMED_STATUSES = new Set(["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"])
-const PENDING_STATUSES = new Set([
+export const CONFIRMED_STATUSES = new Set(["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"])
+export const PENDING_STATUSES = new Set([
   "PENDING",
   "AWAITING_RISK_ANALYSIS",
   "AWAITING_CHARGEBACK_REVERSAL",
@@ -793,7 +793,7 @@ async function chargeCardInstallments(
  * Boleto de uma cobrança: linha digitável + PDF do BOLETO (`bankSlipUrl`). Nunca
  * a fatura hospedada (`invoiceUrl`), que é uma página de pagamento do Asaas.
  */
-async function boletoResult(
+export async function boletoResult(
   payment: AsaasPayment,
   apiKey: string,
 ): Promise<TransparentResult> {
@@ -934,7 +934,7 @@ async function resolvePreviousSubscription(
 }
 
 /** Converte AsaasApiError (ex.: cartão recusado) num TransparentResult de erro. */
-function asaasErrorToResult(err: unknown): TransparentResult {
+export function asaasErrorToResult(err: unknown): TransparentResult {
   if (err instanceof AsaasApiError) {
     const description = err.errors?.[0]?.description
     // 4xx → erro de negócio (cartão recusado, dado inválido) → 400 amigável.

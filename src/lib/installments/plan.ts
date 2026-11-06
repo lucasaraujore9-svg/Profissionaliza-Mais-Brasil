@@ -79,12 +79,14 @@ export interface CreatePlanResult {
 }
 
 /** Dados da matrícula/aluno/unidade necessários para emitir boletos. */
-interface PlanContext {
+export interface PlanContext {
   enrollment: {
     id: string
     tenantId: string | null
     externalReference: string | null
     courseNome: string
+    /** Venda parcelada com meio escolhido pelo pagador (flex-charge.ts). */
+    flexInstallments: boolean
     // PayerSource garante que os campos do responsavel estao carregados: sem
     // eles o carne de um aluno menor sairia cobrado no CPF do menor.
     student: PayerSource & {
@@ -104,19 +106,22 @@ interface PlanContext {
   tenant: {
     id: string
     slug: string
+    name: string
+    plataformaVendedorId: string | null
     salesGateway: "MP" | "ASAAS"
     mpAccessToken: string | null
     asaasApiKey: string | null
   } | null
 }
 
-async function loadContext(enrollmentId: string): Promise<PlanContext> {
+export async function loadContext(enrollmentId: string): Promise<PlanContext> {
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
     select: {
       id: true,
       tenantId: true,
       externalReference: true,
+      flexInstallments: true,
       course: { select: { nome: true } },
       student: {
         select: {
@@ -133,6 +138,8 @@ async function loadContext(enrollmentId: string): Promise<PlanContext> {
         select: {
           id: true,
           slug: true,
+          name: true,
+          plataformaVendedorId: true,
           salesGateway: true,
           mpAccessToken: true,
           asaasApiKey: true,
@@ -149,6 +156,7 @@ async function loadContext(enrollmentId: string): Promise<PlanContext> {
       id: enrollment.id,
       tenantId: enrollment.tenantId,
       externalReference: enrollment.externalReference,
+      flexInstallments: enrollment.flexInstallments,
       courseNome: enrollment.course.nome,
       student: enrollment.student,
     },
@@ -191,15 +199,17 @@ export async function createBoletoInstallmentPlan(
  * Resolve/cria o cliente na conta Asaas correta: da UNIDADE (venda direta) ou
  * conta-mãe (vitrine PMB). O externalReference segue a convenção de cada lado
  * (`student_<id>` vs `pmb_student_<id>`, mesma usada por issuePmbAsaasCharge).
+ * `override`: dados do pagador digitados agora (flex-charge.ts) por cima da ficha.
  */
-async function resolveAsaasCustomerId(
+export async function resolveAsaasCustomerId(
   ctx: PlanContext,
   apiKey: string,
   isPmb: boolean,
+  override?: { nome: string; email: string | null; cpf: string | null; fone: string | null },
 ): Promise<string> {
   const s = ctx.enrollment.student
   // O carne e cobrado de QUEM PAGA — com aluno menor, o responsavel financeiro.
-  const payer = resolvePayer(s)
+  const payer = { ...resolvePayer(s), ...override }
   if (payer.asaasCustomerId) {
     try {
       const existing = await getAsaasCustomer(payer.asaasCustomerId, apiKey)
