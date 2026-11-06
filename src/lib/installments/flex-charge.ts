@@ -86,10 +86,10 @@ interface ChargeInput {
   card?: FlexCardInput
 }
 
-const fail = (httpStatus: number, code: string, error: string): FlexChargeResult =>
+export const fail = (httpStatus: number, code: string, error: string): FlexChargeResult =>
   ({ kind: "error", httpStatus, code, error })
 
-const STUCK = fail(
+export const STUCK = fail(
   409,
   "PREVIOUS_CHARGE_STUCK",
   "Não foi possível substituir a cobrança anterior desta parcela. Tente novamente em instantes.",
@@ -124,7 +124,7 @@ async function chargeUnderLock(input: ChargeInput): Promise<FlexChargeResult> {
   return row.gateway === "ASAAS" ? chargeAsaas(row, ctx, input, settle) : chargeMp(row, ctx, input, settle)
 }
 
-function tenantContext(ctx: PlanContext): TenantContext {
+export function tenantContext(ctx: PlanContext): TenantContext {
   if (!ctx.tenant) {
     return {
       id: PMB_TENANT_SLUG,
@@ -148,48 +148,101 @@ type Settle = (event: InstallmentPaymentEvent) => Promise<void>
 
 type Charger = (row: BoletoInstallment, ctx: PlanContext, input: ChargeInput, settle: Settle) => Promise<FlexChargeResult>
 
+/** Vitrine PMB na conta-mãe; venda da unidade, na conta dela. null = unidade sem Asaas. */
+export function asaasKeyFor(ctx: PlanContext): string | null {
+  if (ctx.tenant === null) return motherAsaasKey()
+  return ctx.tenant.asaasApiKey ? decryptTenantAsaasKey(ctx.tenant.asaasApiKey) : null
+}
+
+export async function mpTokenFor(ctx: PlanContext): Promise<string | null> {
+  if (!ctx.tenant) return pmbMpAccessToken()
+  return ctx.tenant.mpAccessToken ? decryptTenantMpToken(ctx.tenant.mpAccessToken) : null
+}
+
+export const asaasEvent = (p: AsaasPayment): InstallmentPaymentEvent => ({
+  gateway: "ASAAS",
+  externalPaymentId: p.id,
+  amount: p.value,
+  paidAt: p.paymentDate ? new Date(p.paymentDate) : new Date(),
+})
+
+export const mpEvent = (p: MPPayment): InstallmentPaymentEvent => ({
+  gateway: "MP",
+  externalPaymentId: String(p.id),
+  amount: p.transaction_amount,
+  paidAt: p.date_approved ? new Date(p.date_approved) : new Date(),
+  mpPaymentType: p.payment_type_id,
+})
+
+/** "missing" = 404 (não existe mais); null = leitura falhou. */
+export async function readAsaasPayment(id: string, apiKey: string): Promise<AsaasPayment | "missing" | null> {
+  try {
+    return await getAsaasPayment(id, apiKey)
+  } catch (err) {
+    return err instanceof AsaasApiError && err.statusCode === 404 ? "missing" : null
+  }
+}
+
+/**
+ * Resultado de tirar do ar a cobrança anterior de uma linha: removida (com
+ * prova), paga (liquidar, não remover), em análise (aguardar) ou presa.
+ */
+export type Release<P> = { kind: "released" } | { kind: "paid"; payment: P } | { kind: "busy" } | { kind: "stuck" }
+
+/** DELETE do Asaas é soft: só `deleted: true` (ou 404) na releitura prova a remoção. */
+export async function releaseAsaasCharge(prev: AsaasPayment | "missing", apiKey: string): Promise<Release<AsaasPayment>> {
+  if (prev === "missing" || prev.deleted) return { kind: "released" }
+  if (CONFIRMED_STATUSES.has(prev.status)) return { kind: "paid", payment: prev }
+  // Em análise / reversão: outra cobrança por cima cobraria duas vezes.
+  if (prev.status !== "PENDING" && prev.status !== "OVERDUE") {
+    return PENDING_STATUSES.has(prev.status) ? { kind: "busy" } : { kind: "stuck" }
+  }
+  await deleteAsaasPayment(prev.id, apiKey).catch(() => null)
+  const after = await readAsaasPayment(prev.id, apiKey)
+  if (after && after !== "missing" && CONFIRMED_STATUSES.has(after.status)) return { kind: "paid", payment: after }
+  return after === "missing" || after?.deleted ? { kind: "released" } : { kind: "stuck" }
+}
+
+/** MP: só `status: "cancelled"` (na resposta ou na releitura) prova o cancelamento. */
+export async function releaseMpCharge(token: string, prev: MPPayment): Promise<Release<MPPayment>> {
+  if (prev.status === "approved") return { kind: "paid", payment: prev }
+  if (prev.status === "in_process" || prev.status === "authorized" || prev.status === "in_mediation") {
+    return { kind: "busy" }
+  }
+  if (prev.status === "pending") {
+    const cancelled = await cancelMpPayment(token, String(prev.id)).catch(() => null)
+    if (cancelled?.status !== "cancelled") {
+      const after = await getMpPayment(token, prev.id).catch(() => null)
+      if (after?.status === "approved") return { kind: "paid", payment: after }
+      if (after?.status !== "cancelled") return { kind: "stuck" }
+    }
+  }
+  // rejected / cancelled (PIX ou boleto expirado) / estornado: nada vivo.
+  return { kind: "released" }
+}
+
 const chargeAsaas: Charger = async (row, ctx, input, settle) => {
   const isPmb = ctx.tenant === null
-  if (!isPmb && !ctx.tenant!.asaasApiKey) return fail(409, "GATEWAY_NOT_CONNECTED", "Unidade sem conta Asaas conectada")
+  const apiKey = asaasKeyFor(ctx)
+  if (!apiKey) return fail(409, "GATEWAY_NOT_CONNECTED", "Unidade sem conta Asaas conectada")
   if (!input.payer.cpf) return fail(400, "PAYER_CPF_MISSING", "CPF do pagador é obrigatório no Asaas")
-  // Hop do dinheiro: vitrine PMB na conta-mãe; venda da unidade, na conta dela.
-  const apiKey = isPmb ? motherAsaasKey() : decryptTenantAsaasKey(ctx.tenant!.asaasApiKey!)
   const method = input.method
   const settleAsaas = async (p: AsaasPayment): Promise<FlexChargeResult> => {
-    await settle({
-      gateway: "ASAAS",
-      externalPaymentId: p.id,
-      amount: p.value,
-      paidAt: p.paymentDate ? new Date(p.paymentDate) : new Date(),
-    })
+    await settle(asaasEvent(p))
     return { kind: "approved" }
-  }
-  const read = async (id: string): Promise<AsaasPayment | "missing" | null> => {
-    try {
-      return await getAsaasPayment(id, apiKey)
-    } catch (err) {
-      return err instanceof AsaasApiError && err.statusCode === 404 ? "missing" : null
-    }
   }
 
   let payment: AsaasPayment | null = null
   if (row.asaasPaymentId) {
-    const prev = await read(row.asaasPaymentId)
+    const prev = await readAsaasPayment(row.asaasPaymentId, apiKey)
     if (prev === null) return STUCK
-    if (prev !== "missing" && !prev.deleted) {
-      if (CONFIRMED_STATUSES.has(prev.status)) return settleAsaas(prev)
-      const open = prev.status === "PENDING" || prev.status === "OVERDUE"
-      // Em análise / reversão: outra cobrança por cima cobraria duas vezes.
-      if (!open) return PENDING_STATUSES.has(prev.status) ? { kind: "pending" } : STUCK
-      if (prev.status === "PENDING" && prev.billingType === method && sameValue(prev.value, row)) {
-        payment = prev
-      } else {
-        // DELETE do Asaas é soft: só `deleted: true` na releitura prova a remoção.
-        await deleteAsaasPayment(prev.id, apiKey).catch(() => null)
-        const after = await read(prev.id)
-        if (after && after !== "missing" && CONFIRMED_STATUSES.has(after.status)) return settleAsaas(after)
-        if (!(after === "missing" || after?.deleted)) return STUCK
-      }
+    if (prev !== "missing" && !prev.deleted && prev.status === "PENDING" && prev.billingType === method && sameValue(prev.value, row)) {
+      payment = prev
+    } else {
+      const r = await releaseAsaasCharge(prev, apiKey)
+      if (r.kind === "paid") return settleAsaas(r.payment)
+      if (r.kind === "busy") return { kind: "pending" }
+      if (r.kind === "stuck") return STUCK
     }
   }
 
@@ -308,9 +361,7 @@ function mpPending(p: MPPayment): FlexChargeResult {
 }
 
 const chargeMp: Charger = async (row, ctx, input, settle) => {
-  const token = ctx.tenant
-    ? ctx.tenant.mpAccessToken && decryptTenantMpToken(ctx.tenant.mpAccessToken)
-    : await pmbMpAccessToken()
+  const token = await mpTokenFor(ctx)
   if (!token) return fail(409, "GATEWAY_NOT_CONNECTED", "Mercado Pago não conectado")
   const { payer, method } = input
   if (!payer.email) return fail(400, "PAYER_EMAIL_MISSING", "E-mail do pagador ausente")
@@ -327,35 +378,25 @@ const chargeMp: Charger = async (row, ctx, input, settle) => {
   }
 
   const settleMp = async (p: MPPayment): Promise<FlexChargeResult> => {
-    await settle({
-      gateway: "MP",
-      externalPaymentId: String(p.id),
-      amount: p.transaction_amount,
-      paidAt: p.date_approved ? new Date(p.date_approved) : new Date(),
-      mpPaymentType: p.payment_type_id,
-    })
+    await settle(mpEvent(p))
     return { kind: "approved" }
   }
 
   if (row.mpPaymentId) {
     const prev = await getMpPayment(token, row.mpPaymentId).catch(() => null)
     if (!prev) return STUCK
-    if (prev.status === "approved") return settleMp(prev)
-    if (prev.status === "in_process" || prev.status === "authorized" || prev.status === "in_mediation") {
-      return { kind: "pending" }
+    if (
+      prev.status === "pending" &&
+      row.method === method &&
+      method !== "CREDIT_CARD" &&
+      sameValue(prev.transaction_amount, row)
+    ) {
+      return mpPending(prev)
     }
-    if (prev.status === "pending") {
-      if (row.method === method && method !== "CREDIT_CARD" && sameValue(prev.transaction_amount, row)) {
-        return mpPending(prev)
-      }
-      const cancelled = await cancelMpPayment(token, String(prev.id)).catch(() => null)
-      if (cancelled?.status !== "cancelled") {
-        const after = await getMpPayment(token, prev.id).catch(() => null)
-        if (after?.status === "approved") return settleMp(after)
-        if (after?.status !== "cancelled") return STUCK
-      }
-    }
-    // rejected / cancelled (PIX ou boleto expirado) / estornado: substitui.
+    const r = await releaseMpCharge(token, prev)
+    if (r.kind === "paid") return settleMp(r.payment)
+    if (r.kind === "busy") return { kind: "pending" }
+    if (r.kind === "stuck") return STUCK
   }
 
   const externalReference = `parc_${row.id}`

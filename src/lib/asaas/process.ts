@@ -10,6 +10,7 @@ import { afterResponse } from "@/lib/after-response"
 import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
+import { settleFlexSubscriptionPayment } from "@/lib/installments/flex-card"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { createNotification } from "@/lib/notifications"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
@@ -463,6 +464,30 @@ async function processPmbDirectSale(
   }
 
   if (!enrollment || enrollment.tenantId !== null) return false
+
+  // Parcelado no cartao: cobranca da assinatura baixa a proxima linha, nunca o
+  // caminho de mensalidade abaixo. E o OVERDUE dela nao suspende a matricula:
+  // atraso do parcelado e da varredura diaria (as linhas), como no carne.
+  if (enrollment.flexInstallments) {
+    const paid = event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED"
+    if (paid && payment.subscription && payment.subscription === enrollment.asaasSubscriptionId) {
+      const outcome = await settleFlexSubscriptionPayment({
+        enrollmentId: enrollment.id,
+        event: {
+          gateway: "ASAAS",
+          externalPaymentId: payment.id,
+          amount: payment.value,
+          paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
+        },
+      })
+      await markLog(logId, true, `pmb parcelado cartao: ${outcome}`)
+      return true
+    }
+    if (event === "PAYMENT_OVERDUE") {
+      await markLog(logId, true, "pmb parcelado: overdue sem acao (varredura trata atraso)")
+      return true
+    }
+  }
 
   if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
     const wasSuspended = enrollment.status === "SUSPENDED"

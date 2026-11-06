@@ -56,12 +56,16 @@ vi.mock("@/lib/subscriptions/renew", () => ({
   revokeSubscriptionForRefund: vi.fn(async () => undefined),
   markSubscriptionPastDue: vi.fn(async () => undefined),
 }))
+vi.mock("@/lib/installments/flex-card", () => ({
+  settleFlexSubscriptionPayment: vi.fn(async () => "settled"),
+}))
 vi.mock("@/lib/logger", () => ({
   contextLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
 
 import { prisma } from "@/lib/prisma"
-import { getPayment } from "./client"
+import { getAuthorizedPayment, getPayment } from "./client"
+import { settleFlexSubscriptionPayment } from "@/lib/installments/flex-card"
 import { fulfillFromMpPayment } from "./fulfillment"
 import { createNotification } from "@/lib/notifications"
 import {
@@ -373,5 +377,19 @@ describe("processMpWebhook — estorno/cancelamento de matricula avulsa", () => 
     await processMpWebhook(args())
 
     expect(getPaymentMock).not.toHaveBeenCalled()
+  })
+
+  it("authorized_payment aprovado de matrícula flex baixa a linha pelo settleFlexSubscriptionPayment, não pelo fulfill", async () => {
+    ;(getAuthorizedPayment as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 77, payment_id: 555 })
+    getPaymentMock.mockResolvedValue({ ...mpPayment("approved"), id: 555 })
+    p.enrollment.findFirst.mockResolvedValue({ id: "e1", flexInstallments: true })
+
+    await processMpWebhook(args({ topic: "subscription_authorized_payment", dataId: "77", paymentId: "77" }))
+
+    expect(settleFlexSubscriptionPayment).toHaveBeenCalledWith({
+      enrollmentId: "e1",
+      event: expect.objectContaining({ gateway: "MP", externalPaymentId: "555", amount: 100 }),
+    })
+    expect(fulfillMock).not.toHaveBeenCalled()
   })
 })

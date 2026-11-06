@@ -112,6 +112,9 @@ describe("link de pagamento de loja nunca é a página do gateway", () => {
       // Cobrança de uma linha do parcelado: grava na coluna o PDF do boleto
       // (`bankSlipUrl` / `external_resource_url`), nunca a fatura.
       "lib/installments/flex-charge.ts",
+      // Cartão no parcelado: só APAGA a coluna (null) da linha cujo boleto foi
+      // removido para a assinatura assumir.
+      "lib/installments/flex-card.ts",
       // Renegociação da parcela: regrava a coluna com o `bankSlipUrl` novo.
       "lib/installments/edit.ts",
       // ── Mesma view (`InstallmentView.invoiceUrl`) para a assinatura no boleto:

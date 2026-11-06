@@ -12,6 +12,7 @@ import { pmbPlataformaPolo, pmbPlataformaVendedorId, pmbMpAccessToken } from "@/
 import { fulfillFromMpPayment } from "./fulfillment"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
+import { settleFlexSubscriptionPayment } from "@/lib/installments/flex-card"
 import {
   handleMpCarnePayment,
   isMpCarneReference,
@@ -154,20 +155,19 @@ async function resolveTenantBySlug(slug: string): Promise<TenantContext | null> 
   return tenant
 }
 
-async function resolveEnrollmentId(
+async function resolveEnrollment(
   tenant: TenantContext,
   payment: MPPayment,
-): Promise<string | null> {
+): Promise<{ id: string; flexInstallments: boolean } | null> {
   if (!payment.external_reference) return null
 
-  const enrollment = await prisma.enrollment.findFirst({
+  return prisma.enrollment.findFirst({
     where: {
       externalReference: payment.external_reference,
       ...(tenant.isPmbVitrine ? { tenantId: null } : { tenantId: tenant.id }),
     },
-    select: { id: true },
+    select: { id: true, flexInstallments: true },
   })
-  return enrollment?.id ?? null
 }
 
 /**
@@ -463,7 +463,7 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     }
 
     // ── Assinatura de aluno (pmb_sub_<id>) ─────────────────────────────────
-    // Roteada ANTES de `resolveEnrollmentId`: uma assinatura não tem matrícula
+    // Roteada ANTES de `resolveEnrollment`: uma assinatura não tem matrícula
     // própria (as matrículas nascem sob demanda, uma por curso aberto), então
     // cairia em "enrollment nao encontrado" e o ciclo nunca renovaria.
     if (payment.external_reference?.startsWith("pmb_sub_")) {
@@ -549,7 +549,8 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     }
 
     // ── Passo 5: resolver o enrollmentId pelo external_reference ────────────
-    const enrollmentId = await resolveEnrollmentId(tenant, payment)
+    const enrollment = await resolveEnrollment(tenant, payment)
+    const enrollmentId = enrollment?.id
 
     if (!enrollmentId) {
       await markLog(
@@ -562,6 +563,24 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
 
     // ── Passo 6: rotear conforme status ─────────────────────────────────────
     if (payment.status === "approved") {
+      // Parcelado no cartao: o pagamento com a referencia da matricula so pode
+      // ser cobranca do preapproval (as linhas avulsas usam `parc_`). Baixa a
+      // proxima linha em vez de efetivar como mensalidade. ANTES do
+      // `alreadyPaid`: uma baixa que caiu no meio precisa poder ser retomada.
+      if (enrollment.flexInstallments) {
+        const outcome = await settleFlexSubscriptionPayment({
+          enrollmentId,
+          event: {
+            gateway: "MP",
+            externalPaymentId: String(payment.id),
+            amount: payment.transaction_amount,
+            paidAt: payment.date_approved ? new Date(payment.date_approved) : new Date(),
+            mpPaymentType: payment.payment_type_id,
+          },
+        })
+        await markLog(logId, true, `parcelado cartao: ${outcome}`)
+        return
+      }
       // Notificacao repetida de pagamento ja liberado: sem fulfill e sem
       // re-avisar a unidade do HMAC a cada reenvio.
       if (alreadyPaid) {

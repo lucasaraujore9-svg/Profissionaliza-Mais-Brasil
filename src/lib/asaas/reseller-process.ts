@@ -4,6 +4,7 @@ import { linkPixAutomaticFirstPayment } from "@/lib/subscriptions/carne"
 import { getPayment, AsaasApiError } from "./client"
 import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
+import { settleFlexSubscriptionPayment } from "@/lib/installments/flex-card"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import {
@@ -167,6 +168,30 @@ export async function processResellerAsaasWebhook(
       // Não lança: evita retry infinito do Asaas por um id que nunca casa.
       await markLog(logId, true, `matrícula não encontrada para ${payment.id} (tenant ${tenant.slug})`)
       return
+    }
+
+    // Parcelado no cartao: cobranca da assinatura baixa a proxima linha, nunca o
+    // caminho de mensalidade abaixo. E o OVERDUE dela nao suspende a matricula:
+    // atraso do parcelado e da varredura diaria (as linhas), como no carne.
+    if (enrollment.flexInstallments) {
+      const paid = event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED"
+      if (paid && payment.subscription && payment.subscription === enrollment.asaasSubscriptionId) {
+        const outcome = await settleFlexSubscriptionPayment({
+          enrollmentId: enrollment.id,
+          event: {
+            gateway: "ASAAS",
+            externalPaymentId: payment.id,
+            amount: payment.value,
+            paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
+          },
+        })
+        await markLog(logId, true, `parcelado cartao: ${outcome}`)
+        return
+      }
+      if (event === "PAYMENT_OVERDUE") {
+        await markLog(logId, true, `parcelado: overdue ${payment.id} sem acao (varredura trata atraso)`)
+        return
+      }
     }
 
     switch (event) {
