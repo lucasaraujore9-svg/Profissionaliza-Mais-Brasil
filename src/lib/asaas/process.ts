@@ -470,7 +470,10 @@ async function processPmbDirectSale(
   // atraso do parcelado e da varredura diaria (as linhas), como no carne.
   if (enrollment.flexInstallments) {
     const paid = event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED"
-    if (paid && payment.subscription && payment.subscription === enrollment.asaasSubscriptionId) {
+    // QUALQUER cobranca de assinatura, mesmo com id diferente do gravado: o
+    // Asaas captura o cartao dentro do create e o webhook pode chegar antes
+    // de o id ser gravado. O caminho MONTHLY contaria a parcela sem baixar linha.
+    if (paid && payment.subscription) {
       const outcome = await settleFlexSubscriptionPayment({
         enrollmentId: enrollment.id,
         event: {
@@ -792,10 +795,15 @@ export async function processAsaasWebhook(
 
     // Se a subscription pertence a uma matricula PMB (vitrine principal),
     // delega para o processamento de venda direta antes de tentar tenant.
-    const pmbEnrollmentForSubscription = await prisma.enrollment.findFirst({
-      where: { asaasSubscriptionId: subscriptionId, tenantId: null },
-      select: { id: true },
-    })
+    // `pmb_enr_` tambem: a 1a cobranca de uma assinatura recem-criada chega
+    // antes de o id ser gravado na matricula (processPmbDirectSale casa pela
+    // referencia e devolve false se nao for venda direta PMB).
+    const pmbEnrollmentForSubscription =
+      payment.externalReference?.startsWith("pmb_enr_") ||
+      (await prisma.enrollment.findFirst({
+        where: { asaasSubscriptionId: subscriptionId, tenantId: null },
+        select: { id: true },
+      }))
     if (pmbEnrollmentForSubscription) {
       const handled = await processPmbDirectSale(logId, event, payment)
       if (handled) return

@@ -65,6 +65,7 @@ vi.mock("@/lib/asaas/client", () => {
     listPayments: vi.fn(),
     payWithCreditCard: vi.fn(),
     createSubscription: vi.fn(),
+    cancelSubscription: vi.fn(),
   }
 })
 vi.mock("@/lib/mercadopago/client", () => {
@@ -80,11 +81,14 @@ vi.mock("@/lib/mercadopago/client", () => {
     createPayment: vi.fn(),
     cancelPayment: vi.fn(),
     createPreapproval: vi.fn(),
+    cancelPreapproval: vi.fn(),
   }
 })
+const lock = vi.hoisted(() => ({ busy: false }))
 vi.mock("@/lib/enrollment/fulfill", () => ({
   advisoryLockKeyFrom: () => BigInt(1),
   withAdvisoryLock: vi.fn(async (_k: bigint, fn: () => Promise<void>) => {
+    if (lock.busy) return false
     await fn()
     return true
   }),
@@ -111,6 +115,7 @@ vi.mock("@/lib/pmb-config", () => ({
   PMB_TENANT_SLUG: "__pmb__",
 }))
 vi.mock("@/lib/audit", () => ({ logAudit: vi.fn() }))
+vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn(async () => null) }))
 vi.mock("@/lib/logger", () => ({ contextLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
 import { prisma } from "@/lib/prisma"
@@ -119,6 +124,7 @@ import * as mp from "@/lib/mercadopago/client"
 import { settleBoletoInstallment } from "./settle"
 import { asaasSplitsForEnrollment } from "@/lib/course-authoring/split-server"
 import { logAudit } from "@/lib/audit"
+import { createNotification } from "@/lib/notifications"
 import { loadContext } from "./plan"
 import { settleFlexSubscriptionPayment, startFlexCardSubscription } from "./flex-card"
 import type { FlexCardInput, FlexPayer } from "./flex-charge"
@@ -161,9 +167,11 @@ function plan(gateway: "ASAAS" | "MP", opts: { tenant?: boolean } = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  lock.busy = false
   vi.useFakeTimers({ toFake: ["Date"] })
   vi.setSystemTime(new Date("2026-11-06T15:00:00Z"))
   enrollment.findUnique.mockResolvedValue({ asaasSubscriptionId: null, mpSubscriptionId: null })
+  enrollment.update.mockResolvedValue({})
   m(asaasSplitsForEnrollment).mockResolvedValue(SPLITS)
   m(asaas.createSubscription).mockResolvedValue({ id: "sub_1" })
   m(asaas.listPayments).mockResolvedValue({ data: [{ id: "pay_1", status: "PENDING", value: 100 }] })
@@ -263,6 +271,48 @@ describe("startFlexCardSubscription — Asaas", () => {
   })
 })
 
+describe("assinatura criada mas não gravada (falha no banco)", () => {
+  it("Asaas: cancela a assinatura no gateway e relança; cancelamento confirmado não alerta", async () => {
+    plan("ASAAS")
+    enrollment.update.mockRejectedValueOnce(new Error("db down"))
+    m(asaas.cancelSubscription).mockResolvedValue({ deleted: true, id: "sub_1" })
+
+    await expect(
+      startFlexCardSubscription({ enrollmentId: "enr1", fromRowNumber: 2, payer, card: asaasCard }),
+    ).rejects.toThrow("db down")
+
+    expect(asaas.cancelSubscription).toHaveBeenCalledWith("sub_1", "unit_key")
+    expect(createNotification).not.toHaveBeenCalled()
+  })
+
+  it("Asaas: cancelamento NÃO confirmado (deleted: false) alerta o SUPER_ADMIN", async () => {
+    plan("ASAAS")
+    enrollment.update.mockRejectedValueOnce(new Error("db down"))
+    m(asaas.cancelSubscription).mockResolvedValue({ deleted: false, id: "sub_1" })
+
+    await expect(
+      startFlexCardSubscription({ enrollmentId: "enr1", fromRowNumber: 2, payer, card: asaasCard }),
+    ).rejects.toThrow("db down")
+
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ audience: "ROLE", roleTarget: "SUPER_ADMIN", body: expect.stringContaining("sub_1") }),
+    )
+  })
+
+  it("MP: preapproval não cancelado alerta o SUPER_ADMIN", async () => {
+    plan("MP", { tenant: false })
+    enrollment.update.mockRejectedValueOnce(new Error("db down"))
+    m(mp.cancelPreapproval).mockResolvedValue({ id: "pre_1", status: "authorized" })
+
+    await expect(
+      startFlexCardSubscription({ enrollmentId: "enr1", fromRowNumber: 2, payer, card: mpCard }),
+    ).rejects.toThrow("db down")
+
+    expect(mp.cancelPreapproval).toHaveBeenCalledWith("pmb_mp", "pre_1")
+    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({ roleTarget: "SUPER_ADMIN" }))
+  })
+})
+
 describe("startFlexCardSubscription — Mercado Pago", () => {
   it("preapproval com a referência da matrícula, valor da linha e fim no nº de linhas", async () => {
     plan("MP", { tenant: false })
@@ -304,13 +354,39 @@ describe("settleFlexSubscriptionPayment", () => {
     expect(db.rows[2]).toMatchObject({ asaasPaymentId: null, status: "SCHEDULED" })
   })
 
-  it("pagamento sem linha aberta: no_open_row e nada muda", async () => {
+  it("pagamento sem linha aberta: no_open_row, nada muda, PMB e unidade avisadas, auditado", async () => {
     plan("ASAAS")
     db.rows.forEach((r) => (r.status = "PAID"))
+    enrollment.findUnique.mockResolvedValue({ tenantId: "t1" })
     const before = JSON.stringify(db.rows)
 
     expect(await settleFlexSubscriptionPayment({ enrollmentId: "enr1", event })).toBe("no_open_row")
     expect(JSON.stringify(db.rows)).toBe(before)
     expect(settleBoletoInstallment).not.toHaveBeenCalled()
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ audience: "ROLE", roleTarget: "SUPER_ADMIN", body: expect.stringMatching(/pay_9.*R\$ 100,00.*enr1/) }),
+    )
+    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({ audience: "TENANT", tenantId: "t1" }))
+    expect(logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "enrollment.flex.card_unmatched_payment", resourceId: "enr1", tenantId: "t1" }),
+    )
+  })
+
+  it("webhook antes de a criação gravar as linhas (lock FLEX_CARD ocupado): espera, baixa e não alerta", async () => {
+    plan("ASAAS")
+    vi.useRealTimers()
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout"] })
+    vi.setSystemTime(new Date("2026-11-06T15:00:00Z"))
+    lock.busy = true // criação em andamento
+    const pending = settleFlexSubscriptionPayment({ enrollmentId: "enr1", event })
+    await vi.advanceTimersByTimeAsync(10)
+    // a criação termina: linhas no cartão
+    db.rows.slice(1).forEach((r) => Object.assign(r, { method: "CREDIT_CARD", status: "SCHEDULED" }))
+    lock.busy = false
+    await vi.advanceTimersByTimeAsync(3_000)
+
+    expect(await pending).toBe("settled")
+    expect(db.rows[1]).toMatchObject({ asaasPaymentId: "pay_9", status: "PAID" })
+    expect(createNotification).not.toHaveBeenCalled()
   })
 })

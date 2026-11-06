@@ -175,7 +175,10 @@ export async function processResellerAsaasWebhook(
     // atraso do parcelado e da varredura diaria (as linhas), como no carne.
     if (enrollment.flexInstallments) {
       const paid = event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED"
-      if (paid && payment.subscription && payment.subscription === enrollment.asaasSubscriptionId) {
+      // QUALQUER cobranca de assinatura, mesmo com id diferente do gravado: o
+      // Asaas captura o cartao dentro do create e o webhook pode chegar antes
+      // de o id ser gravado. O caminho MONTHLY contaria a parcela sem baixar linha.
+      if (paid && payment.subscription) {
         const outcome = await settleFlexSubscriptionPayment({
           enrollmentId: enrollment.id,
           event: {

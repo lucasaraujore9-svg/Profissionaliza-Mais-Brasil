@@ -12,15 +12,21 @@
 import { Prisma, type BoletoInstallment } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { advisoryLockKeyFrom, withAdvisoryLock } from "@/lib/enrollment/fulfill"
-import { createSubscription as createAsaasSubscription, listPayments as listAsaasPayments } from "@/lib/asaas/client"
+import {
+  cancelSubscription as cancelAsaasSubscription,
+  createSubscription as createAsaasSubscription,
+  listPayments as listAsaasPayments,
+} from "@/lib/asaas/client"
 import type { AsaasPayment } from "@/lib/asaas/types"
 import { asaasErrorToResult, CONFIRMED_STATUSES } from "@/lib/asaas/transparent-process"
-import { createPreapproval, getPayment as getMpPayment, MPApiError } from "@/lib/mercadopago/client"
+import { cancelPreapproval, createPreapproval, getPayment as getMpPayment, MPApiError } from "@/lib/mercadopago/client"
 import { asaasSplitsForEnrollment } from "@/lib/course-authoring/split-server"
 import { asaasWebhookUrl, appUrl, mpWebhookUrl } from "@/lib/tenant/urls"
 import { addMonthsClampedUtc, brDayIso, utcDayIso } from "@/lib/dates"
 import { logAudit } from "@/lib/audit"
 import { contextLogger } from "@/lib/logger"
+import { createNotification } from "@/lib/notifications"
+import { swallow } from "@/lib/errors"
 import { loadContext, resolveAsaasCustomerId, type PlanContext } from "./plan"
 import { settleBoletoInstallment, type InstallmentPaymentEvent } from "./settle"
 import {
@@ -175,6 +181,46 @@ async function adoptCardSchedule(
   })
 }
 
+/**
+ * A assinatura já existe no gateway: se gravá-la no banco falhar, ela fica
+ * órfã (a matrícula não a conhece, a próxima tentativa cria outra e o cartão é
+ * cobrado duas vezes por mês). Desfaz no gateway — com confirmação — e relança.
+ */
+async function adoptOrUndo(
+  ctx: PlanContext,
+  rows: BoletoInstallment[],
+  subscription: { asaasSubscriptionId: string } | { mpSubscriptionId: string },
+  cancel: () => Promise<boolean>,
+): Promise<void> {
+  try {
+    await adoptCardSchedule(ctx, rows, subscription)
+  } catch (err) {
+    const cancelled = await cancel().catch(() => false)
+    contextLogger().error(
+      { err, event: "installments.flex_card.adopt_failed", enrollmentId: ctx.enrollment.id, ...subscription, cancelled },
+      "assinatura do parcelado criada no gateway, mas não gravada",
+    )
+    if (cancelled) {
+      // Se o id chegou a ser gravado, solta a matrícula para uma nova tentativa.
+      const clear = "asaasSubscriptionId" in subscription ? { asaasSubscriptionId: null } : { mpSubscriptionId: null }
+      await prisma.enrollment
+        .update({ where: { id: ctx.enrollment.id }, data: clear })
+        .catch(swallow("installments.flex_card.adopt_clear"))
+    } else {
+      const id = "asaasSubscriptionId" in subscription ? subscription.asaasSubscriptionId : subscription.mpSubscriptionId
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "WARNING",
+        title: "Assinatura de parcelado órfã no gateway",
+        body: `A assinatura ${id} da matrícula ${ctx.enrollment.id} foi criada no gateway, mas não foi gravada nem pôde ser cancelada. Cancele à mão para o cartão do aluno não ser cobrado sem registro.`,
+        href: "/admin/alunos",
+      }).catch(swallow("installments.flex_card.adopt_failed"))
+    }
+    throw err
+  }
+}
+
 async function startAsaas(ctx: PlanContext, rows: BoletoInstallment[], input: StartInput): Promise<FlexChargeResult> {
   const apiKey = asaasKeyFor(ctx)
   if (!apiKey) return fail(409, "GATEWAY_NOT_CONNECTED", "Unidade sem conta Asaas conectada")
@@ -222,7 +268,9 @@ async function startAsaas(ctx: PlanContext, rows: BoletoInstallment[], input: St
     return asaasErrorToResult(err)
   }
   // Grava ANTES de olhar a 1ª cobrança: o webhook dela casa pela assinatura.
-  await adoptCardSchedule(ctx, rows, { asaasSubscriptionId: subscriptionId })
+  await adoptOrUndo(ctx, rows, { asaasSubscriptionId: subscriptionId }, async () =>
+    (await cancelAsaasSubscription(subscriptionId, apiKey)).deleted === true,
+  )
 
   // Como no MONTHLY: só "aprovado" com a 1ª cobrança capturada de verdade.
   let firstPayment: AsaasPayment | undefined
@@ -291,9 +339,53 @@ async function startMp(ctx: PlanContext, rows: BoletoInstallment[], input: Start
     if (err instanceof MPApiError && err.statusCode >= 400 && err.statusCode < 500) return REJECTED
     throw err
   }
-  await adoptCardSchedule(ctx, rows, { mpSubscriptionId: preapprovalId })
+  await adoptOrUndo(ctx, rows, { mpSubscriptionId: preapprovalId }, async () =>
+    (await cancelPreapproval(token, preapprovalId)).status === "cancelled",
+  )
   // A 1ª cobrança do preapproval chega pelo webhook.
   return { kind: "pending" }
+}
+
+const START_RACE_WAIT_MS = 3_000
+
+/** true = há um startFlexCardSubscription segurando o lock desta matrícula. */
+async function cardStartInProgress(enrollmentId: string): Promise<boolean> {
+  return !(await withAdvisoryLock(advisoryLockKeyFrom(`FLEX_CARD:${enrollmentId}`), async () => {}))
+}
+
+/**
+ * Dinheiro entrou e não há linha para baixar: alguém precisa estornar ou
+ * conciliar à mão. Avisa a PMB (e a unidade) e deixa trilha.
+ */
+async function reportUnmatchedPayment(enrollmentId: string, event: InstallmentPaymentEvent): Promise<void> {
+  const enr = await prisma.enrollment.findUnique({ where: { id: enrollmentId }, select: { tenantId: true } })
+  const tenantId = enr?.tenantId ?? null
+  const valor = event.amount.toFixed(2).replace(".", ",")
+  contextLogger().error(
+    { event: "installments.flex_card.no_open_row", enrollmentId, paymentId: event.externalPaymentId },
+    "cobrança da assinatura sem linha aberta para baixar",
+  )
+  const notice = {
+    level: "WARNING" as const,
+    title: "Pagamento do parcelado sem parcela para baixar",
+    body: `A cobrança ${event.externalPaymentId} (${event.gateway}, R$ ${valor}) da matrícula ${enrollmentId} foi paga, mas não há parcela aberta no cartão. Confira e estorne se for cobrança a mais.`,
+  }
+  await createNotification({ audience: "ROLE", roleTarget: "SUPER_ADMIN", href: "/admin/alunos", ...notice }).catch(
+    swallow("installments.flex_card.unmatched_notify"),
+  )
+  if (tenantId) {
+    await createNotification({ audience: "TENANT", tenantId, href: "/painel/financeiro", category: "payment", ...notice }).catch(
+      swallow("installments.flex_card.unmatched_notify"),
+    )
+  }
+  await logAudit({
+    action: "enrollment.flex.card_unmatched_payment",
+    resource: "Enrollment",
+    resourceId: enrollmentId,
+    actorRole: "SYSTEM",
+    tenantId,
+    payloadAfter: { ...event, paidAt: event.paidAt.toISOString() },
+  })
 }
 
 /**
@@ -307,7 +399,8 @@ export async function settleFlexSubscriptionPayment(input: {
 }): Promise<"settled" | "duplicate" | "no_open_row"> {
   const { enrollmentId, event } = input
   const field = event.gateway === "ASAAS" ? "asaasPaymentId" : "mpPaymentId"
-  for (let attempt = 0; attempt < 3; attempt++) {
+  let waited = false
+  for (let attempt = 0; attempt < 4; attempt++) {
     let row = await prisma.boletoInstallment.findFirst({
       where: { enrollmentId, [field]: event.externalPaymentId },
     })
@@ -318,10 +411,15 @@ export async function settleFlexSubscriptionPayment(input: {
         orderBy: { number: "asc" },
       })
       if (!open) {
-        contextLogger().error(
-          { event: "installments.flex_card.no_open_row", enrollmentId, paymentId: event.externalPaymentId },
-          "cobrança da assinatura sem linha aberta para baixar",
-        )
+        // Corrida da criação: o Asaas captura o cartão DENTRO do create, e o
+        // webhook pode chegar antes de as linhas virarem CREDIT_CARD. Com a
+        // criação em andamento (lock FLEX_CARD ocupado), espera e tenta de novo.
+        if (!waited && (await cardStartInProgress(enrollmentId))) {
+          waited = true
+          await new Promise((r) => setTimeout(r, START_RACE_WAIT_MS))
+          continue
+        }
+        await reportUnmatchedPayment(enrollmentId, event)
         return "no_open_row"
       }
       try {

@@ -97,6 +97,14 @@ describe("conta-mãe (vitrine PMB)", () => {
     expect(fulfillEnrollment).not.toHaveBeenCalled()
   })
 
+  it("1ª cobrança chega antes de o id da assinatura ser gravado: baixa a linha mesmo assim", async () => {
+    db.enrollment.findFirst.mockResolvedValue(null) // ninguém tem `sub_1` ainda
+    db.enrollment.findUnique.mockResolvedValue({ ...flexEnrollment(null), asaasSubscriptionId: null })
+    await processAsaasWebhook("log1", { event: "PAYMENT_CONFIRMED", payment: charge("pmb_enr_enr1") } as never)
+    expect(settleFlexSubscriptionPayment).toHaveBeenCalledWith(settled)
+    expect(fulfillEnrollment).not.toHaveBeenCalled()
+  })
+
   it("OVERDUE não suspende a matrícula", async () => {
     await processAsaasWebhook("log1", { event: "PAYMENT_OVERDUE", payment: charge("pmb_enr_enr1") } as never)
     expect(db.enrollment.update).not.toHaveBeenCalled()
@@ -112,6 +120,13 @@ describe("conta da unidade", () => {
 
   it("cobrança da assinatura baixa a linha, sem fulfill de mensalidade", async () => {
     await processResellerAsaasWebhook("log1", unit, { event: "PAYMENT_RECEIVED", payment: charge("enr_enr1") } as never)
+    expect(settleFlexSubscriptionPayment).toHaveBeenCalledWith(settled)
+    expect(fulfillFromAsaasPayment).not.toHaveBeenCalled()
+  })
+
+  it("cobrança de assinatura com id diferente do gravado: nunca cai no fulfill de mensalidade", async () => {
+    db.enrollment.findFirst.mockResolvedValue({ ...flexEnrollment("t1"), asaasSubscriptionId: "sub_outra" })
+    await processResellerAsaasWebhook("log1", unit, { event: "PAYMENT_CONFIRMED", payment: charge("enr_enr1") } as never)
     expect(settleFlexSubscriptionPayment).toHaveBeenCalledWith(settled)
     expect(fulfillFromAsaasPayment).not.toHaveBeenCalled()
   })
