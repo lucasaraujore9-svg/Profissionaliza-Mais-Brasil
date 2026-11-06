@@ -86,7 +86,7 @@ describe("payFlexRow", () => {
     expect(chargeFlexRow).not.toHaveBeenCalled()
   })
 
-  it("linha negada no cartão + PIX → cobra e grava installmentMethod PIX depois", async () => {
+  it("linha negada no cartão + PIX → cobra sem gravar o meio (quem fixa é a linha paga)", async () => {
     db.enrollments = [
       enrollment({
         status: "ACTIVE",
@@ -97,13 +97,21 @@ describe("payFlexRow", () => {
     const r = await pay({ rowId: "r2", method: "PIX" })
     expect(r).toMatchObject({ kind: "pending" })
     expect(chargeFlexRow).toHaveBeenCalledWith({ rowId: "r2", method: "PIX", payer })
-    expect(prisma.enrollment.update).toHaveBeenCalledWith({
-      where: { id: "enr_1" },
-      data: { installmentMethod: "PIX" },
-    })
-    const chargeOrder = vi.mocked(chargeFlexRow).mock.invocationCallOrder[0]
-    const writeOrder = vi.mocked(prisma.enrollment.update).mock.invocationCallOrder[0]
-    expect(chargeOrder).toBeLessThan(writeOrder)
+    expect(prisma.enrollment.update).not.toHaveBeenCalled()
+  })
+
+  it("meio nulo, linha 2 com PIX gerado: POST de BOLETO é aceito e o meio não muda", async () => {
+    db.enrollments = [
+      enrollment({
+        status: "ACTIVE",
+        boletoInstallments: [row("r1", 1, { status: "PAID" }), row("r2", 2, { status: "GENERATED", method: "PIX" })],
+      }),
+    ]
+    vi.mocked(chargeFlexRow).mockResolvedValueOnce({ kind: "pending", boleto: { url: "u" } })
+    const r = await pay({ rowId: "r2", method: "BOLETO" })
+    expect(r).toMatchObject({ kind: "pending", boleto: { url: "u" } })
+    expect(chargeFlexRow).toHaveBeenCalledWith({ rowId: "r2", method: "BOLETO", payer })
+    expect(prisma.enrollment.update).not.toHaveBeenCalled()
   })
 
   it("cobrança falhou: meio do plano não muda", async () => {

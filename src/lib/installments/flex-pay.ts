@@ -87,15 +87,9 @@ export async function payFlexRow(
       : chargeFlexRow({ rowId: input.rowId, method: "CREDIT_CARD", payer: input.payer, card: input.card })
   }
 
-  const result = await chargeFlexRow({ rowId: input.rowId, method: input.method, payer: input.payer })
-  // Os três meios fora da entrada = meio ainda não escolhido ou cartão negado:
-  // o meio usado agora passa a valer para as próximas (a entrada NÃO define).
-  // Só depois que a cobrança nova existe: pedido recusado não troca o plano.
-  const charged = result.kind === "approved" || (result.kind === "pending" && !!(result.pix || result.boleto))
-  if (offer.card === "subscription" && charged) {
-    await prisma.enrollment.update({ where: { id: input.enrollmentId }, data: { installmentMethod: input.method } })
-  }
-  return result
+  // PIX/boleto não fixa o meio do plano aqui: quem fixa é a linha PAGA
+  // (settleBoletoInstallment). Abrir o PIX e pagar no boleto continua possível.
+  return chargeFlexRow({ rowId: input.rowId, method: input.method, payer: input.payer })
 }
 
 // ── Rotas ────────────────────────────────────────────────────────────────────

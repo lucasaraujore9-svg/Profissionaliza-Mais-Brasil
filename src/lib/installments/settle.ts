@@ -66,6 +66,8 @@ export async function settleBoletoInstallment(params: {
     })
     .catch(swallow("installments.settle.mark_paid"))
 
+  await fixFlexMethod(installment)
+
   await maybeReactivate(installment.enrollmentId, wasSuspended)
 
   // Cota de aulas: a parcela paga aumentou a fatia liberada. Reavalia DEPOIS do
@@ -77,6 +79,32 @@ export async function settleBoletoInstallment(params: {
   // Os demais cursos da mesma compra (satélites) seguem o mesmo carnê: a fatia
   // deles também subiu. Depois do `maybeReactivate` pelo mesmo motivo acima.
   await evaluateSatellitePaceGates(installment.enrollmentId)
+}
+
+/**
+ * Parcelado: o meio do plano é o da 1ª linha PAGA em PIX/boleto (não o da
+ * cobrança criada — o aluno pode abrir o PIX e pagar no boleto). Vale quando o
+ * meio ainda não foi escolhido ou o cartão foi negado nesta linha; a entrada
+ * nunca define. Usa o meio que PAGOU (`installment.method`). Condicional no
+ * próprio UPDATE: matrícula fora do parcelado não muda.
+ */
+async function fixFlexMethod(installment: BoletoInstallment): Promise<void> {
+  const method = installment.method
+  if (method !== "PIX" && method !== "BOLETO") return
+  await prisma.enrollment
+    .updateMany({
+      where: {
+        id: installment.enrollmentId,
+        flexInstallments: true,
+        ...(installment.number === 1 ? { flexHasDownPayment: false } : {}),
+        OR: [
+          { installmentMethod: null },
+          ...(installment.cardDeclinedAt ? [{ installmentMethod: "CREDIT_CARD" as const }] : []),
+        ],
+      },
+      data: { installmentMethod: method },
+    })
+    .catch(swallow("installments.settle.flex_method"))
 }
 
 /**
