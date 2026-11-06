@@ -17,7 +17,8 @@
  *       POR ÚLTIMO e com orçamento de tempo: SMTP lento não pode derrubar a
  *       função antes do OVERDUE/bloqueio, da cota nem da varredura de assinatura.
  *   B.  Cartão com assinatura viva e sem recusa: só vira OVERDUE após
- *       CARD_GRACE_DAYS (o gateway ainda retenta o cartão).
+ *       CARD_GRACE_DAYS (o gateway ainda retenta o cartão). Antes, a assinatura
+ *       é conferida no gateway (`checkOverdueCardSubscription`).
  *
  * Idempotente: A pula parcelas já emitidas; B pula matrículas já suspensas;
  * C só age na transição.
@@ -35,6 +36,7 @@ import { PMB_EMAIL_BRAND, emailFromForBrand } from "@/lib/email/brand"
 import { loadTenantEmailBrand } from "@/lib/email/tenant-brand"
 import { generateMpBoletoForInstallment } from "./plan"
 import { chargeFlexRow } from "./flex-charge"
+import { checkOverdueCardSubscription } from "./flex-decline"
 import { flexPaymentUrl } from "./flex"
 import { isOverdue, INSTALLMENT_REVEAL_WINDOW_DAYS } from "./schedule"
 
@@ -130,17 +132,26 @@ export async function runBoletoInstallmentSweep(now: Date = new Date()): Promise
     take: OVERDUE_BATCH,
   })
 
-  const overdue = candidates.filter((r) => {
-    const e = r.enrollment
-    // Cartão em dia no automático: o gateway ainda retenta a cobrança. A recusa
-    // confirmada (cardDeclinedAt) devolve a linha à regra normal.
-    const cardGrace =
-      e.flexInstallments &&
-      e.installmentMethod === "CREDIT_CARD" &&
-      Boolean(e.asaasSubscriptionId || e.mpSubscriptionId) &&
-      !r.cardDeclinedAt
-    return cardGrace ? r.dueDate.getTime() + CARD_GRACE_DAYS * DAY_MS <= now.getTime() : isOverdue(r, now)
-  })
+  // Cartão em dia no automático: o gateway ainda retenta a cobrança. A recusa
+  // confirmada (cardDeclinedAt) devolve a linha à regra normal.
+  const cardGrace = (r: (typeof candidates)[number]) =>
+    r.enrollment.flexInstallments &&
+    r.enrollment.installmentMethod === "CREDIT_CARD" &&
+    Boolean(r.enrollment.asaasSubscriptionId || r.enrollment.mpSubscriptionId) &&
+    !r.cardDeclinedAt
+  const overdue = candidates.filter((r) =>
+    cardGrace(r) ? r.dueDate.getTime() + CARD_GRACE_DAYS * DAY_MS <= now.getTime() : isOverdue(r, now),
+  )
+  // Cartão vencido além da carência: a assinatura pode ter sumido sem evento de
+  // recusa (cancelada à mão, cobrança que falhou calada). Confere no gateway —
+  // sumida, a linha vira recusada e a página reabre PIX/boleto; viva, alerta a
+  // PMB. Uma vez por matrícula; o OVERDUE sai igual nos dois casos.
+  const checked = new Set<string>()
+  for (const r of overdue) {
+    if (!cardGrace(r) || checked.has(r.enrollmentId)) continue
+    checked.add(r.enrollmentId)
+    await checkOverdueCardSubscription(r.enrollmentId, r.id).catch(swallow("installments.sweep.card_sub_check"))
+  }
   for (const r of overdue) {
     await prisma.boletoInstallment
       .update({ where: { id: r.id }, data: { status: "OVERDUE" } })

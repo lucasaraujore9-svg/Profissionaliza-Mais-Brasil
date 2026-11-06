@@ -16,6 +16,7 @@ vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }))
 vi.mock("@/lib/enrollment/pace", () => ({ evaluatePaceGate: vi.fn() }))
 vi.mock("./plan", () => ({ generateMpBoletoForInstallment: vi.fn() }))
 vi.mock("./flex-charge", () => ({ chargeFlexRow: vi.fn() }))
+vi.mock("./flex-decline", () => ({ checkOverdueCardSubscription: vi.fn(async () => "active") }))
 vi.mock("@/lib/email/mailer", () => ({ sendEmail: vi.fn() }))
 vi.mock("@/lib/email/tenant-brand", () => ({ loadTenantEmailBrand: vi.fn(async () => ({ name: "Loja" })) }))
 vi.mock("@/lib/logger", () => ({
@@ -28,6 +29,7 @@ import { PACE_GATED_WHERE, PACE_GATED_CONTENT_WHERE } from "@/lib/enrollment/pac
 import { runBoletoInstallmentSweep } from "./sweep"
 import { generateMpBoletoForInstallment } from "./plan"
 import { chargeFlexRow } from "./flex-charge"
+import { checkOverdueCardSubscription } from "./flex-decline"
 import { sendEmail } from "@/lib/email/mailer"
 
 const p = prisma as unknown as {
@@ -316,6 +318,28 @@ describe("runBoletoInstallmentSweep — parcelado flex", () => {
     rowsFor({ overdue: [cardRow(1, { cardDeclinedAt: new Date(NOW.getTime() - DAY) })] })
     const out = await runBoletoInstallmentSweep(NOW)
     expect(out.markedOverdue).toBe(1)
+  })
+
+  it("F3: passada a carência, confere a assinatura no gateway ANTES do OVERDUE (e marca igual)", async () => {
+    rowsFor({ overdue: [cardRow(4)] })
+    const checkMock = checkOverdueCardSubscription as unknown as ReturnType<typeof vi.fn>
+    const out = await runBoletoInstallmentSweep(NOW)
+    expect(checkMock).toHaveBeenCalledWith("enrC", "c1")
+    expect(checkMock.mock.invocationCallOrder[0]).toBeLessThan(p.boletoInstallment.update.mock.invocationCallOrder[0])
+    expect(out.markedOverdue).toBe(1)
+  })
+
+  it("F3: verificação que lança não impede o OVERDUE", async () => {
+    rowsFor({ overdue: [cardRow(4)] })
+    ;(checkOverdueCardSubscription as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("db"))
+    const out = await runBoletoInstallmentSweep(NOW)
+    expect(out.markedOverdue).toBe(1)
+  })
+
+  it("F3: dentro da carência ou já recusado, não consulta o gateway", async () => {
+    rowsFor({ overdue: [cardRow(1), cardRow(1, { id: "c2", enrollmentId: "enrD", cardDeclinedAt: new Date(NOW.getTime() - DAY) })] })
+    await runBoletoInstallmentSweep(NOW)
+    expect(checkOverdueCardSubscription).not.toHaveBeenCalled()
   })
 
   it("carnê legado (sem flex) segue o caminho atual: boleto MP e OVERDUE no dia seguinte", async () => {

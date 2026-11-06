@@ -178,6 +178,8 @@ export interface AsaasSubscription {
   status: string
   externalReference: string
   dateCreated: string
+  /** Removida (DELETE): o GET ainda responde, com `deleted: true`. */
+  deleted?: boolean
 }
 
 // ── Installment (parcelamento no cartão) ──

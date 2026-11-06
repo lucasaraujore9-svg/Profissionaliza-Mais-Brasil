@@ -10,9 +10,14 @@
  */
 import { prisma } from "@/lib/prisma"
 import { advisoryLockKeyFrom, withAdvisoryLock } from "@/lib/enrollment/fulfill"
-import { getPayment as getAsaasPayment } from "@/lib/asaas/client"
+import {
+  AsaasApiError,
+  getPayment as getAsaasPayment,
+  getSubscription as getAsaasSubscription,
+  listPayments as listAsaasPayments,
+} from "@/lib/asaas/client"
 import { CONFIRMED_STATUSES } from "@/lib/asaas/transparent-process"
-import { getPayment as getMpPayment } from "@/lib/mercadopago/client"
+import { getPayment as getMpPayment, getPreapproval } from "@/lib/mercadopago/client"
 import { sendEmail } from "@/lib/email/mailer"
 import { PMB_EMAIL_BRAND, emailFromForBrand } from "@/lib/email/brand"
 import { loadTenantEmailBrand } from "@/lib/email/tenant-brand"
@@ -85,8 +90,13 @@ async function declineUnderLock(enrollmentId: string, gatewayPaymentId: string):
     const released = now === null ? ({ kind: "stuck" } as const) : await releaseAsaasCharge(now, apiKey)
     if (released.kind === "paid") {
       // O cartão passou numa retentativa entre a recusa e o cancelamento: baixa
-      // a linha com ela. As seguintes ficam sem assinatura (a página reabre os meios).
-      await prisma.enrollment.update({ where: { id: enrollmentId }, data: { asaasSubscriptionId: null } })
+      // a linha com ela. As seguintes ficam sem assinatura (a página reabre os
+      // meios) e o plano deixa de ser "cartão": sem isso o aviso de parcela
+      // disponível não sai e a carência do cartão seguiria valendo.
+      await prisma.enrollment.update({
+        where: { id: enrollmentId },
+        data: { asaasSubscriptionId: null, installmentMethod: null },
+      })
       await settleFlexSubscriptionPayment({ enrollmentId, event: asaasEvent(released.payment) })
       return "ignored"
     }
@@ -131,6 +141,97 @@ async function declineUnderLock(enrollmentId: string, gatewayPaymentId: string):
   })
   notifyStudentCardDeclined(enrollmentId, Number(row.amount))
   return "declined"
+}
+
+export type OverdueCardCheck = "gone" | "active" | "unknown" | "skip"
+
+/**
+ * Linha do cartão vencida além da carência sem evento de recusa: a assinatura
+ * pode ter sumido no gateway (cancelada à mão depois de um cancel_unconfirmed,
+ * cobrança que falhou calada). Chamado pela varredura antes do OVERDUE.
+ *   - sumida (Asaas removida/404/INACTIVE/EXPIRED sem cobrança dela pendente; MP
+ *     cancelled/paused): mesma saída da recusa — solta a assinatura, nega a
+ *     linha e avisa o aluno. NÃO cancela de novo.
+ *   - viva, ou sem resposta: linha intocada e alerta à PMB (um por linha: a
+ *     varredura só chama na transição para OVERDUE).
+ */
+export async function checkOverdueCardSubscription(enrollmentId: string, rowId: string): Promise<OverdueCardCheck> {
+  let checked = "unknown" as OverdueCardCheck
+  // O lock da recusa/criação: não se intercala com um webhook de recusa.
+  const ran = await withAdvisoryLock(advisoryLockKeyFrom(`FLEX_CARD:${enrollmentId}`), async () => {
+    checked = await checkUnderLock(enrollmentId, rowId)
+  })
+  const outcome: OverdueCardCheck = ran ? checked : "unknown"
+  if (outcome === "active" || outcome === "unknown") {
+    await alertPmbAdmin(
+      "Parcelado no cartão em atraso",
+      `A matrícula ${enrollmentId} tem parcela no cartão vencida há mais de 3 dias e a assinatura ${
+        outcome === "active" ? "segue ativa no gateway" : "não pôde ser conferida no gateway"
+      }. Confira a cobrança: o aluno está sendo suspenso e não vê PIX/boleto.`,
+    )
+  }
+  return outcome
+}
+
+async function checkUnderLock(enrollmentId: string, rowId: string): Promise<OverdueCardCheck> {
+  const ctx = await loadContext(enrollmentId)
+  const subs = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: { asaasSubscriptionId: true, mpSubscriptionId: true },
+  })
+  const row = await prisma.boletoInstallment.findFirst({ where: { id: rowId, enrollmentId } })
+  // Recusa processada no meio tempo, ou assinatura já solta: nada a conferir.
+  if (!row || row.cardDeclinedAt || row.status === "PAID") return "skip"
+
+  let sub: GatewaySubscription
+  try {
+    if (subs?.asaasSubscriptionId) {
+      sub = { asaasSubscriptionId: subs.asaasSubscriptionId }
+      const apiKey = asaasKeyFor(ctx)
+      if (!apiKey) return "unknown"
+      const s = await getAsaasSubscription(sub.asaasSubscriptionId, apiKey).catch((err) => {
+        if (err instanceof AsaasApiError && err.statusCode === 404) return null
+        throw err
+      })
+      if (s && !s.deleted && s.status === "ACTIVE") return "active"
+      // Assinatura parada mas com cobrança dela ainda pagável: abrir PIX/boleto
+      // deixaria a parcela cobrável duas vezes.
+      const list = await listAsaasPayments({ subscription: sub.asaasSubscriptionId, limit: 100, offset: 0 }, apiKey)
+      if (list.data.some((p) => !p.deleted && (p.status === "PENDING" || p.status === "OVERDUE"))) return "active"
+    } else if (subs?.mpSubscriptionId) {
+      sub = { mpSubscriptionId: subs.mpSubscriptionId }
+      const token = await mpTokenFor(ctx)
+      if (!token) return "unknown"
+      const pre = await getPreapproval(token, sub.mpSubscriptionId)
+      if (pre.status !== "cancelled" && pre.status !== "paused") return "active"
+    } else {
+      return "skip"
+    }
+  } catch (err) {
+    contextLogger().error(
+      { err, event: "installments.flex_card.overdue_check_failed", enrollmentId, rowId },
+      "conferência da assinatura do parcelado no gateway falhou",
+    )
+    return "unknown"
+  }
+
+  const declinedAt = new Date()
+  await prisma.enrollment.update({
+    where: { id: enrollmentId },
+    data: "asaasSubscriptionId" in sub ? { asaasSubscriptionId: null } : { mpSubscriptionId: null },
+  })
+  await prisma.boletoInstallment.update({ where: { id: row.id }, data: { cardDeclinedAt: declinedAt } })
+  await logAudit({
+    action: "enrollment.flex.card_subscription_gone",
+    resource: "Enrollment",
+    resourceId: enrollmentId,
+    actorRole: "SYSTEM",
+    tenantId: ctx.enrollment.tenantId,
+    payloadBefore: { ...sub, rowNumber: row.number },
+    payloadAfter: { cardDeclinedAt: declinedAt.toISOString() },
+  })
+  notifyStudentCardDeclined(enrollmentId, Number(row.amount))
+  return "gone"
 }
 
 /** Gateway sem prova de parada: a linha fica como está e um humano resolve. */

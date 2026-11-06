@@ -56,8 +56,15 @@ vi.mock("./flex-card", () => ({
   settleFlexSubscriptionPayment: vi.fn(),
   START_RACE_WAIT_MS: 3000,
 }))
-vi.mock("@/lib/asaas/client", () => ({ getPayment: vi.fn() }))
-vi.mock("@/lib/mercadopago/client", () => ({ getPayment: vi.fn() }))
+vi.mock("@/lib/asaas/client", () => {
+  class AsaasApiError extends Error {
+    constructor(message: string, public readonly statusCode: number) {
+      super(message)
+    }
+  }
+  return { AsaasApiError, getPayment: vi.fn(), getSubscription: vi.fn(), listPayments: vi.fn() }
+})
+vi.mock("@/lib/mercadopago/client", () => ({ getPayment: vi.fn(), getPreapproval: vi.fn() }))
 vi.mock("@/lib/enrollment/fulfill", () => ({
   advisoryLockKeyFrom: (s: string) => s,
   withAdvisoryLock: vi.fn(async (_k: unknown, fn: () => Promise<void>) => {
@@ -87,9 +94,9 @@ import * as mp from "@/lib/mercadopago/client"
 import { sendEmail } from "@/lib/email/mailer"
 import { loadContext } from "./plan"
 import { readAsaasPayment, releaseAsaasCharge } from "./flex-charge"
-import { alertPmbAdmin, cancelFlexSubscription } from "./flex-card"
+import { alertPmbAdmin, cancelFlexSubscription, settleFlexSubscriptionPayment } from "./flex-card"
 import { flexOffer } from "./flex"
-import { handleFlexCardDeclined } from "./flex-decline"
+import { checkOverdueCardSubscription, handleFlexCardDeclined } from "./flex-decline"
 
 const m = <T>(f: T) => f as unknown as ReturnType<typeof vi.fn>
 const day = (iso: string) => new Date(`${iso}T12:00:00Z`)
@@ -265,6 +272,99 @@ describe("handleFlexCardDeclined — Asaas", () => {
     expect(sendEmail).not.toHaveBeenCalled()
     // Sem assinatura ativa, a página já sai do "automático".
     expect(flexOffer(state(), new Date("2026-11-06T15:00:00Z")).kind).toBe("pay")
+  })
+})
+
+describe("handleFlexCardDeclined — cartão passou na retentativa (M5)", () => {
+  it("cobrança paga entre a recusa e o cancelamento: baixa a linha, solta a assinatura E o meio do plano", async () => {
+    plan("ASAAS")
+    m(releaseAsaasCharge).mockResolvedValue({ kind: "paid", payment: { id: "pay_9", value: 100 } })
+    const res = await handleFlexCardDeclined({ enrollmentId: "enr1", gatewayPaymentId: "pay_9" })
+
+    expect(res).toBe("ignored")
+    expect(settleFlexSubscriptionPayment).toHaveBeenCalledTimes(1)
+    expect(db.enrollment.asaasSubscriptionId).toBeNull()
+    // Sem assinatura, o plano não é mais "cartão": o aviso de parcela disponível
+    // volta a sair e a página abre os meios.
+    expect(db.enrollment.installmentMethod).toBeNull()
+  })
+})
+
+describe("checkOverdueCardSubscription — cartão vencido além da carência (F3)", () => {
+  beforeEach(() => {
+    m(asaas.listPayments).mockResolvedValue({ data: [] })
+  })
+
+  it("Asaas: assinatura removida (deleted) → linha recusada, assinatura solta, e-mail; sem novo cancelamento nem alerta", async () => {
+    plan("ASAAS")
+    m(asaas.getSubscription).mockResolvedValue({ id: "sub_1", status: "ACTIVE", deleted: true })
+    const res = await checkOverdueCardSubscription("enr1", "r2")
+    await flush()
+
+    expect(res).toBe("gone")
+    expect(m(asaas.getSubscription).mock.calls[0]).toEqual(["sub_1", "unit_key"])
+    expect(db.enrollment.asaasSubscriptionId).toBeNull()
+    expect(db.rows[1].cardDeclinedAt).toBeInstanceOf(Date)
+    expect(cancelFlexSubscription).not.toHaveBeenCalled()
+    expect(alertPmbAdmin).not.toHaveBeenCalled()
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(m(sendEmail).mock.calls[0][0].subject).toBe("Seu cartão foi recusado")
+    expect(flexOffer(state(), new Date("2026-11-06T15:00:00Z")).kind).toBe("pay")
+  })
+
+  it("Asaas: 404 / INACTIVE também contam como sumida", async () => {
+    plan("ASAAS")
+    m(asaas.getSubscription).mockRejectedValue(new asaas.AsaasApiError("not found", 404))
+    expect(await checkOverdueCardSubscription("enr1", "r2")).toBe("gone")
+    plan("ASAAS")
+    m(asaas.getSubscription).mockResolvedValue({ id: "sub_1", status: "INACTIVE" })
+    expect(await checkOverdueCardSubscription("enr1", "r2")).toBe("gone")
+  })
+
+  it("Asaas: INACTIVE com cobrança da assinatura ainda pendente → não abre PIX/boleto (cobrança dupla), alerta", async () => {
+    plan("ASAAS")
+    m(asaas.getSubscription).mockResolvedValue({ id: "sub_1", status: "INACTIVE" })
+    m(asaas.listPayments).mockResolvedValue({ data: [{ id: "pay_x", status: "PENDING" }] })
+    expect(await checkOverdueCardSubscription("enr1", "r2")).toBe("active")
+    expect(db.rows[1].cardDeclinedAt).toBeNull()
+    expect(db.enrollment.asaasSubscriptionId).toBe("sub_1")
+    expect(alertPmbAdmin).toHaveBeenCalledTimes(1)
+  })
+
+  it("Asaas: assinatura ativa → linha intocada e UM alerta à PMB", async () => {
+    plan("ASAAS")
+    m(asaas.getSubscription).mockResolvedValue({ id: "sub_1", status: "ACTIVE" })
+    const res = await checkOverdueCardSubscription("enr1", "r2")
+    await flush()
+
+    expect(res).toBe("active")
+    expect(db.rows[1].cardDeclinedAt).toBeNull()
+    expect(db.enrollment.asaasSubscriptionId).toBe("sub_1")
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(alertPmbAdmin).toHaveBeenCalledTimes(1)
+    expect(m(alertPmbAdmin).mock.calls[0][1]).toContain("enr1")
+  })
+
+  it("erro na consulta → linha intocada e alerta", async () => {
+    plan("ASAAS")
+    m(asaas.getSubscription).mockRejectedValue(new asaas.AsaasApiError("boom", 500))
+    expect(await checkOverdueCardSubscription("enr1", "r2")).toBe("unknown")
+    expect(db.rows[1].cardDeclinedAt).toBeNull()
+    expect(alertPmbAdmin).toHaveBeenCalledTimes(1)
+  })
+
+  it("MP: preapproval cancelled/paused → sumida; authorized → alerta", async () => {
+    plan("MP", false)
+    m(mp.getPreapproval).mockResolvedValue({ id: "pre_1", status: "paused" })
+    expect(await checkOverdueCardSubscription("enr1", "r2")).toBe("gone")
+    expect(m(mp.getPreapproval).mock.calls[0]).toEqual(["mp_token", "pre_1"])
+    expect(db.enrollment.mpSubscriptionId).toBeNull()
+    expect(db.rows[1].cardDeclinedAt).toBeInstanceOf(Date)
+
+    plan("MP", false)
+    m(mp.getPreapproval).mockResolvedValue({ id: "pre_1", status: "authorized" })
+    expect(await checkOverdueCardSubscription("enr1", "r2")).toBe("active")
+    expect(alertPmbAdmin).toHaveBeenCalledTimes(1)
   })
 })
 

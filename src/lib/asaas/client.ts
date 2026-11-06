@@ -287,10 +287,12 @@ export async function createSubscription(
   return request<AsaasSubscription>("POST", "/subscriptions", params, apiKey)
 }
 
+/** `apiKey`: conta que criou a assinatura (unidade); omitido = conta-mãe PMB. */
 export async function getSubscription(
   subscriptionId: string,
+  apiKey?: string,
 ): Promise<AsaasSubscription> {
-  return request<AsaasSubscription>("GET", `/subscriptions/${subscriptionId}`)
+  return request<AsaasSubscription>("GET", `/subscriptions/${subscriptionId}`, undefined, apiKey)
 }
 
 /**
