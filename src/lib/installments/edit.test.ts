@@ -58,7 +58,7 @@ function row(over: Record<string, unknown> = {}) {
     mpPaymentId: null,
     invoiceUrl: "old.pdf",
     updatedAt: new Date(),
-    enrollment: { status: "ACTIVE", tenantId: "t1" },
+    enrollment: { status: "ACTIVE", tenantId: "t1", flexInstallments: false, installmentMethod: null, asaasSubscriptionId: null, mpSubscriptionId: null },
     ...over,
   }
 }
@@ -161,5 +161,36 @@ describe("editBoletoInstallment", () => {
       editBoletoInstallment({ enrollmentId: "enr1", installmentId: "inst1", amount: 80, now: NOW }),
     ).rejects.toThrow(/já foi paga/)
     expect(mp.cancelPayment).not.toHaveBeenCalled()
+  })
+
+  it("flex no cartão com assinatura: 409 CARD_PLAN_NOT_EDITABLE, nada muda", async () => {
+    p.boletoInstallment.findFirst.mockResolvedValue(
+      row({ enrollment: { status: "ACTIVE", tenantId: "t1", flexInstallments: true, installmentMethod: "CREDIT_CARD", asaasSubscriptionId: "sub_1", mpSubscriptionId: null } }),
+    )
+    await expect(
+      editBoletoInstallment({ enrollmentId: "enr1", installmentId: "inst1", amount: 50, now: NOW }),
+    ).rejects.toMatchObject({ status: 409, code: "CARD_PLAN_NOT_EDITABLE", message: "Plano no cartão: o valor é fixo na assinatura." })
+    expect(asaas.updatePayment).not.toHaveBeenCalled()
+    expect(p.boletoInstallment.update).not.toHaveBeenCalled()
+  })
+
+  it("flex PIX: edita no Asaas mantendo billingType PIX", async () => {
+    p.boletoInstallment.findFirst.mockResolvedValue(
+      row({ method: "PIX", enrollment: { status: "ACTIVE", tenantId: "t1", flexInstallments: true, installmentMethod: "PIX", asaasSubscriptionId: null, mpSubscriptionId: null } }),
+    )
+    fn(asaas.getPayment).mockResolvedValue({ status: "PENDING" })
+    fn(asaas.updatePayment).mockResolvedValue({})
+    await editBoletoInstallment({ enrollmentId: "enr1", installmentId: "inst1", amount: 50, now: NOW })
+    expect(asaas.updatePayment).toHaveBeenCalledWith("pay_1", expect.objectContaining({ billingType: "PIX", value: 50 }), "k")
+  })
+
+  it("flex MP: volta a SCHEDULED e NÃO reemite pelo emissor legado de boleto", async () => {
+    p.boletoInstallment.findFirst.mockResolvedValue(
+      row({ gateway: "MP", asaasPaymentId: null, mpPaymentId: "999", number: 1, method: "PIX", enrollment: { status: "ACTIVE", tenantId: "t1", flexInstallments: true, installmentMethod: "PIX", asaasSubscriptionId: null, mpSubscriptionId: null } }),
+    )
+    fn(mp.getPayment).mockResolvedValue({ status: "pending" })
+    await editBoletoInstallment({ enrollmentId: "enr1", installmentId: "inst1", amount: 80, now: NOW })
+    expect(mp.cancelPayment).toHaveBeenCalledWith("t", "999")
+    expect(generateMpBoletoForInstallment).not.toHaveBeenCalled()
   })
 })

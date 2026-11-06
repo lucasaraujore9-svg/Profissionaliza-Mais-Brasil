@@ -317,6 +317,23 @@ describe("cancelEnrollment — efeitos", () => {
     expect(p.boletoInstallment.update).toHaveBeenCalledTimes(2)
   })
 
+  it("flex: assinatura Asaas cancelada e linha PIX em aberto apagada", async () => {
+    p.enrollment.findFirst.mockResolvedValue(
+      enrollment({ gateway: "ASAAS", asaasSubscriptionId: "sub_1", flexInstallments: true, installmentMethod: "CREDIT_CARD" }),
+    )
+    p.boletoInstallment.findMany.mockResolvedValue([
+      { id: "b1", gateway: "ASAAS", mpPaymentId: null, asaasPaymentId: "pay_9" },
+    ])
+
+    await cancelEnrollment({ enrollmentId: "e1", removeAccess: false, actor })
+
+    expect(cancelSubMock).toHaveBeenCalledWith("sub_1", "dec(enc_tenant_asaas)")
+    expect(deletePaymentMock).toHaveBeenCalledWith("pay_9", "dec(enc_tenant_asaas)")
+    expect(p.boletoInstallment.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "CANCELLED" } }),
+    )
+  })
+
   it("carnê Asaas cancela pelo installment (derruba todas as parcelas de uma vez)", async () => {
     p.enrollment.findFirst.mockResolvedValue(
       enrollment({ gateway: "ASAAS", asaasInstallmentId: "inst_1" }),

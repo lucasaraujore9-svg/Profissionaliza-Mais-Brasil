@@ -104,7 +104,7 @@ export const PATCH = withRequestContextParams<Params>(
       return NextResponse.json({ data: result })
     } catch (err) {
       const known = installmentEditErrorStatus(err)
-      if (known) return NextResponse.json({ error: known.error }, { status: known.status })
+      if (known) return NextResponse.json({ error: known.error, ...(known.code ? { code: known.code } : {}) }, { status: known.status })
       contextLogger().error(
         { err, event: "admin.alunos.parcelas.edit_failed", enrollmentId },
         "edição de parcela falhou",

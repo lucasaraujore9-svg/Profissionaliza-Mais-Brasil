@@ -43,6 +43,7 @@ export class InstallmentEditError extends Error {
   constructor(
     message: string,
     public readonly status: 400 | 404 | 409 | 502 = 409,
+    public readonly code?: string,
   ) {
     super(message)
     this.name = "InstallmentEditError"
@@ -90,13 +91,23 @@ export async function editBoletoInstallment(params: {
   const now = params.now ?? new Date()
   const row = await prisma.boletoInstallment.findFirst({
     where: { id: params.installmentId, enrollmentId: params.enrollmentId },
-    include: { enrollment: { select: { status: true, tenantId: true } } },
+    include: { enrollment: { select: { status: true, tenantId: true, flexInstallments: true, installmentMethod: true, asaasSubscriptionId: true, mpSubscriptionId: true } } },
   })
   if (!row) throw new InstallmentEditError("Parcela não encontrada", 404)
   if (!EDITABLE.has(row.status) || row.enrollment.status === "CANCELLED") {
     throw new InstallmentEditError(
       "Parcela paga ou cancelada não pode ser alterada.",
     )
+  }
+
+  // Plano no cartão: a assinatura cobra um valor fixo; editar a linha não muda a cobrança.
+  const en = row.enrollment
+  if (
+    en.flexInstallments &&
+    en.installmentMethod === "CREDIT_CARD" &&
+    (en.asaasSubscriptionId || en.mpSubscriptionId)
+  ) {
+    throw new InstallmentEditError("Plano no cartão: o valor é fixo na assinatura.", 409, "CARD_PLAN_NOT_EDITABLE")
   }
 
   const amount = params.amount ?? Number(row.amount)
@@ -147,7 +158,7 @@ export async function editBoletoInstallment(params: {
     }
     const res = await updateAsaasPayment(
       row.asaasPaymentId,
-      { billingType: "BOLETO", value: amount, dueDate: ymd(dueDate) },
+      { billingType: row.method === "PIX" ? "PIX" : "BOLETO", value: amount, dueDate: ymd(dueDate) },
       keys.asaasApiKey,
     )
     updated = await prisma.boletoInstallment.update({
@@ -189,7 +200,8 @@ export async function editBoletoInstallment(params: {
         generatedAt: null,
       },
     })
-    if (isWithinRevealWindow(updated, now)) {
+    // Linha flex nunca sai pelo emissor legado (boleto): quem emite é o chargeFlexRow / varredura flex.
+    if (!row.enrollment.flexInstallments && isWithinRevealWindow(updated, now)) {
       try {
         updated = (await generateMpBoletoForInstallment(updated.id)) ?? updated
       } catch {
@@ -269,9 +281,9 @@ export async function listEnrollmentInstallments(
  */
 export function installmentEditErrorStatus(
   err: unknown,
-): { status: number; error: string } | null {
+): { status: number; error: string; code?: string } | null {
   if (err instanceof InstallmentEditError) {
-    return { status: err.status, error: err.message }
+    return { status: err.status, error: err.message, ...(err.code ? { code: err.code } : {}) }
   }
   if (err instanceof AsaasApiError || err instanceof MPApiError) {
     return err.statusCode < 500
