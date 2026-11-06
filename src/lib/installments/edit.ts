@@ -143,7 +143,15 @@ export async function editBoletoInstallment(params: {
   let updated: BoletoInstallment
   let reissuePending = false
 
-  if (row.gateway === "ASAAS") {
+  if (row.gateway === "ASAAS" && !row.asaasPaymentId && row.enrollment.flexInstallments) {
+    // Parcelado flex: a cobrança só nasce quando o aluno escolhe o meio e paga
+    // (flex-charge.ts, que reaproveita/troca a cobrança pelo valor da linha).
+    // Sem cobrança, renegociar é só a linha.
+    updated = await prisma.boletoInstallment.update({
+      where: { id: row.id },
+      data: { amount, dueDate, status: row.status === "OVERDUE" ? "SCHEDULED" : row.status },
+    })
+  } else if (row.gateway === "ASAAS") {
     if (!row.asaasPaymentId) {
       throw new InstallmentEditError("Parcela sem cobrança no Asaas.")
     }
@@ -158,7 +166,7 @@ export async function editBoletoInstallment(params: {
     }
     const res = await updateAsaasPayment(
       row.asaasPaymentId,
-      { billingType: row.method === "PIX" ? "PIX" : "BOLETO", value: amount, dueDate: ymd(dueDate) },
+      { billingType: row.method ?? "BOLETO", value: amount, dueDate: ymd(dueDate) },
       keys.asaasApiKey,
     )
     updated = await prisma.boletoInstallment.update({

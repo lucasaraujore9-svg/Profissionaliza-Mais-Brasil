@@ -193,4 +193,29 @@ describe("editBoletoInstallment", () => {
     expect(mp.cancelPayment).toHaveBeenCalledWith("t", "999")
     expect(generateMpBoletoForInstallment).not.toHaveBeenCalled()
   })
+
+  it("flex Asaas sem cobrança emitida: edita só a linha, sem gateway, e sai do atraso (I1)", async () => {
+    p.boletoInstallment.findFirst.mockResolvedValue(
+      row({ status: "OVERDUE", asaasPaymentId: null, method: null, dueDate: new Date("2026-10-20T12:00:00Z"), enrollment: { status: "ACTIVE", tenantId: "t1", flexInstallments: true, installmentMethod: null, asaasSubscriptionId: null, mpSubscriptionId: null } }),
+    )
+    const res = await editBoletoInstallment({ enrollmentId: "enr1", installmentId: "inst1", amount: 70, dueDate: "2026-11-15", now: NOW })
+    expect(asaas.getPayment).not.toHaveBeenCalled()
+    expect(asaas.updatePayment).not.toHaveBeenCalled()
+    expect(p.boletoInstallment.update).toHaveBeenCalledWith({
+      where: { id: "inst1" },
+      data: { amount: 70, dueDate: new Date("2026-11-15T12:00:00Z"), status: "SCHEDULED" },
+    })
+    expect(res.after).toMatchObject({ amount: 70, dueDate: "2026-11-15", status: "SCHEDULED" })
+    expect(maybeReactivate).toHaveBeenCalledWith("enr1")
+  })
+
+  it("flex Asaas no boleto com cobrança: preserva billingType BOLETO", async () => {
+    p.boletoInstallment.findFirst.mockResolvedValue(
+      row({ method: "BOLETO", enrollment: { status: "ACTIVE", tenantId: "t1", flexInstallments: true, installmentMethod: "BOLETO", asaasSubscriptionId: null, mpSubscriptionId: null } }),
+    )
+    fn(asaas.getPayment).mockResolvedValue({ status: "PENDING" })
+    fn(asaas.updatePayment).mockResolvedValue({})
+    await editBoletoInstallment({ enrollmentId: "enr1", installmentId: "inst1", amount: 50, now: NOW })
+    expect(asaas.updatePayment).toHaveBeenCalledWith("pay_1", expect.objectContaining({ billingType: "BOLETO" }), "k")
+  })
 })
