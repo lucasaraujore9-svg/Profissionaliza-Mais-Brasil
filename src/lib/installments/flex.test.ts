@@ -5,6 +5,7 @@ import {
   flexTotal,
   flexRowLabel,
   flexPlanSummary,
+  flexRowsSummary,
   flexOffer,
   type FlexPlanState,
   type FlexRowState,
@@ -74,6 +75,22 @@ describe("flexPlanSummary", () => {
     expect(
       flexPlanSummary({ hasDownPayment: false, downPayment: null, count: 3, installmentValue: 100 }),
     ).toBe("3x R$ 100,00 · total R$ 300,00")
+  })
+})
+
+describe("flexRowsSummary", () => {
+  const a = (...v: number[]) => v.map((amount) => ({ amount }))
+  it("parcelas iguais: mesmo texto do flexPlanSummary", () => {
+    expect(flexRowsSummary(a(250, 100, 100, 100), true)).toBe(
+      "Entrada R$ 250,00 + 3x R$ 100,00 · total R$ 550,00",
+    )
+    expect(flexRowsSummary(a(100, 100, 100), false)).toBe("3x R$ 100,00 · total R$ 300,00")
+  })
+  it("parcelas diferentes (renegociadas): quantidade e total somado", () => {
+    expect(flexRowsSummary(a(250, 100, 120.5, 100), true)).toBe(
+      "Entrada R$ 250,00 + 3 parcelas · total R$ 570,50",
+    )
+    expect(flexRowsSummary(a(100, 80, 100), false)).toBe("3 parcelas · total R$ 280,00")
   })
 })
 

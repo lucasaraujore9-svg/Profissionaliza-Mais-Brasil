@@ -101,6 +101,26 @@ export function flexPlanSummary(i: {
     : `${parcelas} · ${total}`
 }
 
+/**
+ * Resumo do plano a partir das LINHAS gravadas (`amount` em reais). Depois de
+ * uma renegociação (edit.ts) as parcelas podem ter valores diferentes: aí não
+ * cabe "Nx R$ V" e o resumo mostra só a quantidade e o total somado.
+ */
+export function flexRowsSummary(rows: { amount: number }[], hasDownPayment: boolean): string {
+  const cents = rows.map((r) => Math.round(r.amount * 100))
+  const parcelas = hasDownPayment ? cents.slice(1) : cents
+  if (parcelas.length > 0 && parcelas.every((c) => c === parcelas[0])) {
+    return flexPlanSummary({
+      hasDownPayment,
+      downPayment: hasDownPayment ? (cents[0] ?? 0) / 100 : null,
+      count: parcelas.length,
+      installmentValue: parcelas[0] / 100,
+    })
+  }
+  const body = `${parcelas.length} parcelas · total ${brl(cents.reduce((a, c) => a + c, 0) / 100)}`
+  return hasDownPayment ? `Entrada ${brl((cents[0] ?? 0) / 100)} + ${body}` : body
+}
+
 export interface FlexRowState {
   number: number
   status: "SCHEDULED" | "GENERATED" | "PAID" | "OVERDUE" | "CANCELLED"

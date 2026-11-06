@@ -5,7 +5,7 @@ import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { pmbMpPublicKey } from "@/lib/pmb-config"
 import {
   flexOffer,
-  flexPlanSummary,
+  flexRowsSummary,
   flexRowLabel,
   type FlexOffer,
 } from "@/lib/installments/flex"
@@ -214,14 +214,11 @@ export async function FlexInstallmentPage({
     enrollment.course.capaOverride ??
     enrollment.course.capaImageUrl
 
-  // Toda linha fora a entrada tem o mesmo valor.
-  const installmentRows = hasDownPayment ? rows.slice(1) : rows
-  const planSummary = flexPlanSummary({
+  // Renegociação (edit.ts) pode deixar parcelas com valores diferentes.
+  const planSummary = flexRowsSummary(
+    rows.map((r) => ({ amount: Number(r.amount) })),
     hasDownPayment,
-    downPayment: hasDownPayment ? Number(rows[0]?.amount ?? 0) : null,
-    count: installmentRows.length,
-    installmentValue: Number(installmentRows[0]?.amount ?? 0),
-  })
+  )
   const label = (row: { number: number }) => flexRowLabel(row, hasDownPayment, rows.length)
   const headerRow = payRow ?? currentRow
 
@@ -266,11 +263,14 @@ export async function FlexInstallmentPage({
         interestFreeInstallments: 1,
         defaultNome: payer.nome || undefined,
         defaultEmail: payer.email ?? undefined,
+        // Pago, volta para esta página com o plano atualizado. A confirmação
+        // padrão diria "Matrícula realizada" com o total do plano e dispararia
+        // de novo o Purchase do pixel. O form anexa `?enrollment_id=`.
+        confirmacaoPath: `/pagar/${enrollment.id}`,
         ...(store === "pmb"
           ? {
               processPath: "/api/checkout/parcela",
               statusPath: "/api/checkout/parcela/status",
-              confirmacaoPath: "/checkout/confirmacao",
             }
           : {
               processPath: "/api/loja/checkout/parcela",
