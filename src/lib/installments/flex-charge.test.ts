@@ -212,6 +212,22 @@ describe("chargeFlexRow — Asaas", () => {
   })
 })
 
+describe("chargeFlexRow — carnê antigo não muda", () => {
+  for (const gateway of ["ASAAS", "MP"] as const) {
+    it(`${gateway}: matrícula sem flexInstallments → 409 NOT_FLEX, sem apagar nem criar`, async () => {
+      setup(gateway, { asaasPaymentId: "pay_old", mpPaymentId: "77", method: "BOLETO", status: "GENERATED" })
+      const ctx = await m(loadContext).getMockImplementation()!()
+      m(loadContext).mockResolvedValue({ ...ctx, enrollment: { ...ctx.enrollment, flexInstallments: false } })
+      const res = await chargeFlexRow({ rowId: "row1", method: "PIX", payer })
+      expect(res).toMatchObject({ kind: "error", httpStatus: 409, code: "NOT_FLEX" })
+      for (const f of [asaas.getPayment, asaas.deletePayment, asaas.createPayment, mp.getPayment, mp.cancelPayment, mp.createPayment]) {
+        expect(f).not.toHaveBeenCalled()
+      }
+      expect(row.update).not.toHaveBeenCalled()
+    })
+  }
+})
+
 describe("chargeFlexRow — Mercado Pago", () => {
   it("PIX numa linha sem cobrança cria um, com parc_<id> e chave por linha+updatedAt+método", async () => {
     setup("MP")
