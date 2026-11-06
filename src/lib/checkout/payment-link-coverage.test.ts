@@ -120,6 +120,9 @@ describe("link de pagamento de loja nunca é a página do gateway", () => {
       // Página /pagar do parcelado: repassa a coluna (PDF do boleto gravado
       // por flex-charge.ts) para a lista de parcelas da nossa página.
       "components/loja/flex-installment-page.tsx",
+      // Plano parcelado em /aluno/pagamentos (`flexCarneView`): só PREENCHE a
+      // view com `invoiceUrl: null` — o pagamento é pela página do plano.
+      "lib/installments/flex.ts",
       // ── Mesma view (`InstallmentView.invoiceUrl`) para a assinatura no boleto:
       //    preenchida com `bankSlipUrl`, o PDF do boleto — nunca a fatura.
       "lib/subscriptions/carne-view.ts",
