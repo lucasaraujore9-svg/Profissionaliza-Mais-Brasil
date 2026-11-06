@@ -18,7 +18,7 @@ export const faqs: FAQItem[] = [
   {
     pergunta: "Qual o investimento inicial pra começar?",
     resposta:
-      "Por R$ 289 por mês no cartão (débito automático), ou R$ 329 no boleto ou PIX pagos mês a mês, você tem o seu site totalmente personalizado, com mais de 100 cursos profissionalizantes disponíveis pra vender. Sem taxa de adesão, sem comissão sobre vendas, e com a Automação que vende no WhatsApp por você. O catálogo é atualizado e você pode ofertar os cursos pelo valor que quiser.",
+      "Por R$ 289 por mês você tem o seu site totalmente personalizado, com mais de 100 cursos profissionalizantes disponíveis pra vender. Sem taxa de adesão, sem comissão sobre vendas, e com a Automação que vende no WhatsApp por você. O catálogo é atualizado e você pode ofertar os cursos pelo valor que quiser.",
   },
   {
     pergunta: "Quanto posso lucrar tendo o meu site personalizado?",
@@ -58,6 +58,6 @@ export const faqs: FAQItem[] = [
   {
     pergunta: "Vocês cobram alguma taxa por venda?",
     resposta:
-      "Claro que não. Você paga apenas uma mensalidade fixa (R$ 289 no cartão ou R$ 329 no boleto), e muitas vezes com uma única venda já cobre essa mensalidade. O restante é lucro pra você. Não cobramos nenhuma taxa sobre as suas vendas.",
+      "Claro que não. Você paga apenas uma mensalidade fixa (R$ 289), e muitas vezes com uma única venda já cobre essa mensalidade. O restante é lucro pra você. Não cobramos nenhuma taxa sobre as suas vendas.",
   },
 ]

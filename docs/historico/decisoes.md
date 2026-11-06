@@ -2875,3 +2875,8 @@ migrado.
   assinatura `CREDIT_CARD` com cartao e `nextDueDate` hoje captura na criacao e
   recusa com 4xx; (2) cancelar a assinatura antiga nao suspende a unidade; (3) o
   2o mes debita sozinho.
+- **Site anuncia so R$ 289 (2026-11-06, decisao do dono).** Landings, FAQ,
+  planos, comparacao e checkout publico nao citam mais o R$ 329. A cobranca
+  nao mudou: PIX/boleto mes a mes segue R$ 329, visivel so na pagina
+  `/cobranca` e no e-mail. Risco aceito pelo dono: anuncio de 289 com boleto a
+  329. Precos de CURSO (R$ 239,90 etc.) nao sao a mensalidade e ficaram.

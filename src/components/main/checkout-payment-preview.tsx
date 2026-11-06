@@ -20,13 +20,13 @@ const paymentMethods: Array<{
   {
     id: "PIX",
     label: "PIX mensal",
-    description: "R$ 329/mês. Receba um QR Code todo mês com 7 dias de antecedência.",
+    description: "Receba um QR Code todo mês com 7 dias de antecedência.",
     icon: QrCode,
   },
   {
     id: "BOLETO",
     label: "Boleto mensal",
-    description: "R$ 329/mês. Boleto enviado por email 7 dias antes do vencimento.",
+    description: "Boleto enviado por email 7 dias antes do vencimento.",
     icon: CalendarCheck,
   },
 ]

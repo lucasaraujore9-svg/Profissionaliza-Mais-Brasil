@@ -78,10 +78,6 @@ export function PlanosPMB() {
               </span>
               <span className="text-base font-medium text-white/60">/mês</span>
             </div>
-            <p className="mt-2 text-sm text-white/70">
-              No cartão, com débito automático. No boleto ou PIX, pagos mês a
-              mês: R$ 329/mês.
-            </p>
 
             <a href="#formulario" className="mt-6 block">
               <Button

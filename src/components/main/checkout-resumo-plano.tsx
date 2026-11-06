@@ -1,8 +1,8 @@
 import { Check, Shield } from "lucide-react"
 
 // Resumo do plano para o checkout direto. Só existe o PRO (com Automação):
-// R$ 289 no cartão (débito automático) ou R$ 329 no PIX/boleto mês a mês —
-// mesmos valores que /api/revendedores/cadastro cobra (lib/resellers/plans.ts).
+// o site anuncia só R$ 289 (decisão do dono, 2026-11-06). O PIX/boleto mês a mês
+// segue cobrando R$ 329 (lib/resellers/plans.ts) — o valor aparece na cobrança.
 const PLAN = {
   name: "Plano Profissionaliza PRO",
   priceLabel: "R$ 289",
@@ -36,8 +36,7 @@ export function CheckoutResumoPlano() {
           <span className="text-sm opacity-80">{PLAN.cadenceLabel}</span>
         </div>
         <p className="mt-1 text-xs opacity-80">
-          No cartão, com débito automático. No PIX ou boleto, pagos mês a
-          mês: R$ 329/mês. Cancele quando quiser.
+          Cobrança recorrente. Cancele quando quiser.
         </p>
       </div>
 

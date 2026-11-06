@@ -23,7 +23,7 @@ export const metadata = {
   title:
     "Seja um parceiro Profissionaliza Mais Brasil — sua escola digital pronta",
   description:
-    "Empreenda na educação com um modelo inovador. Site personalizado, catálogo de cursos profissionalizantes pronto e suporte do Grupo Bolsa Mais Brasil. A partir de R$ 289/mês, sem comissão, com a Automação que vende no WhatsApp por você.",
+    "Empreenda na educação com um modelo inovador. Site personalizado, catálogo de cursos profissionalizantes pronto e suporte do Grupo Bolsa Mais Brasil. R$ 289/mês, sem comissão, com a Automação que vende no WhatsApp por você.",
 }
 
 const faqSchema = {
