@@ -16,6 +16,7 @@ import {
 import {
   isWithinRevealWindow,
   INSTALLMENT_REVEAL_WINDOW_DAYS,
+  currentPlanRow,
 } from "@/lib/installments/schedule"
 import { getSystemSettings } from "@/lib/system-settings"
 import {
@@ -209,11 +210,9 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
                   count:
                     enrollment.installmentsTotal ??
                     enrollment.boletoInstallments.length,
-                  amount: Number(enrollment.boletoInstallments[0]?.amount),
-                  // A parcela em aberto de verdade (a última, se tudo pago).
-                  currentNumber:
-                    enrollment.boletoInstallments.find((r) => r.status !== "PAID")
-                      ?.number ?? enrollment.boletoInstallments.at(-1)?.number,
+                  // A parcela em aberto de verdade (a última, se tudo pago), com o valor dela.
+                  amount: currentPlanRow(enrollment.boletoInstallments)?.amount ?? 0,
+                  currentNumber: currentPlanRow(enrollment.boletoInstallments)?.number,
                 }}
               />
             </aside>

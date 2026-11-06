@@ -108,3 +108,14 @@ export function isOverdue(
   endOfDue.setUTCHours(23, 59, 59, 999)
   return now.getTime() > endOfDue.getTime()
 }
+
+/**
+ * Parcela que o resumo mostra como "Parcela K de N": a 1ª não paga (a última,
+ * se tudo pago), com o valor DELA — parcelas renegociadas têm valores diferentes.
+ */
+export function currentPlanRow(
+  rows: { number: number; amount: unknown; status: string }[],
+): { number: number; amount: number } | null {
+  const row = rows.find((r) => r.status !== "PAID") ?? rows.at(-1)
+  return row ? { number: row.number, amount: Number(row.amount) } : null
+}

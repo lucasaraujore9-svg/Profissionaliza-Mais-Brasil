@@ -14,6 +14,7 @@ import {
 import {
   isWithinRevealWindow,
   INSTALLMENT_REVEAL_WINDOW_DAYS,
+  currentPlanRow,
 } from "@/lib/installments/schedule"
 import {
   MAX_CARD_INSTALLMENTS,
@@ -219,9 +220,10 @@ export default async function PagarPage({ params }: PagarPageProps) {
         }
       }),
     }
+    // "Parcela K de N" mostra o valor da própria K (renegociadas diferem).
+    const planRow = currentPlanRow(enrollment.boletoInstallments)
     const installmentAmount =
-      Number(enrollment.boletoInstallments[0]?.amount) ||
-      Number(enrollment.finalAmount) / installmentCount
+      planRow?.amount || Number(enrollment.finalAmount) / installmentCount
 
     return (
       <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -258,9 +260,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
                   count: installmentCount,
                   amount: installmentAmount,
                   // A parcela em aberto de verdade (a última, se tudo pago).
-                  currentNumber:
-                    enrollment.boletoInstallments.find((r) => r.status !== "PAID")
-                      ?.number ?? enrollment.boletoInstallments.at(-1)?.number,
+                  currentNumber: planRow?.number,
                 }}
               />
             </aside>

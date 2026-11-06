@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
+  currentPlanRow,
   buildInstallmentSchedule,
   installmentAmountsError,
   isWithinRevealWindow,
@@ -99,5 +100,22 @@ describe("isOverdue", () => {
     const later = new Date("2027-01-01T00:00:00Z")
     expect(isOverdue({ dueDate: due, status: "PAID" }, later)).toBe(false)
     expect(isOverdue({ dueDate: due, status: "CANCELLED" }, later)).toBe(false)
+  })
+})
+
+describe("currentPlanRow (F1: \"Parcela K de N\" com o valor da propria K)", () => {
+  it("parcela em aberto com valor proprio (renegociada)", () => {
+    const rows = [
+      { number: 1, amount: 300, status: "PAID" },
+      { number: 2, amount: 120, status: "SCHEDULED" },
+      { number: 3, amount: 100, status: "SCHEDULED" },
+    ]
+    expect(currentPlanRow(rows)).toEqual({ number: 2, amount: 120 })
+  })
+  it("tudo pago: a ultima", () => {
+    expect(currentPlanRow([{ number: 1, amount: 50, status: "PAID" }, { number: 2, amount: 70, status: "PAID" }])).toEqual({ number: 2, amount: 70 })
+  })
+  it("sem linhas: null", () => {
+    expect(currentPlanRow([])).toBeNull()
   })
 })
