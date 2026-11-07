@@ -3,10 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   ArrowUpDown,
-  CreditCard,
   GraduationCap,
   Layers,
-  Repeat,
   Search,
   Server,
   Table2,
@@ -35,7 +33,6 @@ interface AdminCatalogClientProps {
   canEdit?: boolean
 }
 
-type PaymentFilter = "all" | "ONE_TIME" | "MONTHLY"
 type ProviderFilter = "all" | "EA" | "LMS"
 type StatusFilter = "all" | "ATIVO" | "INATIVO"
 type CuradoriaFilter = "all" | "featured" | "override"
@@ -84,7 +81,6 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
   const [providerBulkOpen, setProviderBulkOpen] = useState(false)
 
   const [search, setSearch] = useState("")
-  const [payment, setPayment] = useState<PaymentFilter>("all")
   const [provider, setProvider] = useState<ProviderFilter>("all")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [curadoria, setCuradoria] = useState<CuradoriaFilter>("all")
@@ -123,8 +119,6 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
   const counts = useMemo(
     () => ({
       total: courses.length,
-      oneTime: courses.filter((c) => c.paymentTypeMain !== "MONTHLY").length,
-      monthly: courses.filter((c) => c.paymentTypeMain === "MONTHLY").length,
       ea: courses.filter((c) => c.provider === "EA").length,
       lms: courses.filter((c) => c.provider === "LMS").length,
     }),
@@ -134,8 +128,6 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
     const list = courses.filter((c) => {
-      if (payment === "ONE_TIME" && c.paymentTypeMain === "MONTHLY") return false
-      if (payment === "MONTHLY" && c.paymentTypeMain !== "MONTHLY") return false
       if (provider !== "all" && c.provider !== provider) return false
       if (status !== "all" && c.status !== status) return false
       if (curadoria === "featured" && !c.destaqueHome) return false
@@ -177,11 +169,10 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
         break
     }
     return sorted
-  }, [courses, search, payment, provider, status, curadoria, sort])
+  }, [courses, search, provider, status, curadoria, sort])
 
   const hasFilters =
     search.trim().length > 0 ||
-    payment !== "all" ||
     provider !== "all" ||
     status !== "all" ||
     curadoria !== "all" ||
@@ -189,7 +180,6 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
 
   const resetFilters = () => {
     setSearch("")
-    setPayment("all")
     setProvider("all")
     setStatus("all")
     setCuradoria("all")
@@ -279,35 +269,6 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
 
         <div className="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3 xl:flex-row xl:items-end xl:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row sm:gap-6">
-            <div>
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                Modo de pagamento
-              </span>
-              <div className="inline-flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
-                <SegmentButton
-                  active={payment === "all"}
-                  onClick={() => setPayment("all")}
-                  icon={Layers}
-                  label="Todos"
-                  count={counts.total}
-                />
-                <SegmentButton
-                  active={payment === "ONE_TIME"}
-                  onClick={() => setPayment("ONE_TIME")}
-                  icon={CreditCard}
-                  label="Pagamento único"
-                  count={counts.oneTime}
-                />
-                <SegmentButton
-                  active={payment === "MONTHLY"}
-                  onClick={() => setPayment("MONTHLY")}
-                  icon={Repeat}
-                  label="Mensalidade"
-                  count={counts.monthly}
-                />
-              </div>
-            </div>
-
             <div>
               <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">
                 Plataforma
@@ -422,7 +383,7 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
 }
 
 /* ------------------------------------------------------------------ */
-/* SegmentButton — filtro segmentado por modo de pagamento             */
+/* SegmentButton — filtro segmentado (plataforma)                      */
 /* ------------------------------------------------------------------ */
 
 function SegmentButton({

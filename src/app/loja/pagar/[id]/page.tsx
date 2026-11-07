@@ -104,9 +104,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
       },
       tenantCourse: {
         select: {
-          customParcelas: true,
           customCapaUrl: true,
-          course: { select: { parcelasSugeridas: true, parcelasOverride: true } },
         },
       },
       boletoInstallments: {

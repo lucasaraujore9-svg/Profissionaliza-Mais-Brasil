@@ -1,5 +1,5 @@
 import Image from "next/image"
-import { BookOpen, Users, Pencil, Sparkles, Repeat, EyeOff, Server } from "lucide-react"
+import { BookOpen, Users, Pencil, Sparkles, EyeOff, Server } from "lucide-react"
 
 export type CourseProvider = "EA" | "LMS"
 
@@ -31,8 +31,6 @@ export interface CatalogCourse {
   students: number
   precoVitrineMain?: number | null
   destaqueHome?: boolean
-  paymentTypeMain?: "ONE_TIME" | "MONTHLY"
-  monthlyMonthsMain?: number | null
   hasOverride?: boolean
 }
 
@@ -116,11 +114,6 @@ export function CatalogCourseGrid({ courses, canEdit = false, onEdit, totalCount
                     </span>
                     <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
                       {formatMoney(preco)}
-                      {c.paymentTypeMain === "MONTHLY" && (
-                        <span className="ml-0.5 text-[10px] font-normal text-gray-500">
-                          /mês
-                        </span>
-                      )}
                     </span>
                   </div>
                   <p className="mt-2 text-[10px] font-medium text-gray-500">
@@ -144,14 +137,6 @@ export function CatalogCourseGrid({ courses, canEdit = false, onEdit, totalCount
                     {c.hiddenMain ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
                         <EyeOff className="h-3 w-3" /> Oculto na vitrine
-                      </span>
-                    ) : null}
-                    {c.paymentTypeMain === "MONTHLY" ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-                        <Repeat className="h-3 w-3" />
-                        {c.monthlyMonthsMain
-                          ? `${c.monthlyMonthsMain} mensalidades`
-                          : "Mensalidade"}
                       </span>
                     ) : null}
                     {c.destaqueHome ? (

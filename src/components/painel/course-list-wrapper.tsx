@@ -6,15 +6,12 @@ import { toast } from "sonner"
 import {
   ArrowUpDown,
   BookOpen,
-  CreditCard,
   Eye,
   EyeOff,
   HelpCircle,
   Info,
-  Layers,
   Loader2,
   Pencil,
-  Repeat,
   Search,
   Sparkles,
   Star,
@@ -28,7 +25,6 @@ import type { CourseListItem } from "./course-types"
 import { interestFreeInstallmentsFor } from "@/lib/mercadopago/installments"
 
 type FilterValue = "Todos" | "Visíveis" | "Ocultos" | "Em destaque"
-type PaymentFilter = "all" | "ONE_TIME" | "MONTHLY"
 type SortValue =
   | "ordem"
   | "recent-edit"
@@ -68,7 +64,6 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
   const [bulkOpen, setBulkOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<FilterValue>("Todos")
-  const [payment, setPayment] = useState<PaymentFilter>("all")
   const [sort, setSort] = useState<SortValue>("ordem")
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [tipDismissed, setTipDismissed] = useState(false)
@@ -94,14 +89,12 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
 
   const stats = useMemo(() => {
     if (!courses)
-      return { total: 0, visible: 0, hidden: 0, featured: 0, oneTime: 0, monthly: 0 }
+      return { total: 0, visible: 0, hidden: 0, featured: 0 }
     return {
       total: courses.length,
       visible: courses.filter((c) => c.isVisible).length,
       hidden: courses.filter((c) => !c.isVisible).length,
       featured: courses.filter((c) => c.isFeatured).length,
-      oneTime: courses.filter((c) => c.paymentType === "ONE_TIME").length,
-      monthly: courses.filter((c) => c.paymentType === "MONTHLY").length,
     }
   }, [courses])
 
@@ -111,8 +104,6 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
       if (filter === "Visíveis" && !course.isVisible) return false
       if (filter === "Ocultos" && course.isVisible) return false
       if (filter === "Em destaque" && !course.isFeatured) return false
-      if (payment === "ONE_TIME" && course.paymentType !== "ONE_TIME") return false
-      if (payment === "MONTHLY" && course.paymentType !== "MONTHLY") return false
       if (search.trim()) {
         return course.title.toLowerCase().includes(search.trim().toLowerCase())
       }
@@ -149,7 +140,7 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
         break
     }
     return sorted
-  }, [courses, filter, payment, search, sort])
+  }, [courses, filter, search, sort])
 
   const editingCourse = useMemo(
     () => (editingId ? courses?.find((c) => c.id === editingId) ?? null : null),
@@ -192,14 +183,12 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
 
   const hasFilters =
     filter !== "Todos" ||
-    payment !== "all" ||
     sort !== "ordem" ||
     search.trim().length > 0
 
   const resetFilters = () => {
     setSearch("")
     setFilter("Todos")
-    setPayment("all")
     setSort("ordem")
   }
 
@@ -297,37 +286,8 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
           </div>
         </div>
 
-        {/* Filtro por modo de pagamento + ordenação */}
-        <div className="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-              Modo de pagamento
-            </span>
-            <div className="inline-flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
-              <SegmentButton
-                active={payment === "all"}
-                onClick={() => setPayment("all")}
-                icon={Layers}
-                label="Todos"
-                count={stats.total}
-              />
-              <SegmentButton
-                active={payment === "ONE_TIME"}
-                onClick={() => setPayment("ONE_TIME")}
-                icon={CreditCard}
-                label="Pagamento único"
-                count={stats.oneTime}
-              />
-              <SegmentButton
-                active={payment === "MONTHLY"}
-                onClick={() => setPayment("MONTHLY")}
-                icon={Repeat}
-                label="Mensalidade"
-                count={stats.monthly}
-              />
-            </div>
-          </div>
-
+        {/* Ordenação */}
+        <div className="mt-3 flex justify-end border-t border-gray-100 pt-3">
           <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
             <ArrowUpDown className="h-3.5 w-3.5 text-gray-400" />
             <span className="shrink-0">Ordenar por</span>
@@ -397,11 +357,6 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
               {filtered.length}{" "}
               {filtered.length === 1 ? "curso encontrado" : "cursos encontrados"}
               {filter !== "Todos" ? ` · ${filter.toLowerCase()}` : ""}
-              {payment === "ONE_TIME"
-                ? " · pagamento único"
-                : payment === "MONTHLY"
-                  ? " · mensalidade"
-                  : ""}
             </h3>
             <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
               <Info className="h-3 w-3" />
@@ -431,13 +386,9 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
           ) : (
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filtered.map((c) => {
-                const parcelas = c.parcelas
-                // Pagamento único: o mesmo nº que a vitrine anuncia (com o piso
-                // de R$ 5 por parcela). Mensalidade usa `parcelas` como contagem.
-                const parcelasSemJuros =
-                  c.paymentType === "MONTHLY"
-                    ? null
-                    : interestFreeInstallmentsFor(c.price, parcelas)
+                // O mesmo nº que a vitrine anuncia (nº da unidade, com o piso
+                // de R$ 5 por parcela). Curso não tem parcelas próprias.
+                const parcelasSemJuros = interestFreeInstallmentsFor(c.price, c.parcelas)
                 const valorParcela = parcelasSemJuros
                   ? c.price / parcelasSemJuros
                   : null
@@ -527,19 +478,8 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
                         <div>
                           <p className="font-mono text-sm font-bold text-[var(--color-pmb-green-900)]">
                             {formatBRL(c.price)}
-                            {c.paymentType === "MONTHLY" && (
-                              <span className="text-[11px] font-medium text-gray-500">
-                                {" "}/mês
-                              </span>
-                            )}
                           </p>
-                          {c.paymentType === "MONTHLY" ? (
-                            <p className="text-[11px] text-gray-500">
-                              {parcelas
-                                ? `${parcelas} ${parcelas === 1 ? "mensalidade" : "mensalidades"}`
-                                : "Mensalidade recorrente"}
-                            </p>
-                          ) : valorParcela ? (
+                          {valorParcela ? (
                             <p className="text-[11px] text-gray-500">
                               {parcelasSemJuros}x de {formatBRL(valorParcela)}
                             </p>
@@ -556,11 +496,6 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
                         {c.hasCustomDescription && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-pmb-mist)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-pmb-green-900)]">
                             <Sparkles className="h-3 w-3" /> descrição
-                          </span>
-                        )}
-                        {c.hasCustomParcelas && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-pmb-mist)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-pmb-green-900)]">
-                            <Sparkles className="h-3 w-3" /> parcelas
                           </span>
                         )}
                         {canManage && (
@@ -598,49 +533,6 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
         }}
       />
     </>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/* SegmentButton — botão de filtro segmentado (modo de pagamento)      */
-/* ------------------------------------------------------------------ */
-
-function SegmentButton({
-  active,
-  onClick,
-  icon: Icon,
-  label,
-  count,
-}: {
-  active: boolean
-  onClick: () => void
-  icon: typeof BookOpen
-  label: string
-  count: number
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-        active
-          ? "bg-white text-[var(--color-pmb-green-900)] shadow-sm"
-          : "text-gray-500 hover:text-[var(--color-pmb-green-900)]"
-      }`}
-    >
-      <Icon className="h-3.5 w-3.5" />
-      {label}
-      <span
-        className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-          active
-            ? "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]"
-            : "bg-gray-200 text-gray-500"
-        }`}
-      >
-        {count}
-      </span>
-    </button>
   )
 }
 

@@ -2966,9 +2966,9 @@ Spec: `docs/superpowers/specs/2026-11-06-venda-direta-parcelada-design.md`.
   null`, PATCH do admin grava `ONE_TIME` + `monthlyMonthsMain null`.
 - **Ficou:** matrículas MONTHLY antigas e webhooks; `vitrineCoursePrice` (vira
   no-op); o default "curso mensal" da venda direta (sem uso). Vitrine, home e
-  cards já tiravam o "Nx sem juros" do nº global, não do curso. Leituras legadas
-  que sobraram (decisão pendente do dono): `maxInstallments` de
-  `/api/loja/checkout` ainda é `customParcelas ?? parcelasOverride ??
-  parcelasSugeridas ?? 12` (nenhum formulário lê esse campo); o selo "parcelas"
-  (`hasCustomParcelas`) e o filtro "Mensalidade" da lista do painel, e o selo/
-  filtro MONTHLY do `/admin/catalogo`, ficam mortos depois da migração.
+  cards já tiravam o "Nx sem juros" do nº global, não do curso.
+- **Sobras removidas:** `maxInstallments` morto de `/api/loja/checkout`
+  (`customParcelas ?? parcelasOverride ?? parcelasSugeridas`, nenhum formulário
+  lia), o selo "parcelas" (`hasCustomParcelas`) e o filtro/selo "Mensalidade" da
+  lista do painel e do `/admin/catalogo`. Os valores antigos de
+  `parcelas_override`/`custom_parcelas` ficam no banco sem leitor (inofensivos).

@@ -13,14 +13,13 @@ export interface CourseListItem {
   qtdAulas: number
   cargaHoraria: string | null
   price: number
+  /** Nº de parcelas sem juros da UNIDADE (o curso não tem parcelas próprias). */
   parcelas: number | null
-  paymentType: "ONE_TIME" | "MONTHLY"
   isVisible: boolean
   isFeatured: boolean
   customOrder: number
   hasCustomCapa?: boolean
   hasCustomDescription?: boolean
-  hasCustomParcelas?: boolean
   enrollmentsCount: number
   createdAt?: string
   updatedAt?: string

@@ -207,8 +207,6 @@ export const POST = withRequestContext(
             select: {
               slug: true,
               monthlyMonthsMain: true,
-              parcelasSugeridas: true,
-              parcelasOverride: true,
               // Sem estas colunas o curso de autoria se apresenta como curso
               // comum da PMB e a venda sai SEM rateio: o produtor nunca recebe
               // e ninguem percebe.
@@ -535,12 +533,6 @@ export const POST = withRequestContext(
           amount: reusedAmount,
           publicKey: tenant.mpPublicKey,
           payerEmail: student.email ?? data.email,
-          maxInstallments: isMonthlyReuse
-            ? 1
-            : tenantCourse.customParcelas ??
-              tenantCourse.course.parcelasOverride ??
-              tenantCourse.course.parcelasSugeridas ??
-              12,
           installmentsTotal: existingEnrollment.installmentsTotal,
         },
       })
@@ -639,13 +631,6 @@ export const POST = withRequestContext(
       data: { externalReference },
     })
 
-    // Parcelas máximas oferecidas no cartão.
-    const maxInstallments =
-      tenantCourse.customParcelas ??
-      tenantCourse.course.parcelasOverride ??
-      tenantCourse.course.parcelasSugeridas ??
-      12
-
     return NextResponse.json({
       data: {
         enrollmentId: enrollment.id,
@@ -654,7 +639,6 @@ export const POST = withRequestContext(
         amount: finalAmount,
         publicKey: tenant.mpPublicKey,
         payerEmail: student.email ?? data.email,
-        maxInstallments,
         installmentsTotal: null,
       },
     })

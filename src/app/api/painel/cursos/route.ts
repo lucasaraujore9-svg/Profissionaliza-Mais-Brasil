@@ -20,7 +20,8 @@ export const GET = withRequestContext(
     // curso ATIVO do catálogo global (cria apenas o que falta).
     await ensureTenantCourses(ctx.tenantId)
 
-    // Parcelas sem juros que a vitrine desta unidade anuncia no pagamento único
+    // Parcelas sem juros que a vitrine desta unidade anuncia (curso nao tem
+    // parcelas proprias desde 2026-11-06)
     // (espelha a vitrine; ver mapTenantCourseItem). null quando o checkout dela
     // não parcela o cartão.
     const tenant = await prisma.tenant.findUnique({
@@ -47,8 +48,6 @@ export const GET = withRequestContext(
             capaOverride: true,
             qtdAulas: true,
             cargaHoraria: true,
-            parcelasSugeridas: true,
-            parcelasOverride: true,
           },
         },
         _count: { select: { enrollments: true } },
@@ -70,21 +69,13 @@ export const GET = withRequestContext(
         qtdAulas: tc.course.qtdAulas,
         cargaHoraria: tc.course.cargaHoraria,
         price: Number(tc.price),
-        // ONE_TIME: "Nx sem juros" vem do nº global da unidade (espelha a
-        // vitrine). MONTHLY: o número exibido é a quantidade de mensalidades.
-        parcelas:
-          tc.paymentType === "MONTHLY"
-            ? tc.customParcelas ??
-              tc.course.parcelasOverride ??
-              tc.course.parcelasSugeridas
-            : interestFree,
-        paymentType: tc.paymentType,
+        // "Nx sem juros": nº global da unidade (espelha a vitrine).
+        parcelas: interestFree,
         isVisible: tc.isVisible,
         isFeatured: tc.isFeatured,
         customOrder: tc.customOrder,
         hasCustomCapa: tc.customCapaUrl != null,
         hasCustomDescription: tc.customDescription != null,
-        hasCustomParcelas: tc.customParcelas != null,
         enrollmentsCount: tc._count.enrollments,
         createdAt: tc.createdAt.toISOString(),
         updatedAt: tc.updatedAt.toISOString(),
