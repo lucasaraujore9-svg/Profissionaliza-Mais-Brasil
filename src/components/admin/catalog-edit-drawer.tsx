@@ -43,11 +43,7 @@ interface CourseDetail {
   categoryIds: string[]
   categories: { id: string; name: string; slug: string }[]
   status: string
-  parcelasSugeridas: number | null
-  parcelasOverride: number | null
   hiddenMain: boolean
-  paymentTypeMain: "ONE_TIME" | "MONTHLY"
-  monthlyMonthsMain: number | null
   visibilityMode: "ALL" | "ALLOWLIST" | "DENYLIST"
   allowedTenantIds: string[]
   blockedTenantIds: string[]
@@ -145,16 +141,10 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
       descricaoOverride: detail.descricaoOverride,
       aprendizado: parseAprendizado(aprendizadoText),
       capaOverride: detail.capaOverride,
-      parcelasOverride: detail.parcelasOverride,
       categoriaLoja: detail.categoriaLoja,
       categoryIds: detail.categoryIds,
       status: visibility === "none" ? "INATIVO" : "ATIVO",
       hiddenMain: visibility === "main_only_hidden",
-      paymentTypeMain: detail.paymentTypeMain,
-      monthlyMonthsMain:
-        detail.paymentTypeMain === "MONTHLY"
-          ? detail.monthlyMonthsMain ?? 12
-          : null,
       visibilityMode: detail.visibilityMode,
       // Envia apenas a lista relevante (zera a outra para evitar lixo)
       allowedTenantIds:
@@ -206,94 +196,8 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
             </div>
 
             <div>
-              <label id="payment-type-label" className="text-xs font-semibold text-gray-700">
-                Forma de pagamento
-              </label>
-              <div
-                role="group"
-                aria-labelledby="payment-type-label"
-                className="mt-1 grid grid-cols-2 gap-2"
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDetail({
-                      ...detail,
-                      paymentTypeMain: "ONE_TIME",
-                      monthlyMonthsMain: null,
-                    })
-                  }
-                  className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${
-                    detail.paymentTypeMain === "ONE_TIME"
-                      ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
-                      : "border-gray-200 bg-white hover:border-gray-300"
-                  }`}
-                >
-                  <div className="font-bold text-[var(--color-pmb-green-900)]">
-                    Pagamento único
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-gray-500">
-                    À vista ou parcelado no cartão
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDetail({
-                      ...detail,
-                      paymentTypeMain: "MONTHLY",
-                      monthlyMonthsMain: detail.monthlyMonthsMain ?? 12,
-                    })
-                  }
-                  className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${
-                    detail.paymentTypeMain === "MONTHLY"
-                      ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
-                      : "border-gray-200 bg-white hover:border-gray-300"
-                  }`}
-                >
-                  <div className="font-bold text-[var(--color-pmb-green-900)]">
-                    Mensalidade
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-gray-500">
-                    Cobrança recorrente no mesmo dia
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {detail.paymentTypeMain === "MONTHLY" && (
-              <div>
-                <label htmlFor="monthly-months" className="text-xs font-semibold text-gray-700">
-                  Quantidade de mensalidades
-                </label>
-                <input
-                  id="monthly-months"
-                  type="number"
-                  min={1}
-                  max={60}
-                  value={detail.monthlyMonthsMain ?? ""}
-                  onChange={(e) =>
-                    setDetail({
-                      ...detail,
-                      monthlyMonthsMain:
-                        e.target.value === "" ? null : Number(e.target.value),
-                    })
-                  }
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Ex: 12"
-                />
-                <p className="mt-1 text-[11px] text-gray-500">
-                  Número de cobranças mensais que o aluno fará. Ex: 12 = um ano de
-                  curso.
-                </p>
-              </div>
-            )}
-
-            <div>
               <label htmlFor="preco-vitrine-main" className="text-xs font-semibold text-gray-700">
-                {detail.paymentTypeMain === "MONTHLY"
-                  ? "Valor da mensalidade (R$)"
-                  : "Preço vitrine principal (R$)"}
+                Preço total na vitrine principal (R$)
               </label>
               <input
                 id="preco-vitrine-main"
@@ -311,39 +215,8 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
                 placeholder={detail.precoOriginal ? String(detail.precoOriginal) : "Ex: 197.00"}
               />
               <p className="mt-1 text-[11px] text-gray-500">
-                {detail.paymentTypeMain === "MONTHLY"
-                  ? "Valor cobrado por mês do aluno na vitrine PMB."
-                  : "Preço usado na vitrine PMB. Revendedores definem o próprio."}
+                Preço usado na vitrine PMB. Revendedores definem o próprio.
               </p>
-              {detail.paymentTypeMain === "MONTHLY" &&
-                detail.precoVitrineMain !== null &&
-                detail.monthlyMonthsMain &&
-                detail.monthlyMonthsMain > 0 && (
-                  <div className="mt-2 rounded-lg border border-[rgba(2,89,24,0.15)] bg-[var(--color-pmb-lime-50)]/40 px-3 py-2 text-xs text-[var(--color-pmb-green-900)]">
-                    <strong>{detail.monthlyMonthsMain}</strong>{" "}
-                    {detail.monthlyMonthsMain === 1
-                      ? "mensalidade"
-                      : "mensalidades"}{" "}
-                    de{" "}
-                    <strong className="font-mono">
-                      {detail.precoVitrineMain.toLocaleString("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      })}
-                    </strong>
-                    <div className="mt-0.5 text-[11px] text-gray-600">
-                      Total ao final:{" "}
-                      <span className="font-mono">
-                        {(
-                          detail.precoVitrineMain * detail.monthlyMonthsMain
-                        ).toLocaleString("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
-                        })}
-                      </span>
-                    </div>
-                  </div>
-                )}
             </div>
 
             <div>
@@ -515,37 +388,6 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
                 generico.
               </p>
             </div>
-
-            {detail.paymentTypeMain === "ONE_TIME" && (
-            <div>
-              <label htmlFor="parcelas-override" className="text-xs font-semibold text-gray-700">
-                Parcelas (override) — vazio usa o padrão importado
-                {detail.parcelasSugeridas
-                  ? ` (${detail.parcelasSugeridas}x)`
-                  : ""}
-              </label>
-              <input
-                id="parcelas-override"
-                type="number"
-                min={1}
-                max={24}
-                value={detail.parcelasOverride ?? ""}
-                onChange={(e) =>
-                  setDetail({
-                    ...detail,
-                    parcelasOverride:
-                      e.target.value === "" ? null : Number(e.target.value),
-                  })
-                }
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                placeholder={
-                  detail.parcelasSugeridas
-                    ? String(detail.parcelasSugeridas)
-                    : "Ex: 12"
-                }
-              />
-            </div>
-            )}
 
             <fieldset className="rounded-lg border border-gray-200 p-4">
               <legend className="px-2 text-xs font-bold uppercase tracking-wide text-gray-600">

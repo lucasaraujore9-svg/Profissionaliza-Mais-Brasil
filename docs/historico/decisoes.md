@@ -2946,3 +2946,29 @@ Spec: `docs/superpowers/specs/2026-11-06-venda-direta-parcelada-design.md`.
 - **Não validado contra os gateways reais.** Pendente (dono, Chrome real por
   causa do BotID): uma venda de valor baixo por gateway, entrada no PIX, 1ª
   parcela no cartão e um boleto; recusa de cartão nos dois. Não anunciar antes.
+
+### Curso sem forma de pagamento: fim do MONTHLY no cadastro (2026-11-06)
+
+- **Decisão do dono:** a edição de curso (painel `/painel/cursos`, catálogo
+  `/admin/catalogo`, planilha em massa) não oferece mais "Forma de pagamento"
+  nem "Quantidade de mensalidades"/parcelas por curso. Venda parcelada só na
+  venda direta ("Parcelado"). O cartão parcela para todos no checkout; o que a
+  unidade configura é só o nº sem juros (`Tenant.interestFreeInstallments`).
+- **Migração** `20261106_course_monthly_to_total`: `tenant_courses` e `courses`
+  MONTHLY viram ONE_TIME pelo TOTAL que a vitrine já cobrava (preço e "De" ×
+  meses, `tenantCourseMonths`). Na PMB, curso sem override (`preco_vitrine_main`
+  NULL) cobrava o preço do FEED × meses: o total é materializado em
+  `preco_vitrine_main` (o feed segue sendo a mensalidade e é reescrito pelo
+  sync). Idempotente: a 2ª execução não acha MONTHLY.
+- **APIs:** `paymentType`/`customParcelas` (painel) e `paymentTypeMain`/
+  `monthlyMonthsMain`/`parcelasOverride` (admin) saíram dos schemas Zod
+  (descartados se vierem); PUT do painel grava `ONE_TIME` + `customParcelas
+  null`, PATCH do admin grava `ONE_TIME` + `monthlyMonthsMain null`.
+- **Ficou:** matrículas MONTHLY antigas e webhooks; `vitrineCoursePrice` (vira
+  no-op); o default "curso mensal" da venda direta (sem uso). Vitrine, home e
+  cards já tiravam o "Nx sem juros" do nº global, não do curso. Leituras legadas
+  que sobraram (decisão pendente do dono): `maxInstallments` de
+  `/api/loja/checkout` ainda é `customParcelas ?? parcelasOverride ??
+  parcelasSugeridas ?? 12` (nenhum formulário lê esse campo); o selo "parcelas"
+  (`hasCustomParcelas`) e o filtro "Mensalidade" da lista do painel, e o selo/
+  filtro MONTHLY do `/admin/catalogo`, ficam mortos depois da migração.

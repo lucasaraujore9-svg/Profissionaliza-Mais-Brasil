@@ -26,7 +26,6 @@ const patchSchema = z.object({
   descricaoOverride: z.string().nullable().optional(),
   aprendizado: aprendizadoSchema.optional(),
   capaOverride: z.string().url().nullable().optional(),
-  parcelasOverride: z.number().int().min(1).max(24).nullable().optional(),
   categoriaLoja: z.string().nullable().optional(),
   // Categoria principal (legado/compat). Continua aceito, mas `categoryIds`
   // tem prioridade quando enviado.
@@ -36,8 +35,10 @@ const patchSchema = z.object({
   categoryIds: z.array(z.string().cuid()).optional(),
   status: z.enum(["ATIVO", "INATIVO"]).optional(),
   hiddenMain: z.boolean().optional(),
-  paymentTypeMain: z.enum(["ONE_TIME", "MONTHLY"]).optional(),
-  monthlyMonthsMain: z.number().int().min(1).max(60).nullable().optional(),
+  // Curso nao tem mais forma de pagamento nem parcelas proprias (decisao do
+  // dono 2026-11-06): parcelado so na venda direta. `paymentTypeMain`,
+  // `monthlyMonthsMain` e `parcelasOverride` de cliente antigo sao descartados
+  // pelo z.object; o PATCH grava ONE_TIME (o preco e o TOTAL).
   visibilityMode: z.enum(["ALL", "ALLOWLIST", "DENYLIST"]).optional(),
   allowedTenantIds: z.array(z.string().cuid()).optional(),
   blockedTenantIds: z.array(z.string().cuid()).optional(),
@@ -80,11 +81,7 @@ export const GET = withRequestContextParams<{ id: string }>(
       descricaoOverride: true,
       aprendizado: true,
       capaOverride: true,
-      parcelasSugeridas: true,
-      parcelasOverride: true,
       hiddenMain: true,
-      paymentTypeMain: true,
-      monthlyMonthsMain: true,
     },
   })
   if (!course) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
@@ -175,15 +172,6 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     }
   }
 
-  // Se mudou para ONE_TIME, zera monthlyMonthsMain. Se MONTHLY sem meses,
-  // garante um default razoavel.
-  if (data.paymentTypeMain === "ONE_TIME") {
-    data.monthlyMonthsMain = null
-  }
-  if (data.paymentTypeMain === "MONTHLY" && data.monthlyMonthsMain === undefined) {
-    data.monthlyMonthsMain = 12
-  }
-
   // Normaliza a entrada de categorias: `categoryIds` (M2M) tem prioridade;
   // se vier so o legado `categoryId`, deriva a lista a partir dele para manter
   // join e categoria principal consistentes.
@@ -222,7 +210,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 
   const updated = await prisma.course.update({
     where: { id },
-    data,
+    data: { ...data, paymentTypeMain: "ONE_TIME", monthlyMonthsMain: null },
     select: {
       id: true,
       precoVitrineMain: true,
@@ -232,7 +220,6 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       descricaoOverride: true,
       aprendizado: true,
       capaOverride: true,
-      parcelasOverride: true,
       categoriaLoja: true,
       categoryId: true,
       visibilityMode: true,
@@ -240,8 +227,6 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       blockedTenantIds: true,
       status: true,
       hiddenMain: true,
-      paymentTypeMain: true,
-      monthlyMonthsMain: true,
     },
   })
 

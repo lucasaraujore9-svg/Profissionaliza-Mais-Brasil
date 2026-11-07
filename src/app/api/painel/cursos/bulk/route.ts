@@ -22,8 +22,8 @@ const BULK_CONCURRENCY = 10
 
 /* ------------------------------------------------------------------ */
 /* GET — dados enxutos para a edição em massa (planilha)               */
-/* Retorna apenas os campos editáveis em lote: preço, parcelas sem     */
-/* juros (informativo) e descrição customizada.                        */
+/* Retorna apenas os campos editáveis em lote: preço, "De",            */
+/* descrição e "o que vai aprender".                                    */
 /* ------------------------------------------------------------------ */
 export const GET = withRequestContext(
   { action: "painel.cursos.bulk.list", route: "/api/painel/cursos/bulk" },
@@ -43,7 +43,6 @@ export const GET = withRequestContext(
             nome: true,
             descricao: true,
             descricaoOverride: true,
-            monthlyMonthsMain: true,
             aprendizado: true,
           },
         },
@@ -56,9 +55,6 @@ export const GET = withRequestContext(
         title: tc.course.nome,
         price: Number(tc.price),
         precoDe: tc.precoDe != null ? Number(tc.precoDe) : null,
-        paymentType: tc.paymentType,
-        customParcelas: tc.customParcelas,
-        defaultParcelas: tc.course.monthlyMonthsMain,
         customDescription: tc.customDescription,
         defaultDescription:
           tc.course.descricaoOverride ?? tc.course.descricao,
@@ -71,15 +67,15 @@ export const GET = withRequestContext(
 
 /* ------------------------------------------------------------------ */
 /* PUT — atualização em lote                                            */
-/* Aceita só os campos da planilha. Não toca em paymentType,           */
-/* visibilidade, destaque, capa, etc.                                  */
+/* Aceita só os campos da planilha. Não toca em visibilidade, destaque, */
+/* capa, etc. Parcelas por curso não existem mais (2026-11-06):        */
+/* `customParcelas` de cliente antigo é descartado pelo z.object.      */
 /* ------------------------------------------------------------------ */
 const itemSchema = z.object({
   id: z.string().min(1),
   price: z.number().positive("Preço deve ser maior que zero").optional(),
   // Preco de tabela ("De R$ X"). null = limpar (a vitrine deixa de exibir "De").
   precoDe: z.number().positive().nullable().optional(),
-  customParcelas: z.number().int().min(1).max(24).nullable().optional(),
   customDescription: z.string().trim().max(2000).nullable().optional(),
   // Lista vazia = volta ao padrão definido pela PMB no catálogo mãe.
   customAprendizado: z
@@ -216,9 +212,6 @@ export const PUT = withRequestContext(
         data: {
           ...(it.price !== undefined && { price: it.price }),
           ...(it.precoDe !== undefined && { precoDe: it.precoDe }),
-          ...(it.customParcelas !== undefined && {
-            customParcelas: it.customParcelas,
-          }),
           ...(it.customDescription !== undefined && {
             customDescription: it.customDescription,
           }),

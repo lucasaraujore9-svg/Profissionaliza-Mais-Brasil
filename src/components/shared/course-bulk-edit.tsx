@@ -18,9 +18,6 @@ interface BulkRow {
   title: string
   price: number
   precoDe: number | null
-  paymentType: "ONE_TIME" | "MONTHLY"
-  customParcelas: number | null
-  defaultParcelas: number | null
   customDescription: string | null
   defaultDescription: string | null
   customAprendizado: string[]
@@ -35,7 +32,7 @@ interface CourseBulkEditProps {
   endpoint: string
   title?: string
   subtitle?: string
-  /** Texto do aviso sobre parcelas / escopo das alterações. */
+  /** Texto do aviso sobre parcelamento sem juros / escopo das alterações. */
   scopeNote?: React.ReactNode
 }
 
@@ -345,11 +342,6 @@ export function CourseBulkEdit({
                         <div className="font-medium leading-snug text-[var(--color-pmb-green-900)]">
                           {row.title}
                         </div>
-                        {row.paymentType === "MONTHLY" && (
-                          <span className="mt-0.5 inline-block text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                            mensalidade
-                          </span>
-                        )}
                       </td>
                       <td className="px-3 py-3">
                         <input

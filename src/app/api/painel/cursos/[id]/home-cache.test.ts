@@ -62,3 +62,18 @@ describe("edicao de curso no painel limpa o cache da home", () => {
     expect(invalidateHomeCache).toHaveBeenCalledWith(T)
   })
 })
+
+// Curso nao tem mais forma de pagamento nem parcelas proprias (2026-11-06):
+// cliente antigo mandando MONTHLY/customParcelas nao pode recriar mensalidade.
+describe("edicao de curso no painel grava sempre pagamento unico", () => {
+  it("descarta MONTHLY e customParcelas e grava ONE_TIME sem parcelas", async () => {
+    const res = await PUT(
+      req("PUT", { price: 199.9, paymentType: "MONTHLY", customParcelas: 6 }),
+      params,
+    )
+    expect(res.status).toBe(200)
+    const data = db.tenantCourse.update.mock.calls[0][0].data
+    expect(data.paymentType).toBe("ONE_TIME")
+    expect(data.customParcelas).toBeNull()
+  })
+})

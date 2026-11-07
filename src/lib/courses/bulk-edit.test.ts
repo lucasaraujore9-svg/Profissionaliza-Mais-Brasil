@@ -28,7 +28,6 @@ describe("buildBulkItems", () => {
     title: "Curso com preço",
     price: 197.9,
     precoDe: null,
-    customParcelas: null,
     customDescription: null,
     customAprendizado: [],
   }
@@ -38,44 +37,43 @@ describe("buildBulkItems", () => {
     title: "Curso sem preço",
     price: 0,
     precoDe: null,
-    customParcelas: null,
     customDescription: null,
     customAprendizado: [],
   }
 
-  it("envia somente os campos alterados (parcelas) sem tocar no preço", () => {
+  it("envia somente os campos alterados (descrição) sem tocar no preço", () => {
     const rows = [priced]
     const drafts = rowsToDrafts(rows)
-    drafts.a = { ...drafts.a, parcelas: "12" }
+    drafts.a = { ...drafts.a, description: "Nova descrição" }
 
     const res = buildBulkItems(rows, drafts, new Set(["a"]))
     expect(res.ok).toBe(true)
     if (!res.ok) return
-    expect(res.items).toEqual([{ id: "a", customParcelas: 12 }])
+    expect(res.items).toEqual([{ id: "a", customDescription: "Nova descrição" }])
     // preço não foi incluído porque não mudou
     expect(res.items[0]).not.toHaveProperty("price")
   })
 
-  it("REGRESSÃO: mudar parcelas de um curso sem preço não dispara erro de preço", () => {
+  it("REGRESSÃO: mudar a descrição de um curso sem preço não dispara erro de preço", () => {
     const rows = [free]
     const drafts = rowsToDrafts(rows)
-    drafts.b = { ...drafts.b, parcelas: "10" }
+    drafts.b = { ...drafts.b, description: "Texto" }
 
     const res = buildBulkItems(rows, drafts, new Set(["b"]))
     expect(res.ok).toBe(true)
     if (!res.ok) return
-    expect(res.items).toEqual([{ id: "b", customParcelas: 10 }])
+    expect(res.items).toEqual([{ id: "b", customDescription: "Texto" }])
   })
 
-  it("limpa parcelas (volta ao padrão) enviando null", () => {
-    const rows = [{ ...priced, customParcelas: 12 }]
+  it("limpa a descrição (volta ao padrão) enviando null", () => {
+    const rows = [{ ...priced, customDescription: "Própria" }]
     const drafts = rowsToDrafts(rows)
-    drafts.a = { ...drafts.a, parcelas: "" }
+    drafts.a = { ...drafts.a, description: "" }
 
     const res = buildBulkItems(rows, drafts, new Set(["a"]))
     expect(res.ok).toBe(true)
     if (!res.ok) return
-    expect(res.items).toEqual([{ id: "a", customParcelas: null }])
+    expect(res.items).toEqual([{ id: "a", customDescription: null }])
   })
 
   it("valida preço apenas quando o preço foi alterado", () => {
@@ -89,32 +87,20 @@ describe("buildBulkItems", () => {
     expect(res.error).toContain("Preço inválido")
   })
 
-  it("rejeita parcelas fora do intervalo 1–24", () => {
-    const rows = [priced]
-    const drafts = rowsToDrafts(rows)
-    drafts.a = { ...drafts.a, parcelas: "36" }
-
-    const res = buildBulkItems(rows, drafts, new Set(["a"]))
-    expect(res.ok).toBe(false)
-    if (res.ok) return
-    expect(res.error).toContain("entre 1 e 24")
-  })
-
-  it("envia preço e parcelas juntos quando ambos mudaram", () => {
+  it("envia preço e descrição juntos quando ambos mudaram", () => {
     const rows = [priced]
     const drafts = rowsToDrafts(rows)
     drafts.a = {
       price: "250,00",
       precoDe: "",
-      parcelas: "6",
-      description: "",
+      description: "Nova",
       aprendizado: "",
     }
 
     const res = buildBulkItems(rows, drafts, new Set(["a"]))
     expect(res.ok).toBe(true)
     if (!res.ok) return
-    expect(res.items).toEqual([{ id: "a", price: 250, customParcelas: 6 }])
+    expect(res.items).toEqual([{ id: "a", price: 250, customDescription: "Nova" }])
   })
 
   it("envia o 'vai aprender' como lista, uma linha por item", () => {
@@ -222,7 +208,7 @@ describe("buildBulkItems", () => {
   it("ignora linhas não marcadas como alteradas", () => {
     const rows = [priced, free]
     const drafts = rowsToDrafts(rows)
-    drafts.a = { ...drafts.a, parcelas: "12" }
+    drafts.a = { ...drafts.a, description: "Nova" }
 
     const res = buildBulkItems(rows, drafts, new Set(["a"]))
     expect(res.ok).toBe(true)

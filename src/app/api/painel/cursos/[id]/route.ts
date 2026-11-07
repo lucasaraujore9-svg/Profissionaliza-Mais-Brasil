@@ -5,28 +5,20 @@ import { validateTenantCoursePrice } from "@/lib/course-authoring/split-server"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { invalidateHomeCache } from "@/lib/home/cache"
-import { monthlyActive } from "@/lib/tenant/monthly-policy"
 import {
   APRENDIZADO_MAX_ITEMS,
   APRENDIZADO_MAX_LEN,
 } from "@/lib/courses/aprendizado"
 
-async function tenantMonthlyActive(tenantId: string): Promise<boolean> {
-  const t = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { monthlyAllowed: true, monthlyEnabled: true, monthlyScope: true },
-  })
-  return t ? monthlyActive(t) : false
-}
-
 const updateSchema = z.object({
   price: z.number().positive("Preço deve ser maior que zero"),
   // Preco de tabela desta vitrine ("De R$ X" riscado). null = sem "De".
   precoDe: z.number().positive().nullable().optional(),
-  paymentType: z.enum(["ONE_TIME", "MONTHLY"]),
+  // Curso nao tem mais forma de pagamento nem parcelas proprias (decisao do
+  // dono 2026-11-06): parcelado so na venda direta. `paymentType` e
+  // `customParcelas` vindos de cliente antigo sao descartados pelo z.object.
   customDescription: z.string().trim().max(2000).nullable().optional(),
   customCapaUrl: z.string().url().nullable().optional(),
-  customParcelas: z.number().int().min(1).max(24).nullable().optional(),
   // Lista vazia = "voltar ao padrão da PMB" (não existe "esconder a seção").
   customAprendizado: z
     .array(z.string().trim().min(1).max(APRENDIZADO_MAX_LEN))
@@ -68,15 +60,11 @@ export const GET = withRequestContextParams<{ id: string }>(
       return NextResponse.json({ error: "Curso não encontrado" }, { status: 404 })
     }
 
-    const monthlyAvailable = await tenantMonthlyActive(ctx.tenantId)
-
     return NextResponse.json({
       data: {
         id: tc.id,
         courseId: tc.courseId,
         title: tc.course.nome,
-        // Se false, o painel mantem o botao "Mensalidade" visivel porem travado.
-        monthlyAvailable,
         // Hierarquia: tenant > admin > plataforma bruto
         description:
           tc.customDescription ??
@@ -88,23 +76,14 @@ export const GET = withRequestContextParams<{ id: string }>(
         cargaHoraria: tc.course.cargaHoraria,
         price: Number(tc.price),
         precoDe: tc.precoDe != null ? Number(tc.precoDe) : null,
-        parcelas:
-          tc.customParcelas ??
-          tc.course.parcelasOverride ??
-          tc.course.parcelasSugeridas,
-        paymentType: tc.paymentType,
         isVisible: tc.isVisible,
         isFeatured: tc.isFeatured,
         customOrder: tc.customOrder,
         customDescription: tc.customDescription,
         customCapaUrl: tc.customCapaUrl,
-        customParcelas: tc.customParcelas,
         customAprendizado: tc.customAprendizado,
         // Defaults vindos do catálogo (úteis pro form mostrar "valor padrão")
         defaultCapaUrl: tc.course.capaOverride ?? tc.course.capaImageUrl,
-        // Padrão de "Quantidade de mensalidades" — o mesmo que a venda e a
-        // vitrine usam quando a unidade não define (tenantCourseMonths).
-        defaultParcelas: tc.course.monthlyMonthsMain,
         defaultDescription: tc.course.descricaoOverride ?? tc.course.descricao,
         // Padrão definido pela PMB no catálogo mãe (vazio => texto genérico,
         // que o painel exibe como placeholder).
@@ -179,33 +158,17 @@ export const PUT = withRequestContextParams<{ id: string }>(
       )
     }
 
-    // Trava: so permite marcar MONTHLY se a unidade tem parcelado habilitado
-    // (admin liberou E revendedor ativou).
-    if (
-      parsed.data.paymentType === "MONTHLY" &&
-      !(await tenantMonthlyActive(ctx.tenantId))
-    ) {
-      return NextResponse.json(
-        {
-          error: "Mensalidade não está habilitada para esta unidade.",
-          code: "MONTHLY_NOT_ALLOWED",
-        },
-        { status: 400 },
-      )
-    }
-
     const updated = await prisma.tenantCourse.update({
       where: { id },
       data: {
         price: parsed.data.price,
-        paymentType: parsed.data.paymentType,
+        // Salvar sempre normaliza: o preco digitado e o TOTAL.
+        paymentType: "ONE_TIME",
+        customParcelas: null,
         ...(parsed.data.precoDe !== undefined && { precoDe: parsed.data.precoDe }),
         customDescription: parsed.data.customDescription ?? null,
         ...(parsed.data.customCapaUrl !== undefined && {
           customCapaUrl: parsed.data.customCapaUrl,
-        }),
-        ...(parsed.data.customParcelas !== undefined && {
-          customParcelas: parsed.data.customParcelas,
         }),
         ...(parsed.data.customAprendizado !== undefined && {
           customAprendizado: parsed.data.customAprendizado,
@@ -227,7 +190,6 @@ export const PUT = withRequestContextParams<{ id: string }>(
         paymentType: updated.paymentType,
         customDescription: updated.customDescription,
         customCapaUrl: updated.customCapaUrl,
-        customParcelas: updated.customParcelas,
         customAprendizado: updated.customAprendizado,
         isVisible: updated.isVisible,
         isFeatured: updated.isFeatured,

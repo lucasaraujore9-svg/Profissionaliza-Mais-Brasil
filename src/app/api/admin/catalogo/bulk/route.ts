@@ -21,8 +21,8 @@ const BULK_CONCURRENCY = 10
 
 /* ------------------------------------------------------------------ */
 /* GET — dados enxutos para a edição em massa (planilha) do catálogo   */
-/* mãe. Retorna só os campos editáveis em lote: preço de vitrine,      */
-/* parcelas (override) e descrição (override).                         */
+/* mãe. Retorna só os campos editáveis em lote: preço de vitrine, "De", */
+/* descrição (override) e "o que vai aprender".                        */
 /* ------------------------------------------------------------------ */
 export const GET = withRequestContext(
   { action: "admin.catalogo.bulk.list", route: "/api/admin/catalogo/bulk" },
@@ -39,9 +39,6 @@ export const GET = withRequestContext(
         precoDeVitrineMain: true,
         precoPromocional: true,
         precoOriginal: true,
-        paymentTypeMain: true,
-        parcelasOverride: true,
-        parcelasSugeridas: true,
         descricaoOverride: true,
         descricao: true,
         aprendizado: true,
@@ -57,9 +54,6 @@ export const GET = withRequestContext(
         ),
         precoDe:
           c.precoDeVitrineMain != null ? Number(c.precoDeVitrineMain) : null,
-        paymentType: c.paymentTypeMain,
-        customParcelas: c.parcelasOverride,
-        defaultParcelas: c.parcelasSugeridas,
         customDescription: c.descricaoOverride,
         defaultDescription: c.descricao,
         // No catálogo mãe não há camada acima: o que está gravado JÁ é o padrão
@@ -73,9 +67,10 @@ export const GET = withRequestContext(
 
 /* ------------------------------------------------------------------ */
 /* PUT — atualização em lote do catálogo mãe                            */
-/* Aceita o mesmo contrato da edição em massa do painel (price,        */
-/* customParcelas, customDescription) e mapeia para os campos do       */
-/* catálogo: precoVitrineMain, parcelasOverride, descricaoOverride.    */
+/* Aceita o mesmo contrato da edição em massa do painel (price, precoDe,*/
+/* customDescription, customAprendizado) e mapeia para os campos do    */
+/* catálogo. Parcelas por curso não existem mais (2026-11-06):         */
+/* `customParcelas` de cliente antigo é descartado pelo z.object.      */
 /* ------------------------------------------------------------------ */
 const itemSchema = z.object({
   id: z.string().min(1),
@@ -83,7 +78,6 @@ const itemSchema = z.object({
   // Vira Course.precoDeVitrineMain — o "De R$ X" da vitrine PMB.
   // null = limpar (a vitrine deixa de exibir "De").
   precoDe: z.number().positive().nullable().optional(),
-  customParcelas: z.number().int().min(1).max(24).nullable().optional(),
   customDescription: z.string().trim().max(2000).nullable().optional(),
   // Vira Course.aprendizado — o padrão herdado por TODAS as vitrines.
   customAprendizado: z
@@ -220,9 +214,6 @@ export const PUT = withRequestContext(
         data: {
           ...(it.price !== undefined && { precoVitrineMain: it.price }),
           ...(it.precoDe !== undefined && { precoDeVitrineMain: it.precoDe }),
-          ...(it.customParcelas !== undefined && {
-            parcelasOverride: it.customParcelas,
-          }),
           ...(it.customDescription !== undefined && {
             descricaoOverride: it.customDescription,
           }),

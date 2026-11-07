@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Loader2, X, Upload, RotateCcw, Info } from "lucide-react"
+import { Loader2, X, Upload, RotateCcw } from "lucide-react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,17 +30,12 @@ interface CourseDetail {
   capaImageUrl: string | null
   price: number
   precoDe: number | null
-  parcelas: number | null
-  paymentType: "ONE_TIME" | "MONTHLY"
-  monthlyAvailable: boolean
   isVisible: boolean
   isFeatured: boolean
   customDescription: string | null
   customCapaUrl: string | null
-  customParcelas: number | null
   customAprendizado: string[]
   defaultCapaUrl: string | null
-  defaultParcelas: number | null
   defaultDescription: string | null
   defaultAprendizado: string[]
 }
@@ -56,12 +51,10 @@ export function CourseEditDrawer({
   const [price, setPrice] = useState("")
   // Preço de tabela ("De R$ X" riscado). Vazio = a vitrine não exibe "De".
   const [precoDe, setPrecoDe] = useState("")
-  const [paymentType, setPaymentType] = useState<"ONE_TIME" | "MONTHLY">("ONE_TIME")
   const [description, setDescription] = useState("")
   // Texto cru de "O que vai aprender" (1 item por linha). Vazio = herda o
   // padrão da PMB — por isso o placeholder mostra o que está herdado hoje.
   const [aprendizado, setAprendizado] = useState("")
-  const [parcelas, setParcelas] = useState("")
   const [isVisible, setIsVisible] = useState(true)
   const [isFeatured, setIsFeatured] = useState(false)
   const [capaUrl, setCapaUrl] = useState<string | null>(null)
@@ -103,12 +96,8 @@ export function CourseEditDrawer({
               })
             : "",
         )
-        setPaymentType(data.paymentType)
         setDescription(data.customDescription ?? "")
         setAprendizado(aprendizadoToText(data.customAprendizado))
-        setParcelas(
-          data.customParcelas != null ? String(data.customParcelas) : "",
-        )
         setIsVisible(data.isVisible)
         setIsFeatured(data.isFeatured)
         setCapaUrl(data.customCapaUrl ?? data.defaultCapaUrl ?? null)
@@ -214,17 +203,6 @@ export function CourseEditDrawer({
       precoDeValue = n
     }
 
-    let parcelasValue: number | null = null
-    if (parcelas.trim()) {
-      const n = parseInt(parcelas, 10)
-      if (Number.isNaN(n) || n < 1 || n > 24) {
-        setError("Parcelas: use um número entre 1 e 24 (ou deixe vazio)")
-        setSaving(false)
-        return
-      }
-      parcelasValue = n
-    }
-
     try {
       const response = await fetch(`/api/painel/cursos/${course.id}`, {
         method: "PUT",
@@ -232,14 +210,9 @@ export function CourseEditDrawer({
         body: JSON.stringify({
           price: numericPrice,
           precoDe: precoDeValue,
-          paymentType,
           customDescription: description.trim() || null,
           // Lista vazia = volta ao padrão da PMB.
           customAprendizado: parseAprendizado(aprendizado),
-          // ONE_TIME não usa parcelas por curso (o "Nx sem juros" vem do nº
-          // global da unidade e o cartão vai até 12x). Limpa o valor para não
-          // deixar um teto antigo/herdado preso e invisível no checkout.
-          customParcelas: paymentType === "MONTHLY" ? parcelasValue : null,
           isVisible,
           isFeatured,
         }),
@@ -396,64 +369,8 @@ export function CourseEditDrawer({
               </div>
 
               <div>
-                <Label>Forma de pagamento</Label>
-                <div className="mt-1.5 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentType("ONE_TIME")}
-                    className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${
-                      paymentType === "ONE_TIME"
-                        ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
-                        : "border-gray-200 bg-white hover:border-gray-300"
-                    }`}
-                  >
-                    <div className="font-bold text-[var(--color-pmb-green-900)]">
-                      Pagamento único
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-gray-500">
-                      À vista ou parcelado no cartão
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentType("MONTHLY")}
-                    disabled={!detail?.monthlyAvailable}
-                    className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${
-                      paymentType === "MONTHLY"
-                        ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
-                        : "border-gray-200 bg-white hover:border-gray-300"
-                    } ${!detail?.monthlyAvailable ? "cursor-not-allowed opacity-50 hover:border-gray-200" : ""}`}
-                  >
-                    <div className="font-bold text-[var(--color-pmb-green-900)]">
-                      Mensalidade
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-gray-500">
-                      Só na venda direta
-                    </div>
-                  </button>
-                </div>
-                {paymentType === "MONTHLY" && (
-                  <p className="mt-1.5 text-[11px] text-gray-500">
-                    Mensalidade (cartão recorrente) e carnê só existem na venda
-                    direta. Na vitrine o aluno paga o <strong>total</strong>{" "}
-                    (mensalidade × quantidade) de uma vez — no PIX, no boleto ou
-                    parcelado no cartão.
-                  </p>
-                )}
-                {!detail?.monthlyAvailable && (
-                  <p className="mt-1.5 text-[11px] text-gray-500">
-                    Pagamento parcelado/mensalidade não está habilitado para sua
-                    unidade. Ative em Configurações → Pagamento (mediante liberação
-                    da PMB).
-                  </p>
-                )}
-              </div>
-
-              <div>
                 <Label htmlFor="edit-preco">
-                  {paymentType === "MONTHLY"
-                    ? "Valor da mensalidade (R$)"
-                    : "Preço total (R$)"}
+                  Preço total (R$)
                 </Label>
                 <Input
                   id="edit-preco"
@@ -529,107 +446,6 @@ export function CourseEditDrawer({
                   )
                 })()}
               </div>
-
-              {/* Pagamento único usa o nº GLOBAL de parcelas sem juros da unidade
-                  (Configurações → Pagamento). Só a mensalidade define a
-                  quantidade por curso aqui. */}
-              {paymentType === "MONTHLY" && (
-                <div>
-                <Label htmlFor="edit-parcelas">
-                  {paymentType === "MONTHLY"
-                    ? "Quantidade de mensalidades"
-                    : "Número de parcelas"}{" "}
-                  <span className="text-[11px] font-normal text-gray-500">
-                    (1 a 24
-                    {detail?.defaultParcelas
-                      ? ` · padrão ${detail.defaultParcelas}${
-                          paymentType === "MONTHLY" ? " meses" : "x"
-                        }`
-                      : ""}
-                    )
-                  </span>
-                </Label>
-                <Input
-                  id="edit-parcelas"
-                  type="number"
-                  min={1}
-                  max={24}
-                  value={parcelas}
-                  onChange={(e) => setParcelas(e.target.value)}
-                  className="mt-1.5"
-                  placeholder={
-                    detail?.defaultParcelas
-                      ? String(detail.defaultParcelas)
-                      : "Ex: 12"
-                  }
-                />
-                {(() => {
-                  const numericPrice = parseFloat(
-                    price.replace(/\./g, "").replace(",", "."),
-                  )
-                  const efetivoParcelas = parcelas.trim()
-                    ? parseInt(parcelas, 10)
-                    : (detail?.defaultParcelas ?? 12)
-                  if (
-                    !Number.isFinite(numericPrice) ||
-                    numericPrice <= 0 ||
-                    !efetivoParcelas ||
-                    efetivoParcelas <= 0
-                  ) {
-                    return null
-                  }
-                  const fmt = (v: number) =>
-                    v.toLocaleString("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    })
-                  const usingDefault = parcelas.trim() === ""
-                  return (
-                    <div className="mt-2 rounded-lg border border-[rgba(2,89,24,0.15)] bg-[var(--color-pmb-lime-50)]/40 px-3 py-2 text-xs text-[var(--color-pmb-green-900)]">
-                      {paymentType === "MONTHLY" ? (
-                        <>
-                          <strong>{efetivoParcelas}</strong>{" "}
-                          {efetivoParcelas === 1 ? "mensalidade" : "mensalidades"}{" "}
-                          de{" "}
-                          <strong className="font-mono">
-                            {fmt(numericPrice)}
-                          </strong>
-                          <div className="mt-0.5 text-[11px] text-gray-600">
-                            Total ao final:{" "}
-                            <span className="font-mono">
-                              {fmt(numericPrice * efetivoParcelas)}
-                            </span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <strong>{efetivoParcelas}x</strong> de{" "}
-                          <strong className="font-mono">
-                            {fmt(numericPrice / efetivoParcelas)}
-                          </strong>{" "}
-                          sem juros
-                        </>
-                      )}
-                      {usingDefault && (
-                        <span className="text-gray-500">
-                          {" "}(usando padrão do catálogo)
-                        </span>
-                      )}
-                    </div>
-                  )
-                })()}
-                <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-[var(--color-pmb-gold)]/30 bg-[var(--color-pmb-gold-50)] px-3 py-2 text-[11px] text-[var(--color-pmb-gold-600)]">
-                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    {paymentType === "MONTHLY"
-                      ? "Apenas informativo — define quantas mensalidades aparecem na vitrine."
-                      : "Apenas informativo — define o texto “Nx sem juros” exibido na vitrine."}{" "}
-                    O parcelamento sem juros de fato precisa ser configurado por
-                    você na sua conta do <strong>Mercado Pago</strong>.
-                  </span>
-                </p>
-                </div>
-              )}
 
               <label className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
                 <div>

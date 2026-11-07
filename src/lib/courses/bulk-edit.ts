@@ -3,10 +3,13 @@
  * painel do revendedor e pelo catálogo do admin.
  *
  * Mantida fora do componente React para ser testável e para garantir o
- * invariante crítico: cada campo (preço, parcelas, descrição) só é validado e
- * enviado quando o usuário realmente o alterou. Sem isso, mexer apenas nas
- * parcelas de um curso sem preço (price 0 — ex. cursos LMS ocultos) dispararia
+ * invariante crítico: cada campo (preço, "De", descrição) só é validado e
+ * enviado quando o usuário realmente o alterou. Sem isso, mexer apenas na
+ * descrição de um curso sem preço (price 0 — ex. cursos LMS ocultos) dispararia
  * "Preço inválido" e abortaria o lote inteiro.
+ *
+ * Curso nao tem parcelas proprias (decisao do dono 2026-11-06): o nº de
+ * parcelas sem juros e da unidade, configurado em Configurações → Pagamento.
  */
 
 import { aprendizadoToText, parseAprendizado } from "./aprendizado"
@@ -18,7 +21,6 @@ export interface BulkRowInput {
   price: number
   /** Preco de tabela ("De R$ X"). null = a vitrine nao exibe "De". */
   precoDe: number | null
-  customParcelas: number | null
   customDescription: string | null
   /** "O que vai aprender" próprio desta linha. Vazio = herda o padrão. */
   customAprendizado: string[]
@@ -29,7 +31,6 @@ export interface RowDraft {
   price: string
   /** Vazio = sem "De" (limpar o campo e uma acao valida, nao "nao mexeu"). */
   precoDe: string
-  parcelas: string
   description: string
   /** Um item por linha; string vazia = herda o padrão. */
   aprendizado: string
@@ -40,7 +41,6 @@ export interface BulkItem {
   id: string
   price?: number
   precoDe?: number | null
-  customParcelas?: number | null
   customDescription?: string | null
   customAprendizado?: string[]
 }
@@ -90,7 +90,6 @@ export function draftFromRow(row: BulkRowInput): RowDraft {
   return {
     price: formatPrice(row.price),
     precoDe: row.precoDe != null ? formatPrice(row.precoDe) : "",
-    parcelas: row.customParcelas != null ? String(row.customParcelas) : "",
     description: row.customDescription ?? "",
     aprendizado: aprendizadoToText(row.customAprendizado),
   }
@@ -98,8 +97,7 @@ export function draftFromRow(row: BulkRowInput): RowDraft {
 
 /**
  * Monta os itens do payload apenas com os campos efetivamente alterados de
- * cada linha presente em `changedIds`. Valida preço só quando o preço mudou e
- * parcelas só quando as parcelas mudaram.
+ * cada linha presente em `changedIds`. Valida preço só quando o preço mudou.
  */
 export function buildBulkItems(
   rows: BulkRowInput[],
@@ -145,21 +143,6 @@ export function buildBulkItems(
         }
         item.precoDe = numericPrecoDe
       }
-    }
-
-    if (d.parcelas !== original.parcelas) {
-      let parcelasValue: number | null = null
-      if (d.parcelas.trim()) {
-        const n = parseInt(d.parcelas, 10)
-        if (Number.isNaN(n) || n < 1 || n > 24) {
-          return {
-            ok: false,
-            error: `Parcelas em "${row.title}": use um número entre 1 e 24 (ou vazio)`,
-          }
-        }
-        parcelasValue = n
-      }
-      item.customParcelas = parcelasValue
     }
 
     if (d.description !== original.description) {
